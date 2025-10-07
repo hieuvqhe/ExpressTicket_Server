@@ -5,11 +5,6 @@ using System.Threading.Tasks;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
-    public interface IEmailService
-    {
-        Task SendVerificationEmailAsync(string email, string token);
-    }
-
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _config;
@@ -19,6 +14,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _config = config;
         }
 
+        // Gửi email xác minh tài khoản
         public async Task SendVerificationEmailAsync(string email, string token)
         {
             var apiKey = _config["SendGrid:ApiKey"];
@@ -48,16 +44,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 </p>
                 <p>Nếu bạn không đăng ký, vui lòng bỏ qua email này.</p>";
 
+            await SendEmailAsync(email, subject, htmlContent);
+        }
+
+        //  gửi email chung 
+        public async Task SendEmailAsync(string email, string subject, string body)
+        {
+            var apiKey = _config["SendGrid:ApiKey"];
+            var client = new SendGridClient(apiKey);
+
+            var fromEmail = _config["SendGrid:FromEmail"];
+            var fromName = _config["SendGrid:FromName"];
+
             var from = new EmailAddress(fromEmail, fromName);
             var to = new EmailAddress(email);
-            var msg = MailHelper.CreateSingleEmail(from, to, subject, "", htmlContent);
+            var msg = MailHelper.CreateSingleEmail(from, to, subject, body, body);
 
             var response = await client.SendEmailAsync(msg);
 
             if (!response.IsSuccessStatusCode)
-            {
                 throw new Exception($"Lỗi gửi email: {response.StatusCode}");
-            }
         }
     }
 }

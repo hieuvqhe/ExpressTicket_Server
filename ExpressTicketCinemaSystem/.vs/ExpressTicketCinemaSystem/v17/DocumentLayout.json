@@ -3,52 +3,116 @@
   "WorkspaceRootPath": "D:\\SEP\\ExpressTicketCinemaSystem\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\.gitignore||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\.gitignore||{3B902123-F8A7-4915-9F01-361F908088D0}"
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.application\\services\\iemailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.application\\services\\iemailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
       "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.application\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.application\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.api\\controller\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.api\\controller\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.domain\\entities\\emailverification.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.domain\\entities\\emailverification.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.domain\\entities\\appuser.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.domain\\entities\\appuser.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\registerrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\registerrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.application\\services\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.application\\services\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.application\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.application\\services\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.api\\controller\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.api\\controller\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\models\\emailverificationtoken.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\models\\emailverificationtoken.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\resetpasswordrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\resetpasswordrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\models\\cinemadbcorecontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\models\\cinemadbcorecontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\verifyresetcoderequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\verifyresetcoderequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\cinemadbcorecontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\cinemadbcorecontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\passwordresetcode.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\passwordresetcode.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\partnerreport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\partnerreport.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\cinema.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\cinema.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\forgotpasswordrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\forgotpasswordrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\refreshtokenrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\refreshtokenrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\googleloginrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\googleloginrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\loginresponse.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\loginresponse.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\logoutrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\logoutrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\loginrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\loginrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\registerrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.contracts\\auth\\registerrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\refreshtoken.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\refreshtoken.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\contract.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\contract.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\.gitignore||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\.gitignore||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\emailverificationtoken.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\emailverificationtoken.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\customer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\customer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.infrastructure\\models\\ratingfilm.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.infrastructure\\models\\ratingfilm.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\expressticketcinemasystem.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\expressticketcinemasystem.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
     }
   ],
   "DocumentGroupContainers": [
@@ -63,6 +127,305 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
+              "Title": "IEmailService.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\IEmailService.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\IEmailService.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\IEmailService.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\IEmailService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T16:03:55.87Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "CinemaDbCoreContext.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\CinemaDbCoreContext.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\CinemaDbCoreContext.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\CinemaDbCoreContext.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\CinemaDbCoreContext.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAG8CAAALAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T14:06:42.409Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "User.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\User.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\User.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\User.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\User.cs",
+              "ViewState": "AgIAAAkAAAAAAAAAAAA5wCoAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T12:27:56.805Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "AuthService.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
+              "ViewState": "AgIAAB8BAAAAAAAAAAAiwB8BAABqAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-04T06:31:38.027Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "EmailService.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAACwAAABKAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-04T07:05:13.731Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Program.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Program.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Program.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Program.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAE4AAAAYAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-04T06:30:28.4Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "appsettings.json",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.json",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\appsettings.json",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.json",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\appsettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACAAAAADAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2025-10-04T06:29:31.457Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "appsettings.Development.json",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.Development.json",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\appsettings.Development.json",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.Development.json",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\appsettings.Development.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACEAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2025-10-04T06:29:30.41Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "VerifyResetCodeRequest.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\VerifyResetCodeRequest.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\VerifyResetCodeRequest.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\VerifyResetCodeRequest.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\VerifyResetCodeRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T15:35:11.404Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "ResetPasswordRequest.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ResetPasswordRequest.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ResetPasswordRequest.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ResetPasswordRequest.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ResetPasswordRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T15:35:25.324Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "PasswordResetCode.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PasswordResetCode.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PasswordResetCode.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PasswordResetCode.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PasswordResetCode.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T15:46:45.74Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "AuthController.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
+              "ViewState": "AgIAALUAAAAAAAAAAADwv+8AAABYAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-04T06:34:56.874Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "PartnerReport.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PartnerReport.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PartnerReport.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PartnerReport.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PartnerReport.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T15:46:46.451Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "ForgotPasswordRequest.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ForgotPasswordRequest.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ForgotPasswordRequest.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ForgotPasswordRequest.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ForgotPasswordRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T15:35:01.418Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
+              "Title": "LoginResponse.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginResponse.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginResponse.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginResponse.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginResponse.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T11:20:23.983Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 19,
+              "Title": "LoginRequest.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginRequest.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginRequest.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginRequest.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T11:19:28.779Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "Cinema.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Cinema.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Cinema.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Cinema.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Cinema.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T12:29:34.199Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "LogoutRequest.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LogoutRequest.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LogoutRequest.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LogoutRequest.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LogoutRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T13:44:09.353Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "RefreshTokenRequest.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RefreshTokenRequest.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RefreshTokenRequest.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RefreshTokenRequest.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RefreshTokenRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T14:26:49.601Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 20,
+              "Title": "RegisterRequest.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABsAAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-04T06:31:03.394Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "GoogleLoginRequest.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\GoogleLoginRequest.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\GoogleLoginRequest.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\GoogleLoginRequest.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\GoogleLoginRequest.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T13:03:10.242Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 21,
+              "Title": "RefreshToken.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RefreshToken.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RefreshToken.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RefreshToken.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RefreshToken.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABUAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T14:07:24.527Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 22,
+              "Title": "Contract.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Contract.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Contract.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Contract.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Contract.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T14:00:52.052Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 23,
               "Title": ".gitignore",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\.gitignore",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\.gitignore",
@@ -75,135 +438,55 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
-              "Title": "RegisterRequest.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABoAAABDAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T06:31:03.394Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "EmailVerification.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Domain\\Entities\\EmailVerification.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Domain\\Entities\\EmailVerification.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Domain\\Entities\\EmailVerification.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Domain\\Entities\\EmailVerification.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T06:27:56.845Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "AppUser.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Domain\\Entities\\AppUser.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Domain\\Entities\\AppUser.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Domain\\Entities\\AppUser.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Domain\\Entities\\AppUser.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAoAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T06:27:31.306Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "appsettings.json",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.json",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\appsettings.json",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.json",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\appsettings.json",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2025-10-04T06:29:31.457Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "AuthController.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
-              "ViewState": "AgIAACcAAAAAAAAAAAAowCIAAAAmAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T06:34:56.874Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "appsettings.Development.json",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.Development.json",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\appsettings.Development.json",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.Development.json",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\appsettings.Development.json",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2025-10-04T06:29:30.41Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "EmailService.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAACkAAAAkAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T07:05:13.731Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "Program.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Program.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Program.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Program.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Program.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABoAAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T06:30:28.4Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 9,
-              "Title": "AuthService.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
-              "ViewState": "AgIAAHEAAAAAAAAAAAAwwEkAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T06:31:38.027Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 24,
               "Title": "EmailVerificationToken.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Models\\EmailVerificationToken.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Models\\EmailVerificationToken.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Models\\EmailVerificationToken.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Models\\EmailVerificationToken.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\EmailVerificationToken.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\EmailVerificationToken.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\EmailVerificationToken.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\EmailVerificationToken.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABUAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T07:16:33.431Z"
+              "WhenOpened": "2025-10-04T07:16:33.431Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
-              "Title": "CinemaDbCoreContext.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Models\\CinemaDbCoreContext.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Models\\CinemaDbCoreContext.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Models\\CinemaDbCoreContext.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Models\\CinemaDbCoreContext.cs",
-              "ViewState": "AgIAADcAAAAAAAAAAAAIwEkAAAA4AAAAAAAAAA==",
+              "DocumentIndex": 25,
+              "Title": "Customer.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Customer.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Customer.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Customer.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Customer.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T06:29:12.939Z"
+              "WhenOpened": "2025-10-07T12:18:39.515Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 26,
+              "Title": "RatingFilm.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RatingFilm.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RatingFilm.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RatingFilm.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RatingFilm.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-07T12:19:27.338Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 27,
+              "Title": "ExpressTicketCinemaSystem",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2025-10-07T11:33:12.999Z",
+              "EditorCaption": ""
             }
           ]
         }
