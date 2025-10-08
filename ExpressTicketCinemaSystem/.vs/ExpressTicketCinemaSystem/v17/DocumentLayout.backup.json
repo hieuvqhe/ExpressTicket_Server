@@ -3,6 +3,14 @@
   "WorkspaceRootPath": "D:\\SEP\\ExpressTicketCinemaSystem\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.api\\controller\\usercontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.api\\controller\\usercontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.api\\controller\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.api\\controller\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
       "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
     },
@@ -29,10 +37,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.api\\controller\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|solutionrelative:expressticketcinemasystem\\src\\cinema.api\\controller\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{178DB09C-6ECF-4B31-A467-8E6E6BC152E4}|ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj|d:\\sep\\expressticketcinemasystem\\expressticketcinemasystem\\src\\cinema.contracts\\auth\\resetpasswordrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -131,6 +135,19 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
+              "Title": "UserController.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\UserController.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\UserController.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\UserController.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\UserController.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-08T06:42:00.951Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
               "Title": "launchSettings.json",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Properties\\launchSettings.json",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Properties\\launchSettings.json",
@@ -143,7 +160,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 6,
               "Title": "IEmailService.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\IEmailService.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\IEmailService.cs",
@@ -155,7 +172,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
+              "DocumentIndex": 11,
               "Title": "CinemaDbCoreContext.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\CinemaDbCoreContext.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\CinemaDbCoreContext.cs",
@@ -167,7 +184,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 11,
+              "DocumentIndex": 12,
               "Title": "User.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\User.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\User.cs",
@@ -179,7 +196,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 7,
               "Title": "AuthService.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\AuthService.cs",
@@ -191,7 +208,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 5,
               "Title": "EmailService.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Application\\Services\\EmailService.cs",
@@ -203,7 +220,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 8,
               "Title": "Program.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Program.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Program.cs",
@@ -215,7 +232,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
               "Title": "appsettings.json",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.json",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\appsettings.json",
@@ -223,12 +240,24 @@
               "RelativeToolTip": "ExpressTicketCinemaSystem\\appsettings.json",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAACEAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2025-10-04T06:29:31.457Z",
+              "WhenOpened": "2025-10-04T06:29:31.457Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "AuthController.cs",
+              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
+              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
+              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
+              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
+              "ViewState": "AgIAAHwAAAAAAAAAAAAswO8AAABYAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-04T06:34:56.874Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 4,
               "Title": "appsettings.Development.json",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\appsettings.Development.json",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\appsettings.Development.json",
@@ -236,12 +265,11 @@
               "RelativeToolTip": "ExpressTicketCinemaSystem\\appsettings.Development.json",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAACEAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2025-10-04T06:29:30.41Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-10-04T06:29:30.41Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 10,
               "Title": "VerifyResetCodeRequest.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\VerifyResetCodeRequest.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\VerifyResetCodeRequest.cs",
@@ -253,7 +281,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 9,
               "Title": "ResetPasswordRequest.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ResetPasswordRequest.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ResetPasswordRequest.cs",
@@ -265,7 +293,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 12,
+              "DocumentIndex": 13,
               "Title": "PasswordResetCode.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PasswordResetCode.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PasswordResetCode.cs",
@@ -277,19 +305,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
-              "Title": "AuthController.cs",
-              "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
-              "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
-              "ToolTip": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
-              "RelativeToolTip": "ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\AuthController.cs",
-              "ViewState": "AgIAALUAAAAAAAAAAADwv+8AAABYAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-04T06:34:56.874Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 13,
+              "DocumentIndex": 14,
               "Title": "PartnerReport.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PartnerReport.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\PartnerReport.cs",
@@ -301,7 +317,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 15,
+              "DocumentIndex": 16,
               "Title": "ForgotPasswordRequest.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ForgotPasswordRequest.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\ForgotPasswordRequest.cs",
@@ -313,7 +329,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 18,
+              "DocumentIndex": 19,
               "Title": "LoginResponse.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginResponse.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginResponse.cs",
@@ -325,7 +341,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 20,
+              "DocumentIndex": 21,
               "Title": "LoginRequest.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginRequest.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LoginRequest.cs",
@@ -337,7 +353,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 14,
+              "DocumentIndex": 15,
               "Title": "Cinema.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Cinema.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Cinema.cs",
@@ -349,7 +365,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 19,
+              "DocumentIndex": 20,
               "Title": "LogoutRequest.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LogoutRequest.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\LogoutRequest.cs",
@@ -361,7 +377,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 16,
+              "DocumentIndex": 17,
               "Title": "RefreshTokenRequest.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RefreshTokenRequest.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RefreshTokenRequest.cs",
@@ -373,7 +389,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 21,
+              "DocumentIndex": 22,
               "Title": "RegisterRequest.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\RegisterRequest.cs",
@@ -385,7 +401,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 17,
+              "DocumentIndex": 18,
               "Title": "GoogleLoginRequest.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\GoogleLoginRequest.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Contracts\\Auth\\GoogleLoginRequest.cs",
@@ -397,7 +413,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 22,
+              "DocumentIndex": 23,
               "Title": "RefreshToken.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RefreshToken.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RefreshToken.cs",
@@ -409,7 +425,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 23,
+              "DocumentIndex": 24,
               "Title": "Contract.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Contract.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Contract.cs",
@@ -421,7 +437,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 24,
+              "DocumentIndex": 25,
               "Title": ".gitignore",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\.gitignore",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\.gitignore",
@@ -433,7 +449,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 25,
+              "DocumentIndex": 26,
               "Title": "EmailVerificationToken.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\EmailVerificationToken.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\EmailVerificationToken.cs",
@@ -445,7 +461,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 26,
+              "DocumentIndex": 27,
               "Title": "Customer.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Customer.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\Customer.cs",
@@ -457,7 +473,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 27,
+              "DocumentIndex": 28,
               "Title": "RatingFilm.cs",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RatingFilm.cs",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\Src\\Cinema.Infrastructure\\Models\\RatingFilm.cs",
@@ -469,7 +485,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 28,
+              "DocumentIndex": 29,
               "Title": "ExpressTicketCinemaSystem.csproj",
               "DocumentMoniker": "D:\\SEP\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj",
               "RelativeDocumentMoniker": "ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem.csproj",
