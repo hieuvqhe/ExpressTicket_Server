@@ -1,0 +1,12 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\ExpressTicketCinemaSystem",
+    "\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem",
+    "\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src",
+    "\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api",
+    "\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller"
+  ],
+  "SelectedNode": "\\ExpressTicketCinemaSystem\\ExpressTicketCinemaSystem\\Src\\Cinema.Api\\Controller\\MoviesController.cs",
+  "PreviewInSolutionExplorer": false
+}

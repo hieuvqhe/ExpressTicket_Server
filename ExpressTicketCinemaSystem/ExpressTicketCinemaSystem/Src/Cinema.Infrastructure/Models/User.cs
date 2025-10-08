@@ -35,10 +35,11 @@ public partial class User
 
     public virtual Partner? Partner { get; set; }
 
-    public virtual ICollection<RatingFilm> RatingFilms { get; set; } = new List<RatingFilm>();
-
-    public virtual SystemAdmin? SystemAdmin { get; set; }
-    public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public virtual ICollection<PasswordResetCode> PasswordResetCodes { get; set; } = new List<PasswordResetCode>();
 
+    public virtual ICollection<RatingFilm> RatingFilms { get; set; } = new List<RatingFilm>();
+
+    public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+
+    public virtual SystemAdmin? SystemAdmin { get; set; }
 }
