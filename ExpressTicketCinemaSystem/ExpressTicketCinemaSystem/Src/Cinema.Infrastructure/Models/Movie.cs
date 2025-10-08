@@ -23,6 +23,14 @@ public partial class Movie
 
     public bool IsActive { get; set; }
 
+    public string? PosterUrl { get; set; }
+
+    public string? Production { get; set; }
+
+    public string? Description { get; set; }
+
+    public virtual ICollection<MovieActor> MovieActors { get; set; } = new List<MovieActor>();
+
     public virtual ICollection<MovieSubmission> MovieSubmissions { get; set; } = new List<MovieSubmission>();
 
     public virtual ICollection<RatingFilm> RatingFilms { get; set; } = new List<RatingFilm>();

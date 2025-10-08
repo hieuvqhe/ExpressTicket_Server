@@ -9,6 +9,9 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+
+
 // CONFIGURATION
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -69,6 +72,9 @@ builder.Services.AddDbContext<CinemaDbCoreContext>(options =>
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<ExpressTicketCinemaSystem.Src.Cinema.Application.Services.IMovieService, ExpressTicketCinemaSystem.Src.Cinema.Application.Services.MovieService>();
+
+
 
 //  JWT AUTHENTICATION 
 builder.Services.AddAuthentication(options =>
@@ -96,6 +102,11 @@ builder.Services.AddAuthentication(options =>
     options.ClientId = googleSection["ClientId"];
     options.ClientSecret = googleSection["ClientSecret"];
 });
+
+
+
+
+
 
 //  BUILD APP 
 var app = builder.Build();
