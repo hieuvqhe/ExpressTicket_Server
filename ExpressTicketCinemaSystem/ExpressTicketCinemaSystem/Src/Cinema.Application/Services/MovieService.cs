@@ -15,7 +15,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         public async Task<IEnumerable<MovieResponse>> GetAllMoviesAsync()
         {
-            var movies = await _context.Movies.ToListAsync();
+            var movies = await _context.Movies
+       .Where(m => m.IsActive)
+       .OrderBy(m => m.Title)
+       .ToListAsync();
 
             return movies.Select(m => new MovieResponse
             {
@@ -23,7 +26,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Title = m.Title,
                 Genre = m.Genre,
                 DurationMinutes = m.DurationMinutes,
-                ReleaseDate = m.ReleaseDate,
+                PremiereDate = m.PremiereDate,
+                EndDate = m.EndDate,
                 Director = m.Director,
                 Language = m.Language,
                 Country = m.Country,
@@ -33,13 +37,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Description = m.Description
             });
         }
-
         public async Task<IEnumerable<MovieResponse>> SearchMoviesAsync(string? title, string? genre, int? year, string? actorName)
         {
             var query = _context.Movies
-                .Include(m => m.MovieActors) 
-                    .ThenInclude(ma => ma.Actor)
-                .AsQueryable();
+       .Where(m => m.IsActive) 
+       .Include(m => m.MovieActors)
+       .ThenInclude(ma => ma.Actor)
+       .AsQueryable();
 
             if (!string.IsNullOrEmpty(title))
             {
@@ -48,7 +52,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (year.HasValue)
             {
-                query = query.Where(m => m.ReleaseDate.HasValue && m.ReleaseDate.Value.Year == year.Value);
+                query = query.Where(m => m.PremiereDate.HasValue && m.PremiereDate.Value.Year == year.Value);
             }
 
             if (!string.IsNullOrEmpty(actorName))
@@ -76,7 +80,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Title = m.Title,
                 Genre = m.Genre,
                 DurationMinutes = m.DurationMinutes,
-                ReleaseDate = m.ReleaseDate,
+                PremiereDate = m.PremiereDate,
+                EndDate = m.EndDate,
                 Director = m.Director,
                 Language = m.Language,
                 Country = m.Country,
@@ -89,10 +94,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         public async Task<IEnumerable<MovieResponse>> GetNowShowingMoviesAsync()
         {
-            var today = DateOnly.FromDateTime(DateTime.Today);
+            var today = DateTime.Today;
 
             var movies = await _context.Movies
-                .Where(m => m.ReleaseDate.HasValue && m.ReleaseDate.Value <= today)
+                .Where(m => m.PremiereDate <= today &&
+                           m.EndDate >= today &&
+                           m.IsActive) 
+                .OrderBy(m => m.PremiereDate) 
                 .ToListAsync();
 
             return movies.Select(m => new MovieResponse
@@ -101,7 +109,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Title = m.Title,
                 Genre = m.Genre,
                 DurationMinutes = m.DurationMinutes,
-                ReleaseDate = m.ReleaseDate,
+                PremiereDate = m.PremiereDate,
+                EndDate = m.EndDate,
                 Director = m.Director,
                 Language = m.Language,
                 Country = m.Country,
@@ -114,10 +123,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         public async Task<IEnumerable<MovieResponse>> GetComingSoonMoviesAsync()
         {
-            var today = DateOnly.FromDateTime(DateTime.Today);
+            var today = DateTime.Today;
+            var sevenDaysFromNow = today.AddDays(7);
 
             var movies = await _context.Movies
-                .Where(m => m.ReleaseDate.HasValue && m.ReleaseDate.Value > today)
+                .Where(m => m.PremiereDate > today &&
+                           m.PremiereDate <= sevenDaysFromNow &&
+                           m.IsActive) 
+                .OrderBy(m => m.PremiereDate) 
                 .ToListAsync();
 
             return movies.Select(m => new MovieResponse
@@ -126,7 +139,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Title = m.Title,
                 Genre = m.Genre,
                 DurationMinutes = m.DurationMinutes,
-                ReleaseDate = m.ReleaseDate,
+                PremiereDate = m.PremiereDate,
+                EndDate = m.EndDate,
                 Director = m.Director,
                 Language = m.Language,
                 Country = m.Country,
@@ -164,26 +178,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         public async Task<IEnumerable<MovieResponse>> GetMoviesByGenreAsync(string genre)
         {
-            var allMovies = await _context.Movies
-                .Where(m => m.Genre != null)
-                .ToListAsync();
+            var movies = await _context.Movies
+        .Where(m => m.Genre != null &&
+                   m.Genre.Contains(genre) &&
+                   m.IsActive)
+        .OrderBy(m => m.Title)
+        .ToListAsync();
 
-            
-            var filtered = allMovies
-                .Where(m => m.Genre!
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(g => g.Trim().ToLower())
-                    .Contains(genre.ToLower())
-                )
-                .ToList();
-
-            return filtered.Select(m => new MovieResponse
+            return movies.Select(m => new MovieResponse
             {
                 MovieId = m.MovieId,
                 Title = m.Title,
                 Genre = m.Genre,
                 DurationMinutes = m.DurationMinutes,
-                ReleaseDate = m.ReleaseDate,
+                PremiereDate = m.PremiereDate,
+                EndDate = m.EndDate,
                 Director = m.Director,
                 Language = m.Language,
                 Country = m.Country,
@@ -196,20 +205,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         public async Task<MovieStatisticsResponse> GetMovieStatisticsAsync()
         {
-            var today = DateOnly.FromDateTime(DateTime.Today);
+            var today = DateTime.Today;
+            var sevenDaysFromNow = today.AddDays(7);
 
             var total = await _context.Movies.CountAsync();
 
+            // Now Showing: PremiereDate <= today <= EndDate
             var nowShowing = await _context.Movies
-                .CountAsync(m => m.ReleaseDate.HasValue && m.ReleaseDate.Value <= today);
+                .CountAsync(m => m.PremiereDate <= today &&
+                                m.EndDate >= today &&
+                                m.IsActive);
 
+            // Coming Soon: today < PremiereDate <= today + 7 days
             var comingSoon = await _context.Movies
-                .CountAsync(m => m.ReleaseDate.HasValue && m.ReleaseDate.Value > today);
+                .CountAsync(m => m.PremiereDate > today &&
+                                m.PremiereDate <= sevenDaysFromNow &&
+                                m.IsActive);
 
             var active = await _context.Movies.CountAsync(m => m.IsActive);
             var inactive = await _context.Movies.CountAsync(m => !m.IsActive);
 
-            // ➕ Rating stats
+            // Rating stats
             var totalRatings = await _context.RatingFilms.CountAsync();
             var averageRating = totalRatings > 0
                 ? await _context.RatingFilms.AverageAsync(r => r.RatingStar)
@@ -223,21 +239,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ActiveMovies = active,
                 InactiveMovies = inactive,
                 TotalRatings = totalRatings,
-                AverageRating = Math.Round(averageRating, 2) 
+                AverageRating = Math.Round(averageRating, 2)
             };
         }
 
         public async Task<IEnumerable<TopRatedMovieResponse>> GetTopRatedMoviesAsync(int top = 10)
         {
             var result = await _context.Movies
-                .Where(m => m.RatingFilms.Any()) // chỉ lấy phim có đánh giá
+                .Where(m => m.IsActive &&  m.RatingFilms.Any()) // chỉ lấy phim có đánh giá
                 .Select(m => new
                 {
                     m.MovieId,
                     m.Title,
                     m.Genre,
                     m.PosterUrl,
-                    m.ReleaseDate,
+                    m.PremiereDate,
+                    m.EndDate,
                     AverageRating = m.RatingFilms.Average(r => r.RatingStar),
                     TotalRatings = m.RatingFilms.Count()
                 })
@@ -252,13 +269,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Title = m.Title,
                 Genre = m.Genre,
                 PosterUrl = m.PosterUrl,
-                ReleaseDate = m.ReleaseDate,
+                PremiereDate = m.PremiereDate,
+                EndDate = m.EndDate,
                 AverageRating = Math.Round(m.AverageRating, 2),
                 TotalRatings = m.TotalRatings
             });
         }
-
-
 
     }
 

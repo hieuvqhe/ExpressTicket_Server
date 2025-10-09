@@ -13,8 +13,6 @@ public partial class Movie
 
     public int DurationMinutes { get; set; }
 
-    public DateOnly? ReleaseDate { get; set; }
-
     public string? Director { get; set; }
 
     public string? Language { get; set; }
@@ -28,6 +26,10 @@ public partial class Movie
     public string? Production { get; set; }
 
     public string? Description { get; set; }
+
+    public DateTime? PremiereDate { get; set; }
+
+    public DateTime? EndDate { get; set; }
 
     public virtual ICollection<MovieActor> MovieActors { get; set; } = new List<MovieActor>();
 
