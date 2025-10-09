@@ -30,6 +30,7 @@ public partial class CinemaDbCoreContext : DbContext
     public virtual DbSet<Contract> Contracts { get; set; }
 
     public virtual DbSet<Customer> Customers { get; set; }
+    public virtual DbSet<EmailChangeRequest> EmailChangeRequests { get; set; }
 
     public virtual DbSet<EmailVerificationToken> EmailVerificationTokens { get; set; }
 
@@ -82,9 +83,7 @@ public partial class CinemaDbCoreContext : DbContext
     public virtual DbSet<Voucher> Vouchers { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=DESKTOP-4I8TPNN;database=CinemaDB_Core;Trusted_Connection=SSPI;Encrypt=false;TrustServerCertificate=true");
-
+    { }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Actor>(entity =>
@@ -314,7 +313,21 @@ public partial class CinemaDbCoreContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Customer_User");
         });
+        modelBuilder.Entity<EmailChangeRequest>(entity =>
+        {
+            entity.HasKey(e => e.RequestId).HasName("PK__EmailCha__33A8517AEFE9E42B");
 
+            entity.Property(e => e.RequestId).ValueGeneratedNever();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(sysutcdatetime())");
+            entity.Property(e => e.CurrentCodeHash).HasMaxLength(64);
+            entity.Property(e => e.NewCodeHash).HasMaxLength(64);
+            entity.Property(e => e.NewEmail).HasMaxLength(255);
+
+            entity.HasOne(d => d.User).WithMany(p => p.EmailChangeRequests)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmailChangeRequests_User");
+        });
         modelBuilder.Entity<EmailVerificationToken>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__EmailVer__3213E83F22C4F765");
@@ -433,12 +446,15 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(100)
                 .IsUnicode(false)
                 .HasColumnName("country");
-            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.Description)
+                .UseCollation("Vietnamese_CI_AS")
+                .HasColumnName("description");
             entity.Property(e => e.Director)
                 .HasMaxLength(255)
                 .IsUnicode(false)
                 .HasColumnName("director");
             entity.Property(e => e.DurationMinutes).HasColumnName("duration_minutes");
+            entity.Property(e => e.EndDate).HasColumnName("endDate");
             entity.Property(e => e.Genre)
                 .HasMaxLength(100)
                 .IsUnicode(false)
@@ -451,10 +467,10 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("language");
             entity.Property(e => e.PosterUrl).HasColumnName("poster_url");
+            entity.Property(e => e.PremiereDate).HasColumnName("premiereDate");
             entity.Property(e => e.Production)
                 .HasMaxLength(255)
                 .HasColumnName("production");
-            entity.Property(e => e.ReleaseDate).HasColumnName("release_date");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
                 .IsUnicode(false)
@@ -967,6 +983,9 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasIndex(e => e.Email, "UQ__User__AB6E6164CC9C289B").IsUnique();
 
             entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.AvatarUrl)
+               .HasMaxLength(500)
+               .HasDefaultValue("https://tse2.mm.bing.net/th/id/OIP.Ai9h_6D7ojZdsZnE4_6SDgAAAA?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("created_at");
@@ -994,6 +1013,9 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("user_type");
+             entity.Property(u => u.AvatarUrl)
+                .HasMaxLength(500)
+                .IsUnicode(true);
             entity.Property(e => e.Username).HasMaxLength(50);
         });
 

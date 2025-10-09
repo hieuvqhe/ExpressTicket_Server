@@ -6,7 +6,8 @@
         public string Title { get; set; } = null!;
         public string? Genre { get; set; }
         public string? PosterUrl { get; set; }
-        public DateOnly? ReleaseDate { get; set; }
+        public DateTime? PremiereDate { get; set; }
+        public DateTime? EndDate { get; set; }
 
         public double AverageRating { get; set; }
         public int TotalRatings { get; set; }

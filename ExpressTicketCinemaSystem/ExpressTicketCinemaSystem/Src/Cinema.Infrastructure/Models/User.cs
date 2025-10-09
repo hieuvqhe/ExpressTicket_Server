@@ -25,7 +25,10 @@ public partial class User
 
     public string Username { get; set; } = null!;
 
+    public string AvatarUrl { get; set; } = null!;
+
     public virtual Customer? Customer { get; set; }
+    public virtual ICollection<EmailChangeRequest> EmailChangeRequests { get; set; } = new List<EmailChangeRequest>();
 
     public virtual ICollection<EmailVerificationToken> EmailVerificationTokens { get; set; } = new List<EmailVerificationToken>();
 
