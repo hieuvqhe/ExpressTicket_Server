@@ -1,4 +1,4 @@
-﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.User
+﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Requests
 {
     public class ChangePasswordRequest
     {

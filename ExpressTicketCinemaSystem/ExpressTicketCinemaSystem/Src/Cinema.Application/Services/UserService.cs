@@ -1,11 +1,11 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.User;
-using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
 using System.Security.Cryptography;
 using System.Text;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Requests;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {

@@ -2,7 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.User;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Requests;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {

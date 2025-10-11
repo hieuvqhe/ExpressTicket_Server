@@ -1,4 +1,4 @@
-﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Request
+﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Requests
 {
     public class LoginResponse
     {

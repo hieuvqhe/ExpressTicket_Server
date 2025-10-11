@@ -84,8 +84,7 @@ public partial class CinemaDbCoreContext : DbContext
     public virtual DbSet<Voucher> Vouchers { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=DESKTOP-4I8TPNN;Database=CinemaDB_Core;Trusted_Connection=SSPI;Encrypt=false;TrustServerCertificate=true");
+    { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -447,10 +446,17 @@ public partial class CinemaDbCoreContext : DbContext
             entity.ToTable("Movie");
 
             entity.Property(e => e.MovieId).HasColumnName("movie_id");
+            entity.Property(e => e.AverageRating)
+                .HasColumnType("decimal(3, 1)")
+                .HasColumnName("average_rating");
             entity.Property(e => e.Country)
                 .HasMaxLength(100)
                 .IsUnicode(false)
                 .HasColumnName("country");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy)
+                .HasMaxLength(256)
+                .HasColumnName("created_by");
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.Director)
                 .HasMaxLength(255)
@@ -474,6 +480,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.Production)
                 .HasMaxLength(255)
                 .HasColumnName("production");
+            entity.Property(e => e.RatingsCount).HasColumnName("ratings_count");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
                 .IsUnicode(false)
@@ -482,6 +489,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(500)
                 .IsUnicode(false)
                 .HasColumnName("trailer_url");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
         });
 
         modelBuilder.Entity<MovieActor>(entity =>

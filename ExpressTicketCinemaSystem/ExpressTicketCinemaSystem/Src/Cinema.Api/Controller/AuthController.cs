@@ -5,7 +5,7 @@ using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Request;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Requests;
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
     [ApiController]

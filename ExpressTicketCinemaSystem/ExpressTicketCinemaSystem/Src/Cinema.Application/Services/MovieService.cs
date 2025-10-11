@@ -1,4 +1,4 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,42 +13,183 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context = context;
         }
 
-        public async Task<IEnumerable<MovieResponse>> GetAllMoviesAsync()
+        public async Task<MoviePaginatedResponse> GetAllMoviesAsync(
+    int page = 1,
+    int limit = 10,
+    string? status = null,
+    string? genre = null,
+    string? language = null,
+    string? search = null,
+    string sortBy = "premiere_date",
+    string sortOrder = "desc",
+    DateOnly? premiereDateFrom = null,
+    DateOnly? premiereDateTo = null,
+    double? minRating = null)
         {
-            var movies = await _context.Movies
-       .Where(m => m.IsActive)
-       .OrderBy(m => m.Title)
-       .ToListAsync();
+            var today = DateOnly.FromDateTime(DateTime.Today);
 
-            return movies.Select(m => new MovieResponse
+            var query = _context.Movies
+                .Include(m => m.MovieActors)
+                    .ThenInclude(ma => ma.Actor)
+                .Where(m => m.IsActive)
+                .AsQueryable();
+
+            if (!string.IsNullOrEmpty(status))
+            {
+                query = status.ToLower() switch
+                {
+                    "now_showing" => query.Where(m =>
+                        m.PremiereDate <= today &&
+                        m.EndDate >= today), 
+
+                    "coming_soon" => query.Where(m =>
+                        m.PremiereDate > today &&
+                        m.PremiereDate <= today.AddDays(7)), 
+
+                    "ended" => query.Where(m => m.EndDate < today),
+
+                    _ => query
+                };
+            }
+
+            if (!string.IsNullOrEmpty(genre))
+            {
+                query = query.Where(m =>
+                    m.Genre != null &&
+                    m.Genre.ToLower().Contains(genre.ToLower()));
+            }
+
+            if (!string.IsNullOrEmpty(language))
+            {
+                query = query.Where(m =>
+                    m.Language != null &&
+                    m.Language.ToLower().Contains(language.ToLower()));
+            }
+
+            if (!string.IsNullOrEmpty(search))
+            {
+                query = query.Where(m =>
+                    m.Title.Contains(search) ||
+                    (m.Description != null && m.Description.Contains(search)) ||
+                    (m.Director != null && m.Director.Contains(search)) ||
+                    m.MovieActors.Any(ma => ma.Actor.Name.Contains(search))
+                );
+            }
+
+            if (premiereDateFrom.HasValue)
+            {
+                query = query.Where(m => m.PremiereDate >= premiereDateFrom.Value);
+            }
+
+            if (premiereDateTo.HasValue)
+            {
+                query = query.Where(m => m.PremiereDate <= premiereDateTo.Value);
+            }
+
+            if (minRating.HasValue)
+            {
+                decimal minRatingDecimal = (decimal)minRating.Value;
+                query = query.Where(m => m.AverageRating >= minRatingDecimal);
+            }
+
+            query = (sortBy.ToLower(), sortOrder.ToLower()) switch
+            {
+                ("premiere_date", "desc") => query.OrderByDescending(m => m.PremiereDate),
+                ("premiere_date", "asc") => query.OrderBy(m => m.PremiereDate),
+                ("average_rating", "desc") => query.OrderByDescending(m => m.AverageRating),
+                ("average_rating", "asc") => query.OrderBy(m => m.AverageRating),
+                ("ratings_count", "desc") => query.OrderByDescending(m => m.RatingsCount),
+                ("ratings_count", "asc") => query.OrderBy(m => m.RatingsCount),
+                ("title", "desc") => query.OrderByDescending(m => m.Title),
+                ("title", "asc") => query.OrderBy(m => m.Title),
+                ("created_at", "desc") => query.OrderByDescending(m => m.CreatedAt),
+                ("created_at", "asc") => query.OrderBy(m => m.CreatedAt),
+                _ => query.OrderByDescending(m => m.PremiereDate) 
+            };
+
+            var total = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling(total / (double)limit);
+
+            var movies = await query
+                .Skip((page - 1) * limit)
+                .Take(limit)
+                .ToListAsync();
+
+            var movieResponses = movies.Select(m => new MovieResponse
             {
                 MovieId = m.MovieId,
                 Title = m.Title,
-                Genre = m.Genre,
+                Description = m.Description,
                 DurationMinutes = m.DurationMinutes,
+                Genre = m.Genre,
+                Language = m.Language,
                 PremiereDate = m.PremiereDate,
                 EndDate = m.EndDate,
                 Director = m.Director,
-                Language = m.Language,
-                Country = m.Country,
-                IsActive = m.IsActive,
                 PosterUrl = m.PosterUrl,
+                TrailerUrl = m.TrailerUrl,
+                Country = m.Country,
                 Production = m.Production,
-                Description = m.Description,
-                TrailerUrl =m.TrailerUrl,
-            });
+                IsActive = m.IsActive,
+                Status = GetMovieStatus(m.PremiereDate, m.EndDate),
+
+                AverageRating = (double?)m.AverageRating,
+                RatingsCount = m.RatingsCount,
+                CreatedAt = m.CreatedAt,
+                CreatedBy = m.CreatedBy,
+                UpdateAt = m.UpdatedAt, 
+
+                Actor = m.MovieActors.Select(ma => new ActorResponse
+                {
+                    Id = ma.Actor.ActorId,
+                    Name = ma.Actor.Name,
+                    ProfileImage = ma.Actor.AvatarUrl
+                }).ToList()
+            }).ToList();
+
+            return new MoviePaginatedResponse
+            {
+                Movies = movieResponses,
+                Total = total,
+                Page = page,
+                Limit = limit,
+                TotalPages = totalPages
+            };
         }
-        public async Task<IEnumerable<MovieResponse>> SearchMoviesAsync(string? title, string? genre, int? year, string? actorName)
+        public async Task<MoviePaginatedResponse> SearchMoviesAsync(
+    string? search = null,
+    string? genre = null,
+    int? year = null,
+    string? language = null,
+    double? ratingMin = null,
+    double? ratingMax = null,
+    int? durationMin = null,
+    int? durationMax = null,
+    string? country = null,
+    int page = 1,
+    int limit = 10,
+    string sortBy = "title",
+    string sortOrder = "asc")
         {
             var query = _context.Movies
-       .Where(m => m.IsActive) 
-       .Include(m => m.MovieActors)
-       .ThenInclude(ma => ma.Actor)
-       .AsQueryable();
+                .Include(m => m.MovieActors)
+                    .ThenInclude(ma => ma.Actor)
+                .AsQueryable();
 
-            if (!string.IsNullOrEmpty(title))
+            if (!string.IsNullOrEmpty(search))
             {
-                query = query.Where(m => m.Title.Contains(title));
+                query = query.Where(m =>
+                    m.Title.Contains(search) ||
+                    (m.Description != null && m.Description.Contains(search)) ||
+                    (m.Director != null && m.Director.Contains(search)) ||
+                    m.MovieActors.Any(ma => ma.Actor.Name.Contains(search))
+                );
+            }
+
+            if (!string.IsNullOrEmpty(genre))
+            {
+                query = query.Where(m =>
+                    m.Genre != null && m.Genre.ToLower().Contains(genre.ToLower()));
             }
 
             if (year.HasValue)
@@ -56,44 +197,107 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 query = query.Where(m => m.PremiereDate.Year == year.Value);
             }
 
-            if (!string.IsNullOrEmpty(actorName))
+            if (!string.IsNullOrEmpty(language))
             {
                 query = query.Where(m =>
-                    m.MovieActors.Any(ma => ma.Actor.Name.ToLower().Contains(actorName.ToLower()))
-                );
+                    m.Language != null && m.Language.ToLower().Contains(language.ToLower()));
             }
 
-            var movies = await query.ToListAsync();
-
-            if (!string.IsNullOrEmpty(genre))
+            if (ratingMin.HasValue)
             {
-                movies = movies.Where(m =>
-                    m.Genre != null &&
-                    m.Genre.Split(',')
-                        .Select(g => g.Trim().ToLower())
-                        .Contains(genre.ToLower())
-                ).ToList();
+                decimal ratingMinDecimal = (decimal)ratingMin.Value;
+                query = query.Where(m => m.AverageRating >= ratingMinDecimal);
+            }
+            if (ratingMax.HasValue)
+            {
+                decimal ratingMaxDecimal = (decimal)ratingMax.Value;
+                query = query.Where(m => m.AverageRating <= ratingMaxDecimal);
             }
 
-            return movies.Select(m => new MovieResponse
+            if (durationMin.HasValue)
+            {
+                query = query.Where(m => m.DurationMinutes >= durationMin.Value);
+            }
+            if (durationMax.HasValue)
+            {
+                query = query.Where(m => m.DurationMinutes <= durationMax.Value);
+            }
+
+            if (!string.IsNullOrEmpty(country))
+            {
+                query = query.Where(m =>
+                    m.Country != null && m.Country.ToLower().Contains(country.ToLower()));
+            }
+
+            query = (sortBy.ToLower(), sortOrder.ToLower()) switch
+            {
+                ("title", "desc") => query.OrderByDescending(m => m.Title),
+                ("title", "asc") => query.OrderBy(m => m.Title),
+                ("premiere_date", "desc") => query.OrderByDescending(m => m.PremiereDate),
+                ("premiere_date", "asc") => query.OrderBy(m => m.PremiereDate),
+                ("average_rating", "desc") => query.OrderByDescending(m => m.AverageRating),
+                ("average_rating", "asc") => query.OrderBy(m => m.AverageRating),
+                ("duration_minutes", "desc") => query.OrderByDescending(m => m.DurationMinutes),
+                ("duration_minutes", "asc") => query.OrderBy(m => m.DurationMinutes),
+                _ => query.OrderBy(m => m.Title) // default
+            };
+            var total = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling(total / (double)limit);
+
+            var movies = await query
+                .Skip((page - 1) * limit)
+                .Take(limit)
+                .ToListAsync();
+            var movieResponses = movies.Select(m => new MovieResponse
             {
                 MovieId = m.MovieId,
                 Title = m.Title,
-                Genre = m.Genre,
+                Description = m.Description,
                 DurationMinutes = m.DurationMinutes,
+                Genre = m.Genre,
+                Language = m.Language,
                 PremiereDate = m.PremiereDate,
                 EndDate = m.EndDate,
                 Director = m.Director,
-                Language = m.Language,
-                Country = m.Country,
-                IsActive = m.IsActive,
                 PosterUrl = m.PosterUrl,
+                TrailerUrl = m.TrailerUrl,
+                Country = m.Country,
                 Production = m.Production,
-                Description = m.Description
-            });
+                Status = GetMovieStatus(m.PremiereDate, m.EndDate),
+                AverageRating = (double?)m.AverageRating,
+                RatingsCount = m.RatingsCount,
+                CreatedAt = m.CreatedAt,
+                CreatedBy = m.CreatedBy,
+                UpdateAt = m.UpdatedAt,
+                Actor = m.MovieActors.Select(ma => new ActorResponse
+                {
+                    Id = ma.Actor.ActorId,
+                    Name = ma.Actor.Name,
+                    ProfileImage = ma.Actor.AvatarUrl
+                }).ToList()
+            }).ToList();
+
+            return new MoviePaginatedResponse
+            {
+                Movies = movieResponses,
+                Total = total,
+                Page = page,
+                Limit = limit,
+                TotalPages = totalPages
+            };
+
         }
 
-        public async Task<MoviePaginatedResponse> GetNowShowingMoviesAsync(int page, int limit, string sortBy, string sortOrder)
+        public async Task<MoviePaginatedResponse> GetNowShowingMoviesAsync(
+    int page = 1,
+    int limit = 10,
+    string? genre = null,
+    string? language = null,
+    double? ratingMin = null,
+    int? durationMin = null,
+    int? durationMax = null,
+    string sortBy = "premiere_date",
+    string sortOrder = "desc")
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
 
@@ -106,14 +310,48 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     m.EndDate >= today
                 );
 
-            
+            if (!string.IsNullOrEmpty(genre))
+            {
+                query = query.Where(m =>
+                    m.Genre != null &&
+                    m.Genre.ToLower().Contains(genre.ToLower()));
+            }
+
+            if (!string.IsNullOrEmpty(language))
+            {
+                query = query.Where(m =>
+                    m.Language != null &&
+                    m.Language.ToLower().Contains(language.ToLower()));
+            }
+
+            if (ratingMin.HasValue)
+            {
+                decimal ratingMinDecimal = (decimal)ratingMin.Value;
+                query = query.Where(m => m.AverageRating >= ratingMinDecimal);
+            }
+
+            if (durationMin.HasValue)
+            {
+                query = query.Where(m => m.DurationMinutes >= durationMin.Value);
+            }
+            if (durationMax.HasValue)
+            {
+                query = query.Where(m => m.DurationMinutes <= durationMax.Value);
+            }
+
             query = (sortBy.ToLower(), sortOrder.ToLower()) switch
             {
-                ("premieredate", "desc") => query.OrderByDescending(m => m.PremiereDate),
-                ("premieredate", "asc") => query.OrderBy(m => m.PremiereDate),
+                ("premiere_date", "desc") => query.OrderByDescending(m => m.PremiereDate),
+                ("premiere_date", "asc") => query.OrderBy(m => m.PremiereDate),
                 ("title", "desc") => query.OrderByDescending(m => m.Title),
                 ("title", "asc") => query.OrderBy(m => m.Title),
-                _ => query.OrderBy(m => m.PremiereDate)
+                ("average_rating", "desc") => query.OrderByDescending(m => m.AverageRating),
+                ("average_rating", "asc") => query.OrderBy(m => m.AverageRating),
+                ("duration_minutes", "desc") => query.OrderByDescending(m => m.DurationMinutes),
+                ("duration_minutes", "asc") => query.OrderBy(m => m.DurationMinutes),
+                ("ratings_count", "desc") => query.OrderByDescending(m => m.RatingsCount),
+                ("ratings_count", "asc") => query.OrderBy(m => m.RatingsCount),
+                _ => query.OrderByDescending(m => m.PremiereDate)
             };
 
             var total = await query.CountAsync();
@@ -123,7 +361,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Skip((page - 1) * limit)
                 .Take(limit)
                 .ToListAsync();
-
             var movieResponses = movies.Select(m => new MovieResponse
             {
                 MovieId = m.MovieId,
@@ -133,19 +370,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Genre = string.Join(", ",
                    m.Genre?.Split(',', StringSplitOptions.RemoveEmptyEntries)
                   .Select(g => g.Trim()) ?? Enumerable.Empty<string>()),
-
                 Language = m.Language,
                 PremiereDate = m.PremiereDate,
                 EndDate = m.EndDate,
                 Director = m.Director,
                 PosterUrl = m.PosterUrl,
                 TrailerUrl = m.TrailerUrl,
-                
-                Country =m.Country,
-                Production =m.Production,
+                Country = m.Country,
+                Production = m.Production,
                 IsActive = m.IsActive,
                 Status = "now_showing",
-                Actor = m.MovieActors.Select(ma => new ActorDto
+                AverageRating = (double?)m.AverageRating,
+                RatingsCount = m.RatingsCount,
+                CreatedAt = m.CreatedAt,
+                CreatedBy = m.CreatedBy,
+                UpdateAt = m.UpdatedAt,
+                Actor = m.MovieActors.Select(ma => new ActorResponse
                 {
                     Id = ma.Actor.ActorId,
                     Name = ma.Actor.Name,
@@ -163,30 +403,82 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
-
-
-        public async Task<MoviePaginatedResponse> GetComingSoonMoviesAsync(int page, int limit, string sortBy, string sortOrder)
+        public async Task<MoviePaginatedResponse> GetComingSoonMoviesAsync(
+    int page = 1,
+    int limit = 10,
+    string? genre = null,
+    string? language = null,
+    double? ratingMin = null,
+    int? durationMin = null,
+    int? durationMax = null,
+    DateOnly? premiereDateFrom = null,
+    DateOnly? premiereDateTo = null,
+    string sortBy = "premiere_date",
+    string sortOrder = "asc")
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
             var sevenDaysFromNow = today.AddDays(7);
 
             var query = _context.Movies
-            .Include(m => m.MovieActors)
-            .ThenInclude(ma => ma.Actor)
-            .Where(m =>
-                m.IsActive &&
-                m.PremiereDate > today &&
-                m.PremiereDate <= sevenDaysFromNow 
-       );
+                .Include(m => m.MovieActors)
+                    .ThenInclude(ma => ma.Actor)
+                .Where(m =>
+                    m.IsActive &&
+                    m.PremiereDate > today &&
+                    m.PremiereDate <= sevenDaysFromNow
+                );
 
+            if (!string.IsNullOrEmpty(genre))
+            {
+                query = query.Where(m =>
+                    m.Genre != null &&
+                    m.Genre.ToLower().Contains(genre.ToLower()));
+            }
+
+            if (!string.IsNullOrEmpty(language))
+            {
+                query = query.Where(m =>
+                    m.Language != null &&
+                    m.Language.ToLower().Contains(language.ToLower()));
+            }
+
+            if (ratingMin.HasValue)
+            {
+                decimal ratingMinDecimal = (decimal)ratingMin.Value;
+                query = query.Where(m => m.AverageRating >= ratingMinDecimal);
+            }
+
+            if (durationMin.HasValue)
+            {
+                query = query.Where(m => m.DurationMinutes >= durationMin.Value);
+            }
+            if (durationMax.HasValue)
+            {
+                query = query.Where(m => m.DurationMinutes <= durationMax.Value);
+            }
+
+            if (premiereDateFrom.HasValue)
+            {
+                query = query.Where(m => m.PremiereDate >= premiereDateFrom.Value);
+            }
+            if (premiereDateTo.HasValue)
+            {
+                query = query.Where(m => m.PremiereDate <= premiereDateTo.Value);
+            }
 
             query = (sortBy.ToLower(), sortOrder.ToLower()) switch
             {
-                ("premieredate", "desc") => query.OrderByDescending(m => m.PremiereDate),
-                ("premieredate", "asc") => query.OrderBy(m => m.PremiereDate),
+                ("premiere_date", "desc") => query.OrderByDescending(m => m.PremiereDate),
+                ("premiere_date", "asc") => query.OrderBy(m => m.PremiereDate),
                 ("title", "desc") => query.OrderByDescending(m => m.Title),
                 ("title", "asc") => query.OrderBy(m => m.Title),
-                _ => query.OrderBy(m => m.PremiereDate)
+                ("average_rating", "desc") => query.OrderByDescending(m => m.AverageRating),
+                ("average_rating", "asc") => query.OrderBy(m => m.AverageRating),
+                ("duration_minutes", "desc") => query.OrderByDescending(m => m.DurationMinutes),
+                ("duration_minutes", "asc") => query.OrderBy(m => m.DurationMinutes),
+                ("ratings_count", "desc") => query.OrderByDescending(m => m.RatingsCount),
+                ("ratings_count", "asc") => query.OrderBy(m => m.RatingsCount),
+                _ => query.OrderBy(m => m.PremiereDate) 
             };
 
             var total = await query.CountAsync();
@@ -212,9 +504,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Director = m.Director,
                 PosterUrl = m.PosterUrl,
                 TrailerUrl = m.TrailerUrl,
+                Country = m.Country,
+                Production = m.Production,
                 IsActive = m.IsActive,
-                Status = "coming_soon", 
-                Actor = m.MovieActors.Select(ma => new ActorDto
+                Status = "coming_soon",
+                AverageRating = (double?)m.AverageRating,
+                RatingsCount = m.RatingsCount,
+                CreatedAt = m.CreatedAt,
+                CreatedBy = m.CreatedBy,
+                UpdateAt = m.UpdatedAt,
+                Actor = m.MovieActors.Select(ma => new ActorResponse
                 {
                     Id = ma.Actor.ActorId,
                     Name = ma.Actor.Name,
@@ -233,7 +532,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
 
-        public async Task<IEnumerable<GenreCountDto>> GetAvailableGenresAsync()
+        public async Task<IEnumerable<GenreResponse>> GetAvailableGenresAsync()
         {
             var genres = await _context.Movies
                 .Where(m => m.Genre != null)
@@ -244,7 +543,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .SelectMany(g => g.Split(',', StringSplitOptions.RemoveEmptyEntries))
                 .Select(g => g.Trim())
                 .GroupBy(g => g)
-                .Select(g => new GenreCountDto
+                .Select(g => new GenreResponse
                 {
                     Name = g.Key,
                     Count = g.Count()
@@ -255,7 +554,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
 
-        public async Task<IEnumerable<LanguageCountDto>> GetAvailableLanguagesAsync()
+        public async Task<IEnumerable<LanguageCountResponse>> GetAvailableLanguagesAsync()
         {
             var languages = await _context.Movies
                 .Where(m => m.Language != null)
@@ -266,7 +565,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .SelectMany(l => l.Split(',', StringSplitOptions.RemoveEmptyEntries))
                 .Select(l => l.Trim())
                 .GroupBy(l => l)
-                .Select(g => new LanguageCountDto
+                .Select(g => new LanguageCountResponse
                 {
                     Language = g.Key,
                     Count = g.Count()
@@ -277,8 +576,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
 
-        public async Task<MoviePaginatedByGenreResponse> GetMoviesByGenreAsync(string genre, int page, int limit, string sortBy, string sortOrder)
+        public async Task<MoviePaginatedByGenreResponse> GetMoviesByGenreAsync(
+    string genre,
+    int page = 1,
+    int limit = 10,
+    string sortBy = "title",
+    string sortOrder = "asc")
         {
+            if (string.IsNullOrWhiteSpace(genre))
+            {
+                throw new ArgumentException("Genre cannot be null or empty", nameof(genre));
+            }
+
             var today = DateOnly.FromDateTime(DateTime.Today);
             var sevenDaysFromNow = today.AddDays(7);
 
@@ -286,21 +595,40 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Include(m => m.MovieActors)
                     .ThenInclude(ma => ma.Actor)
                 .Where(m => m.IsActive && !string.IsNullOrEmpty(m.Genre))
-                .ToListAsync(); 
+                .ToListAsync();
 
-            
             var filtered = moviesRaw.Where(m =>
                 m.Genre.Split(',', StringSplitOptions.RemoveEmptyEntries)
                        .Any(g => g.Trim().Equals(genre, StringComparison.OrdinalIgnoreCase)));
 
-            
+            if (!filtered.Any())
+            {
+                return new MoviePaginatedByGenreResponse
+                {
+                    Movies = new List<MovieResponse>(),
+                    Total = 0,
+                    Page = page,
+                    Limit = limit,
+                    TotalPages = 0,
+                    Genre = genre
+                };
+            }
+
             filtered = (sortBy.ToLower(), sortOrder.ToLower()) switch
             {
                 ("title", "desc") => filtered.OrderByDescending(m => m.Title),
                 ("title", "asc") => filtered.OrderBy(m => m.Title),
-                ("premieredate", "desc") => filtered.OrderByDescending(m => m.PremiereDate),
-                ("premieredate", "asc") => filtered.OrderBy(m => m.PremiereDate),
-                _ => filtered.OrderBy(m => m.Title)
+                ("premiere_date", "desc") => filtered.OrderByDescending(m => m.PremiereDate),
+                ("premiere_date", "asc") => filtered.OrderBy(m => m.PremiereDate),
+                ("average_rating", "desc") => filtered.OrderByDescending(m => m.AverageRating ?? 0),
+                ("average_rating", "asc") => filtered.OrderBy(m => m.AverageRating ?? 0),
+                ("duration_minutes", "desc") => filtered.OrderByDescending(m => m.DurationMinutes),
+                ("duration_minutes", "asc") => filtered.OrderBy(m => m.DurationMinutes),
+                ("ratings_count", "desc") => filtered.OrderByDescending(m => m.RatingsCount),
+                ("ratings_count", "asc") => filtered.OrderBy(m => m.RatingsCount),
+                ("created_at", "desc") => filtered.OrderByDescending(m => m.CreatedAt),
+                ("created_at", "asc") => filtered.OrderBy(m => m.CreatedAt),
+                _ => filtered.OrderBy(m => m.Title) 
             };
 
             var total = filtered.Count();
@@ -326,18 +654,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Director = m.Director,
                 PosterUrl = m.PosterUrl,
                 TrailerUrl = m.TrailerUrl,
-                Country =m.Country,
-                Production =m.Production,
+                Country = m.Country,
+                Production = m.Production,
                 IsActive = m.IsActive,
                 Status = GetMovieStatus(m.PremiereDate, m.EndDate),
-                Actor = m.MovieActors.Select(ma => new ActorDto
+                AverageRating = (double?)m.AverageRating,
+                RatingsCount = m.RatingsCount,
+                CreatedAt = m.CreatedAt,
+                CreatedBy = m.CreatedBy,
+                UpdateAt = m.UpdatedAt,
+                Actor = m.MovieActors.Select(ma => new ActorResponse
                 {
                     Id = ma.Actor.ActorId,
                     Name = ma.Actor.Name,
                     ProfileImage = ma.Actor.AvatarUrl
                 }).ToList()
             }).ToList();
-            
+
             return new MoviePaginatedByGenreResponse
             {
                 Movies = movieResponses,
@@ -348,7 +681,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Genre = genre
             };
         }
-
 
 
         public async Task<MovieStatisticsResponse> GetMovieStatisticsAsync()
@@ -427,7 +759,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     m.EndDate,
                     m.PosterUrl,
                     m.TrailerUrl,
-                    Actors = m.MovieActors.Select(ma => new ActorDto
+                    Actors = m.MovieActors.Select(ma => new ActorResponse
                     {
                         Id = ma.Actor.ActorId,
                         Name = ma.Actor.Name,

@@ -1,4 +1,4 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Request;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
