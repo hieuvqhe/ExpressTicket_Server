@@ -1,4 +1,4 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Request;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -30,10 +30,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         public async Task<User> RegisterAsync(RegisterRequest request)
         {
             if (await _context.Users.AnyAsync(u => u.Username == request.Username))
-                throw new Exception("Tên đăng nhập đã tồn tại.");
+                throw new ArgumentException("Tên đăng nhập đã tồn tại.");
 
             if (await _context.Users.AnyAsync(u => u.Email == request.Email))
-                throw new Exception("Email đã tồn tại.");
+                throw new ArgumentException("Email đã tồn tại.");
 
             if (!Regex.IsMatch(request.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
                 throw new Exception("Định dạng email không hợp lệ.");

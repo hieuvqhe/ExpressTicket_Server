@@ -6,11 +6,9 @@ using System.Text;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.OpenApi.Models;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
-
-
-
 
 // CONFIGURATION
 builder.Configuration
@@ -52,7 +50,8 @@ builder.Services.AddSwaggerGen(options =>
             Type = ReferenceType.SecurityScheme
         }
     };
-
+    var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
     options.AddSecurityDefinition("Bearer", jwtSecurityScheme);
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -103,11 +102,6 @@ builder.Services.AddAuthentication(options =>
     options.ClientId = googleSection["ClientId"];
     options.ClientSecret = googleSection["ClientSecret"];
 });
-
-
-
-
-
 
 //  BUILD APP 
 var app = builder.Build();

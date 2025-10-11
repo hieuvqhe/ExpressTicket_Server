@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth
+namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Request
 {
     public class RegisterRequest
     {
