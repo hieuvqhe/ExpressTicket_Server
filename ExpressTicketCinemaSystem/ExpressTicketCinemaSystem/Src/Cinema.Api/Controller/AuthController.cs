@@ -1,11 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
-
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Request;
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
     [ApiController]
@@ -24,29 +24,41 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         [HttpPost("register")]
+        [Produces("application/json")]
+        [ProducesResponseType(typeof(RegisterSuccessResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)] 
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
 
             try
             {
                 var user = await _authService.RegisterAsync(request);
-                return Ok(new
+
+                var successResponse = new RegisterSuccessResponse
                 {
-                    message = "Đăng ký thành công. Vui lòng kiểm tra email để xác minh.",
-                    user = new
+                    Message = "Đăng ký thành công. Vui lòng kiểm tra email để xác minh.",
+                    User = new
                     {
                         user.Fullname,
                         user.Username,
                         user.Email,
                         user.EmailConfirmed
                     }
-                });
+                };
+
+                return Ok(successResponse);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex) 
             {
-                return BadRequest(new { error = ex.Message });
+                return BadRequest(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex) 
+            {
+
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new ErrorResponse { Message = "An unexpected error occurred on the server." });
             }
         }
 
