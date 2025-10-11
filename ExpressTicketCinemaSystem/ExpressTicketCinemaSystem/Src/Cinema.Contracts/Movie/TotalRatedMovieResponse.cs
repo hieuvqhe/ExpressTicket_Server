@@ -8,7 +8,7 @@
         public string? PosterUrl { get; set; }
         public DateTime? PremiereDate { get; set; }
         public DateTime? EndDate { get; set; }
-
+        public string Status { get; set; }
         public double AverageRating { get; set; }
         public int TotalRatings { get; set; }
     }

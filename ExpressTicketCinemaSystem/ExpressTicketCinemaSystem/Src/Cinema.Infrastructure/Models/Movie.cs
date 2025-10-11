@@ -27,9 +27,11 @@ public partial class Movie
 
     public string? Description { get; set; }
 
-    public DateTime? PremiereDate { get; set; }
+    public DateOnly PremiereDate { get; set; }
 
-    public DateTime? EndDate { get; set; }
+    public DateOnly EndDate { get; set; }
+
+    public string? TrailerUrl { get; set; }
 
     public virtual ICollection<MovieActor> MovieActors { get; set; } = new List<MovieActor>();
 

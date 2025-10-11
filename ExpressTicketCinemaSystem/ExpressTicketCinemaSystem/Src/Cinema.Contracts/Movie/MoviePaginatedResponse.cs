@@ -1,0 +1,12 @@
+﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie
+{
+    public class MoviePaginatedResponse
+    {
+        public List<MovieResponse> Movies { get; set; }
+        public int Total { get; set; }
+        public int Page { get; set; }
+        public int Limit { get; set; }
+        public int TotalPages { get; set; }
+    }
+
+}
