@@ -1,4 +1,4 @@
-﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie
+﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses
 {
     public class MoviePaginatedByGenreResponse
     {

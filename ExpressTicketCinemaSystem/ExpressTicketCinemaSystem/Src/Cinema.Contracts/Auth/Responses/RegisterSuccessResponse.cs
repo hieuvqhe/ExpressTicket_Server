@@ -1,4 +1,4 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Request;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Requests;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses
 {

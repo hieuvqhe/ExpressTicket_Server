@@ -33,4 +33,9 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Src\Cinema.Contracts\Movie\Requests\" />
+    <Folder Include="Src\Cinema.Contracts\User\Responses\" />
+  </ItemGroup>
+
 </Project>

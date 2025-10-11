@@ -1,4 +1,4 @@
-﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie
+﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses
 {
     public class MovieResponse
     {
@@ -18,6 +18,11 @@
         public string Status { get; set; }
 
         public string? TrailerUrl { get; set; }
-        public List<ActorDto> Actor { get; set; }
+        public List<ActorResponse> Actor { get; set; }
+        public double? AverageRating { get; set; }
+        public int? RatingsCount { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTime? UpdateAt { get; set; }
     }
 }

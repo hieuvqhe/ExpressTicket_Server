@@ -7,6 +7,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,7 +32,6 @@ builder.Services.AddCors(options =>
 // CONTROLLERS & SWAGGER
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddSwaggerGen(options =>
 {
     // Cấu hình JWT Bearer để có nút "Authorize" trong Swagger
@@ -50,10 +50,10 @@ builder.Services.AddSwaggerGen(options =>
             Type = ReferenceType.SecurityScheme
         }
     };
+    options.OperationFilter<AddGenericMovieExampleFilter>();
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
     options.AddSecurityDefinition("Bearer", jwtSecurityScheme);
-
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
