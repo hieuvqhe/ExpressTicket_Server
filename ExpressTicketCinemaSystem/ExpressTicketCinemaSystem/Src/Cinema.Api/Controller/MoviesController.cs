@@ -324,7 +324,39 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
                 result
             });
         }
+        /// <summary>
+        /// Get movie details by ID
+        /// </summary>
+        /// <param name="id">Movie ID</param>
+        /// <returns>Movie details</returns>
+        [HttpGet("{id}")]
+        [ProducesResponseType(typeof(PaginatedMoviesResponse), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetMovieById([FromRoute] int id)
+        {
+            try
+            {
+                if (id <= 0)
+                {
+                    return BadRequest(new ErrorResponse { Message = "Invalid movie ID" });
+                }
 
+                var movie = await _movieService.GetMovieByIdAsync(id);
+
+                return Ok(new
+                {
+                    message = "Get movie details success",
+                    result = movie
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse { Message = "An internal server error occurred." });
+            }
+        }
 
 
     }

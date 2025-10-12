@@ -54,6 +54,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         string sortOrder = "asc");
         Task<IEnumerable<GenreResponse>> GetAvailableGenresAsync();
         Task<IEnumerable<LanguageCountResponse>> GetAvailableLanguagesAsync();
+        Task<MovieResponse> GetMovieByIdAsync(int movieId);
         Task<MoviePaginatedByGenreResponse> GetMoviesByGenreAsync(string genre, int page, int limit, string sortBy, string sortOrder);
         Task<MovieStatisticsResponse> GetMovieStatisticsAsync();
         Task<IEnumerable<TopRatedMovieResponse>> GetTopRatedMoviesAsync(int limit = 10, int minRatingsCount = 1, string timePeriod = "all");

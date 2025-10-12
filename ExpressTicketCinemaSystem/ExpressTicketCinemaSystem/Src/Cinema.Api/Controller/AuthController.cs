@@ -124,9 +124,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     new GoogleJsonWebSignature.ValidationSettings()
                 );
 
-                var validClientId = _config["Authentication:Google:ClientId"];
-                if (payload.Audience == null || !payload.Audience.ToString().Equals(validClientId))
+                var validClientIds = new List<string>
+        {
+            _config["Authentication:Google:ClientId"], 
+            "407408718192.apps.googleusercontent.com" 
+        };
+
+                if (payload.Audience == null || !validClientIds.Contains(payload.Audience.ToString()))
+                {
                     throw new UnauthorizedAccessException("Token không thuộc về ứng dụng này (audience mismatch).");
+                }
 
                 var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == payload.Email);
 
