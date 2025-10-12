@@ -787,7 +787,48 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             });
 
         }
+        public async Task<MovieResponse> GetMovieByIdAsync(int movieId)
+        {
+            var movie = await _context.Movies
+                .Include(m => m.MovieActors)
+                    .ThenInclude(ma => ma.Actor)
+                .FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
 
+            if (movie == null)
+            {
+                throw new KeyNotFoundException($"Movie with ID {movieId} not found");
+            }
+
+            return new MovieResponse
+            {
+                MovieId = movie.MovieId,
+                Title = movie.Title,
+                Description = movie.Description,
+                DurationMinutes = movie.DurationMinutes,
+                Genre = movie.Genre,
+                Language = movie.Language,
+                PremiereDate = movie.PremiereDate,
+                EndDate = movie.EndDate,
+                Director = movie.Director,
+                PosterUrl = movie.PosterUrl,
+                TrailerUrl = movie.TrailerUrl,
+                Country = movie.Country,
+                Production = movie.Production,
+                IsActive = movie.IsActive,
+                Status = GetMovieStatus(movie.PremiereDate, movie.EndDate),
+                AverageRating = (double?)movie.AverageRating,
+                RatingsCount = movie.RatingsCount,
+                CreatedAt = movie.CreatedAt,
+                CreatedBy = movie.CreatedBy,
+                UpdateAt = movie.UpdatedAt,
+                Actor = movie.MovieActors.Select(ma => new ActorResponse
+                {
+                    Id = ma.Actor.ActorId,
+                    Name = ma.Actor.Name,
+                    ProfileImage = ma.Actor.AvatarUrl
+                }).ToList()
+            };
+        }
         private string GetMovieStatus(DateOnly premiereDate, DateOnly endDate)
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
