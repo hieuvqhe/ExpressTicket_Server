@@ -2,6 +2,7 @@
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Enum;
+using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,10 +14,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
     public class MoviesController : ControllerBase
     {
         private readonly IMovieService _movieService;
+        private readonly S3Service _s3Service;
+        private readonly CinemaDbCoreContext _context;
 
-        public MoviesController(IMovieService movieService)
+        public MoviesController(IMovieService movieService, S3Service s3Service, CinemaDbCoreContext context)
         {
             _movieService = movieService;
+            _s3Service = s3Service;
+            _context = context;
         }
 
         /// <summary>
@@ -358,6 +363,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
             }
         }
 
+
+        [HttpPost("image")]
+        public async Task<IActionResult> UploadImage(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest("File không hợp lệ.");
+
+            var url = await _s3Service.UploadFileAsync(file);
+            return Ok(new { ImageUrl = url });
+        }
+
+        [HttpPost("video")]
+        public async Task<IActionResult> UploadVideo([FromForm] IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            var url = await _s3Service.UploadVideoAsync(file);
+            return Ok(new { url });
+        }
 
     }
 

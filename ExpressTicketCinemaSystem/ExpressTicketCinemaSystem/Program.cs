@@ -1,13 +1,17 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
+﻿using Amazon;
+using Amazon.S3;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
-using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
+using System.Text;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +35,17 @@ builder.Services.AddCors(options =>
 
 // CONTROLLERS & SWAGGER
 builder.Services.AddControllers();
+
+var awsOptions = builder.Configuration.GetSection("AWS");
+builder.Services.AddSingleton<IAmazonS3>(sp =>
+{
+    return new AmazonS3Client(
+        awsOptions["AccessKey"],
+        awsOptions["SecretKey"],
+        RegionEndpoint.GetBySystemName(awsOptions["Region"])
+    );
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -73,6 +88,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ExpressTicketCinemaSystem.Src.Cinema.Application.Services.IMovieService, ExpressTicketCinemaSystem.Src.Cinema.Application.Services.MovieService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<S3Service>();
 
 
 
