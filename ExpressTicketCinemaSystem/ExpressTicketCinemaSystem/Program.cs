@@ -1,13 +1,14 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
+using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
-using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
-using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,6 +62,8 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
+    options.OperationFilter<AdminUserExamplesFilter>();
+
 });
 
 // DATABASE 
@@ -73,6 +76,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ExpressTicketCinemaSystem.Src.Cinema.Application.Services.IMovieService, ExpressTicketCinemaSystem.Src.Cinema.Application.Services.MovieService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<AdminService>();
 
 
 
@@ -109,13 +113,63 @@ var app = builder.Build();
 // - MIDDLEWARE 
 app.UseCors("AllowAll");
 
+app.Use(async (context, next) =>
+{
+    await next();
+
+    // Chỉ xử lý cho các route bắt đầu bằng /api/admin
+    if (context.Request.Path.StartsWithSegments("/api/admin"))
+    {
+        // Xử lý lỗi 401 Unauthorized
+        if (context.Response.StatusCode == StatusCodes.Status401Unauthorized)
+        {
+            context.Response.ContentType = "application/json";
+
+            var errorResponse = new
+            {
+                message = "Unauthorized access",
+                errorInfo = new
+                {
+                    name = "AuthenticationError",
+                    message = "User is not authenticated"
+                }
+            };
+
+            var jsonResponse = System.Text.Json.JsonSerializer.Serialize(errorResponse);
+            await context.Response.WriteAsync(jsonResponse);
+        }
+
+        // Xử lý lỗi 403 Forbidden
+        if (context.Response.StatusCode == StatusCodes.Status403Forbidden)
+        {
+            context.Response.ContentType = "application/json";
+
+            var errorResponse = new
+            {
+                message = "Access forbidden",
+                errorInfo = new
+                {
+                    name = "AuthorizationError",
+                    message = "User does not have required role"
+                }
+            };
+
+            var jsonResponse = System.Text.Json.JsonSerializer.Serialize(errorResponse);
+            await context.Response.WriteAsync(jsonResponse);
+        }
+    }
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+
+
 app.UseAuthentication();
+
 app.UseAuthorization();
 
 app.MapControllers();
