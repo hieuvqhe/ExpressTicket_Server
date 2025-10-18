@@ -1026,6 +1026,30 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("user_type");
             entity.Property(e => e.Username).HasMaxLength(50);
+            entity.Property(e => e.UpdatedAt)
+       .HasColumnType("datetime")
+       .HasColumnName("updated_at")
+       .IsRequired(false);
+
+            entity.Property(e => e.IsBanned)
+                .HasColumnType("bit")
+                .HasDefaultValue(false)
+                .HasColumnName("is_banned");
+
+            entity.Property(e => e.BannedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("banned_at")
+                .IsRequired(false);
+
+            entity.Property(e => e.UnbannedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("unbanned_at")
+                .IsRequired(false);
+
+            entity.Property(e => e.DeactivatedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("deactivated_at")
+                .IsRequired(false);
         });
 
         modelBuilder.Entity<Voucher>(entity =>
