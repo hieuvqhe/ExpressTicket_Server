@@ -36,7 +36,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="sortOrder">Sort order (Available values: asc, desc, Default value: desc)</param>
         [HttpGet("users")]
         [Authorize(Roles = "Admin")]
-        [ProducesResponseType(typeof(PaginatedUserListResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(AdminPaginatedUserListResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status403Forbidden)]
@@ -71,11 +71,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     page, limit, search, role, verify?.ToString(), sortBy, sortOrder
                 );
 
-                var userResponses = new List<UserInfoResponse>();
+                var userResponses = new List<AdminUserInfoResponse>();
                 foreach (var user in users)
                 {
                     var stats = await _adminService.GetUserStatsAsync(user.UserId);
-                    var userResponse = new UserInfoResponse
+                    var userResponse = new AdminUserInfoResponse
                     {
                         Id = user.UserId,
                         Name = user.Fullname,
@@ -89,10 +89,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     userResponses.Add(userResponse);
                 }
 
-                var response = new PaginatedUserListResponse
+                var response = new AdminPaginatedUserListResponse
                 {
                     Message = "Get users success",
-                    Result = new PaginatedUserResponse
+                    Result = new AdminPaginatedUserResponse
                     {
                         Users = userResponses,
                         Page = page,
@@ -546,6 +546,245 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     }
                 });
             }
+        }
+
+        /// <summary>
+        /// Get user by ID
+        /// </summary>
+        /// <remarks>
+        /// Admin only - Retrieve detailed information of a specific user by ID
+        /// </remarks>
+        /// <param name="user_id">User ID (required)</param>
+        [HttpGet("users/{user_id}")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(typeof(AdminGetUserByIdResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetUserById(string user_id)
+        {
+            try
+            {
+                // Parse user_id từ string sang int
+                if (!int.TryParse(user_id, out int userId))
+                {
+                    return BadRequest(new ErrorAdminResponse
+                    {
+                        Message = "Invalid User Id",
+                        ErrorInfo = new ErrorInfo
+                        {
+                            Name = "ValidationError",
+                            Message = "User ID must be a valid number"
+                        }
+                    });
+                }
+
+                if (userId <= 0)
+                {
+                    return BadRequest(new ErrorAdminResponse
+                    {
+                        Message = "Invalid User Id",
+                        ErrorInfo = new ErrorInfo
+                        {
+                            Name = "ValidationError",
+                            Message = "User ID must be greater than 0"
+                        }
+                    });
+                }
+
+                // Gọi service để lấy thông tin user
+                var (success, message, user) = await _adminService.GetUserByIdAsync(userId);
+
+                if (!success)
+                {
+                    var errorResponse = new ErrorAdminResponse
+                    {
+                        Message = message,
+                        ErrorInfo = new ErrorInfo
+                        {
+                            Name = "NotFoundError",
+                            Message = message
+                        }
+                    };
+
+                    return NotFound(errorResponse);
+                }
+
+                // Trả về response thành công (không bao gồm password)
+                var response = new AdminGetUserByIdResponse
+                {
+                    Message = "Get user successful",
+                    Result = new AdminUserDetailResponse
+                    {
+                        UserId = user!.UserId,
+                        Email = user.Email,
+                        Phone = user.Phone,
+                        UserType = user.UserType,
+                        Fullname = user.Fullname,
+                        IsActive = user.IsActive,
+                        CreatedAt = user.CreatedAt,
+                        EmailConfirmed = user.EmailConfirmed,
+                        Username = user.Username,
+                        AvataUrl = user.AvatarUrl,
+                        UpdatedAt = user.UpdatedAt,
+                        IsBanned = user.IsBanned,
+                        BannedAt = user.BannedAt,
+                        UnbannedAt = user.UnbannedAt,
+                        DeactivatedAt = user.DeactivatedAt
+                        // Password không được trả về
+                    }
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorAdminResponse
+                {
+                    Message = "An internal server error occurred",
+                    ErrorInfo = new ErrorInfo
+                    {
+                        Name = "ServerError",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update user by ID
+        /// </summary>
+        /// <remarks>
+        /// Admin only - Update user information (excluding password)
+        /// </remarks>
+        [HttpPut("users/{user_id}")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(typeof(AdminUpdateUserResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateUser(
+            string user_id,
+            [FromBody] AdminUpdateUserRequest request)
+        {
+            try
+            {
+                // Parse user_id từ string sang int
+                if (!int.TryParse(user_id, out int userId))
+                {
+                    return BadRequest(new ErrorAdminResponse
+                    {
+                        Message = "Invalid User Id",
+                        ErrorInfo = new ErrorInfo
+                        {
+                            Name = "ValidationError",
+                            Message = "User ID must be a valid number"
+                        }
+                    });
+                }
+
+                if (userId <= 0)
+                {
+                    return BadRequest(new ErrorAdminResponse
+                    {
+                        Message = "Invalid User Id",
+                        ErrorInfo = new ErrorInfo
+                        {
+                            Name = "ValidationError",
+                            Message = "User ID must be greater than 0"
+                        }
+                    });
+                }
+
+                // Lấy thông tin admin đang thực hiện action
+                var currentAdminId = int.Parse(User.FindFirst("userId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+                // Gọi service để thực hiện update user
+                var (success, message, user) = await _adminService.UpdateUserAsync(userId, request, currentAdminId);
+
+                if (!success)
+                {
+                    var errorResponse = new ErrorAdminResponse
+                    {
+                        Message = message,
+                        ErrorInfo = new ErrorInfo
+                        {
+                            Name = GetUpdateUserErrorName(message),
+                            Message = message
+                        }
+                    };
+
+                    return message switch
+                    {
+                        "User not found" => NotFound(errorResponse),
+                        "Username already exists" or "Email already exists" or "Phone number already exists"
+                            or "Username, email and phone number already exist"
+                            or "Username and email already exist"
+                            or "Username and phone number already exist"
+                            or "Email and phone number already exist" => Conflict(errorResponse),
+                        "Cannot update your own account" or "Not authorized to update another admin" => StatusCode(403, errorResponse),
+                        _ => BadRequest(errorResponse)
+                    };
+                }
+
+                // Trả về response thành công
+                var response = new AdminUpdateUserResponse
+                {
+                    Message = "Update user successful",
+                    Result = new AdminUpdateUserResult
+                    {
+                        UserId = userId.ToString(),
+                        Email = user!.Email,
+                        Phone = user.Phone,
+                        UserType = user.UserType,
+                        Fullname = user.Fullname,
+                        IsActive = user.IsActive,
+                        CreatedAt = user.CreatedAt,
+                        EmailConfirmed = user.EmailConfirmed,
+                        Username = user.Username,
+                        AvataUrl = user.AvatarUrl,
+                        UpdatedAt = user.UpdatedAt ?? DateTime.UtcNow,
+                        IsBanned = user.IsBanned,
+                        BannedAt = user.BannedAt,
+                        UnbannedAt = user.UnbannedAt,
+                        DeactivatedAt = user.DeactivatedAt
+                    }
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorAdminResponse
+                {
+                    Message = "An internal server error occurred",
+                    ErrorInfo = new ErrorInfo
+                    {
+                        Name = "ServerError",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        private static string GetUpdateUserErrorName(string message)
+        {
+            return message switch
+            {
+                "User not found" => "NotFoundError",
+                "Username already exists" or "Email already exists" or "Phone number already exists"
+                    or "Username, email and phone number already exist"
+                    or "Username and email already exist"
+                    or "Username and phone number already exist"
+                    or "Email and phone number already exist" => "ConflictError",
+                "Cannot update your own account" or "Not authorized to update another admin" => "AuthorizationError",
+                _ => "BusinessRuleError"
+            };
         }
 
         private static string GetUpdateRoleErrorName(string message)

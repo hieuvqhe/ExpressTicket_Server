@@ -1,8 +1,8 @@
 ﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Responses
 {
-    public class PaginatedUserListResponse
+    public class AdminPaginatedUserListResponse
     {
         public string Message { get; set; } = string.Empty;
-        public PaginatedUserResponse Result { get; set; } = new();
+        public AdminPaginatedUserResponse Result { get; set; } = new();
     }
 }
