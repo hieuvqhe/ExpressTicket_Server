@@ -2,6 +2,7 @@
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using System.Linq.Dynamic.Core;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Request;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -66,9 +67,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return (users, total);
         }
 
-        public async Task<UserStatsResponse> GetUserStatsAsync(int userId)
+        public async Task<AdminUserStatsResponse> GetUserStatsAsync(int userId)
         {
-            var stats = new UserStatsResponse();
+            var stats = new AdminUserStatsResponse();
             var customer = await _context.Customers.FirstOrDefaultAsync(c => c.UserId == userId);
 
             if (customer == null) return stats;
@@ -247,6 +248,143 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await _context.SaveChangesAsync();
 
             return (true, "Update user role success", user);
+        }
+
+        public async Task<(bool success, string message, User? user)> GetUserByIdAsync(int userId)
+        {
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (user == null)
+            {
+                return (false, "User not found", null);
+            }
+
+            return (true, "Get user successful", user);
+        }
+
+        public async Task<(bool success, string message, User? user)> UpdateUserAsync(int userId, AdminUpdateUserRequest request, int currentAdminId)
+        {
+            // Kiểm tra không được update chính mình
+            if (userId == currentAdminId)
+            {
+                return (false, "Cannot update your own account", null);
+            }
+
+            // Tìm user cần update
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user == null)
+            {
+                return (false, "User not found", null);
+            }
+
+            // Kiểm tra không được update admin khác
+            if (user.UserType.ToLower() == "admin" && userId != currentAdminId)
+            {
+                return (false, "Not authorized to update another admin", null);
+            }
+
+            // Kiểm tra trùng lặp dữ liệu
+            var duplicateCheckResult = await CheckForDuplicatesAsync(userId, request.Email, request.Username, request.Phone);
+            if (!duplicateCheckResult.success)
+            {
+                return (false, duplicateCheckResult.message, null);
+            }
+
+            // Cập nhật các trường nếu có giá trị
+            if (!string.IsNullOrWhiteSpace(request.Email))
+                user.Email = request.Email.Trim();
+
+            if (request.Phone != null)
+                user.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+
+            if (!string.IsNullOrWhiteSpace(request.UserType))
+                user.UserType = request.UserType.Trim();
+
+            if (request.Fullname != null)
+                user.Fullname = string.IsNullOrWhiteSpace(request.Fullname) ? null : request.Fullname.Trim();
+
+            if (request.IsActive.HasValue)
+                user.IsActive = request.IsActive.Value;
+
+            if (request.EmailConfirmed.HasValue)
+                user.EmailConfirmed = request.EmailConfirmed.Value;
+
+            if (!string.IsNullOrWhiteSpace(request.Username))
+                user.Username = request.Username.Trim();
+
+            if (!string.IsNullOrWhiteSpace(request.AvataUrl))
+                user.AvatarUrl = request.AvataUrl.Trim();
+
+            if (request.IsBanned.HasValue)
+            {
+                user.IsBanned = request.IsBanned.Value;
+                if (request.IsBanned.Value)
+                {
+                    user.BannedAt = DateTime.UtcNow;
+                    user.UnbannedAt = null;
+                }
+                else
+                {
+                    user.UnbannedAt = DateTime.UtcNow;
+                    user.BannedAt = null;
+                }
+            }
+
+            user.UpdatedAt = DateTime.UtcNow;
+
+            _context.Users.Update(user);
+            await _context.SaveChangesAsync();
+
+            return (true, "Update user success", user);
+        }
+
+        private async Task<(bool success, string message)> CheckForDuplicatesAsync(int userId, string? email, string? username, string? phone)
+        {
+            var existingUsers = await _context.Users
+                .Where(u => u.UserId != userId)
+                .ToListAsync();
+
+            bool usernameExists = !string.IsNullOrWhiteSpace(username) &&
+                                 existingUsers.Any(u => u.Username.ToLower() == username.ToLower());
+
+            bool emailExists = !string.IsNullOrWhiteSpace(email) &&
+                              existingUsers.Any(u => u.Email.ToLower() == email.ToLower());
+
+            bool phoneExists = !string.IsNullOrWhiteSpace(phone) &&
+                              existingUsers.Any(u => u.Phone != null && u.Phone.ToLower() == phone.ToLower());
+
+            if (usernameExists && emailExists && phoneExists)
+            {
+                return (false, "Username, email and phone number already exist");
+            }
+            else if (usernameExists && emailExists)
+            {
+                return (false, "Username and email already exist");
+            }
+            else if (usernameExists && phoneExists)
+            {
+                return (false, "Username and phone number already exist");
+            }
+            else if (emailExists && phoneExists)
+            {
+                return (false, "Email and phone number already exist");
+            }
+            else if (usernameExists)
+            {
+                return (false, "Username already exists");
+            }
+            else if (emailExists)
+            {
+                return (false, "Email already exists");
+            }
+            else if (phoneExists)
+            {
+                return (false, "Phone number already exists");
+            }
+
+            return (true, string.Empty);
         }
     }
     }

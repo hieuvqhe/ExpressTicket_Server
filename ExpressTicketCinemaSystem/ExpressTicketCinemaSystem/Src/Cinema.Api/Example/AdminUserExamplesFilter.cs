@@ -30,10 +30,251 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             {
                 ApplyUnbanUserExamples(operation);
             }
-            else if (method == "PUT" && path?.Contains("/role") == true) // THÊM UPDATE ROLE
+            else if (method == "PUT" && path?.Contains("/role") == true)
             {
                 ApplyUpdateUserRoleExamples(operation);
             }
+            else if (method == "PUT" && path?.StartsWith("api/admin/users/") == true &&
+                     !path.Contains("/ban") && !path.Contains("/unban") && !path.Contains("/role"))
+            {
+                ApplyUpdateUserExamples(operation); // THÊM UPDATE USER
+            }
+        }
+
+        private void ApplyUpdateUserExamples(OpenApiOperation operation)
+        {
+            // Request body example
+            if (operation.RequestBody != null)
+            {
+                var content = operation.RequestBody.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Request Example", new OpenApiExample
+                    {
+                        Summary = "Update user request",
+                        Value = new OpenApiString(
+                            """
+                    {
+                        "email": "updated.user@example.com",
+                        "phone": "+1234567890",
+                        "userType": "customer",
+                        "fullname": "Updated User Name",
+                        "isActive": true,
+                        "emailConfirmed": true,
+                        "username": "updatedusername",
+                        "avataUrl": "https://example.com/avatar.jpg",
+                        "isBanned": false
+                    }
+                    """
+                        )
+                    });
+                }
+            }
+
+            // Response 200 OK
+            if (operation.Responses.ContainsKey("200"))
+            {
+                var response = operation.Responses["200"];
+                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Success Example", new OpenApiExample
+                    {
+                        Summary = "User updated successfully",
+                        Value = new OpenApiString(
+                            """
+                    {
+                        "message": "Update user successful",
+                        "result": {
+                            "userId": "123",
+                            "email": "updated.user@example.com",
+                            "phone": "+1234567890",
+                            "userType": "customer",
+                            "fullname": "Updated User Name",
+                            "isActive": true,
+                            "createdAt": "2024-01-15T10:30:00Z",
+                            "emailConfirmed": true,
+                            "username": "updatedusername",
+                            "avataUrl": "https://example.com/avatar.jpg",
+                            "updatedAt": "2024-01-25T18:30:00Z",
+                            "isBanned": false,
+                            "bannedAt": null,
+                            "unbannedAt": null,
+                            "deactivatedAt": null
+                        }
+                    }
+                    """
+                        )
+                    });
+                }
+            }
+
+            // Error response examples
+            AddErrorResponseExamples(operation, "400", "Bad Request - Invalid User Id",
+                """
+        {
+            "message": "Invalid User Id",
+            "errorInfo": {
+                "name": "ValidationError",
+                "message": "User ID must be a valid number"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "404", "Not Found",
+                """
+        {
+            "message": "User not found",
+            "errorInfo": {
+                "name": "NotFoundError",
+                "message": "User not found"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "409", "Conflict - Username already exists",
+                """
+        {
+            "message": "Username already exists",
+            "errorInfo": {
+                "name": "ConflictError",
+                "message": "Username already exists"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "409", "Conflict - Email already exists",
+                """
+        {
+            "message": "Email already exists",
+            "errorInfo": {
+                "name": "ConflictError",
+                "message": "Email already exists"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "409", "Conflict - Multiple fields exist",
+                """
+        {
+            "message": "Username and email already exist",
+            "errorInfo": {
+                "name": "ConflictError",
+                "message": "Username and email already exist"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "500", "Internal Server Error",
+                """
+        {
+            "message": "An internal server error occurred",
+            "errorInfo": {
+                "name": "ServerError",
+                "message": "Internal server error details"
+            }
+        }
+        """);
+        }
+
+        private void ApplyGetUserByIdExamples(OpenApiOperation operation)
+        {
+            // Response 200 OK
+            if (operation.Responses.ContainsKey("200"))
+            {
+                var response = operation.Responses["200"];
+                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Success Example", new OpenApiExample
+                    {
+                        Summary = "User retrieved successfully",
+                        Value = new OpenApiString(
+                            """
+                    {
+                        "message": "Get user successful",
+                        "result": {
+                            "userId": 123,
+                            "email": "john.doe@example.com",
+                            "phone": "+1234567890",
+                            "userType": "customer",
+                            "fullname": "John Doe",
+                            "isActive": true,
+                            "createdAt": "2024-01-15T10:30:00Z",
+                            "emailConfirmed": true,
+                            "username": "johndoe",
+                            "avataUrl": "https://example.com/avatar.jpg",
+                            "updatedAt": "2024-01-20T14:30:00Z",
+                            "isBanned": false,
+                            "bannedAt": null,
+                            "unbannedAt": null,
+                            "deactivatedAt": null
+                        }
+                    }
+                    """
+                        )
+                    });
+                }
+            }
+
+            // Error response examples
+            AddErrorResponseExamples(operation, "400", "Bad Request - Invalid User Id",
+                """
+        {
+            "message": "Invalid User Id",
+            "errorInfo": {
+                "name": "ValidationError",
+                "message": "User ID must be a valid number"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "404", "Not Found",
+                """
+        {
+            "message": "User not found",
+            "errorInfo": {
+                "name": "NotFoundError",
+                "message": "User not found"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "401", "Unauthorized",
+                """
+        {
+            "message": "Unauthorized access",
+            "errorInfo": {
+                "name": "AuthenticationError",
+                "message": "User is not authenticated"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "403", "Forbidden",
+                """
+        {
+            "message": "Access forbidden",
+            "errorInfo": {
+                "name": "AuthorizationError",
+                "message": "User does not have Admin role"
+            }
+        }
+        """);
+
+            AddErrorResponseExamples(operation, "500", "Internal Server Error",
+                """
+        {
+            "message": "An internal server error occurred",
+            "errorInfo": {
+                "name": "ServerError",
+                "message": "Internal server error details"
+            }
+        }
+        """);
         }
 
         private void ApplyUpdateUserRoleExamples(OpenApiOperation operation)
