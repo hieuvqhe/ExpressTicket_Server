@@ -37,7 +37,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             else if (method == "PUT" && path?.StartsWith("api/admin/users/") == true &&
                      !path.Contains("/ban") && !path.Contains("/unban") && !path.Contains("/role"))
             {
-                ApplyUpdateUserExamples(operation); // THÊM UPDATE USER
+                ApplyUpdateUserExamples(operation); 
+            }
+            else if (method == "GET" && path?.StartsWith("api/admin/users/") == true &&
+                     !path.Contains("/ban") && !path.Contains("/unban") && !path.Contains("/role"))
+            {
+                // GET /api/admin/users/{id} - Get user by ID
+                ApplyGetUserByIdExamples(operation);
             }
         }
 
@@ -639,7 +645,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request",
                 """
                 {
-                    "message": "Invalid role value. Available values: customer, staff, admin",
+                    "message": "Invalid role value. Available values: customer, employee, admin, manager, partner",
                     "errorInfo": {
                         "name": "ValidationError",
                         "message": "Invalid role parameter"
