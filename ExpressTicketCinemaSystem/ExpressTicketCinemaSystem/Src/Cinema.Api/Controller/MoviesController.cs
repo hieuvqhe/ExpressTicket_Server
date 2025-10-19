@@ -1,7 +1,8 @@
 ﻿using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Enum;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 

@@ -6,6 +6,11 @@ using System.Text.RegularExpressions;
 using System.Security.Cryptography;
 using System.Text;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Requests;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using System.Collections.Generic;
+using System.Linq;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses; 
+using System; 
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -15,10 +20,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IConfiguration _config;
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
-
-        // Configurable rules
         private const int CodeExpiryMinutes = 10;
-        private const int MaxCodeAttempts = 5; // optional if you extend DB to store Attempts
 
         public UserService(CinemaDbCoreContext context, IConfiguration config, IEmailService emailService, IPasswordHasher<User> passwordHasher)
         {
@@ -28,12 +30,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _passwordHasher = passwordHasher;
         }
 
-        public async Task<UserProfileResponse?> GetProfileAsync(int userId)
+        public async Task<UserProfileResponse> GetProfileAsync(int userId)
         {
             var user = await _context.Users.AsNoTracking()
                 .FirstOrDefaultAsync(u => u.UserId == userId);
 
-            if (user == null) return null;
+            if (user == null)
+                throw new NotFoundException("Người dùng không tồn tại.");
 
             var defaultAvatar = _config["Defaults:AvatarUrl"] ??
                 "https://tse2.mm.bing.net/th/id/OIP.Ai9h_6D7ojZdsZnE4_6SDgAAAA?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3";
@@ -46,40 +49,41 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Password = "********",
                 Phone = user.Phone,
                 AvatarUrl = string.IsNullOrWhiteSpace(user.AvatarUrl) ? defaultAvatar : user.AvatarUrl,
-                Email = user.Email ?? string.Empty
+                Email = user.Email ?? string.Empty,
+                Role = user.UserType ?? "User"
             };
         }
 
         public async Task<UserProfileResponse> UpdateProfileAsync(int userId, UpdateUserRequest request)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
-            if (user == null) throw new KeyNotFoundException("User not found.");
-
-            var errors = new List<string>();
+            if (user == null)
+                throw new NotFoundException("Người dùng không tồn tại.");
+            var errors = new Dictionary<string, ValidationError>();
 
             if (request.Fullname != null)
             {
                 var fullnameTrim = request.Fullname.Trim();
                 if (string.IsNullOrEmpty(fullnameTrim))
-                    errors.Add("Fullname không được rỗng.");
+                    errors["fullname"] = new ValidationError { Msg = "Fullname không được rỗng.", Path = "fullname", Location = "body" };
                 else if (fullnameTrim.Length > 255)
-                    errors.Add("Fullname quá dài (tối đa 255 ký tự).");
+                    errors["fullname"] = new ValidationError { Msg = "Fullname quá dài (tối đa 255 ký tự).", Path = "fullname", Location = "body" };
             }
 
             if (request.Phone != null)
             {
                 var phone = request.Phone.Trim();
                 if (!Regex.IsMatch(phone, @"^0\d{9}$"))
-                    errors.Add("Phone phải có đúng 10 chữ số và bắt đầu bằng '0'.");
+                    errors["phone"] = new ValidationError { Msg = "Phone phải có đúng 10 chữ số và bắt đầu bằng '0'.", Path = "phone", Location = "body" };
             }
 
             if (request.AvatarUrl != null && request.AvatarUrl.Length > 2000)
             {
-                errors.Add("AvatarUrl quá dài.");
+                errors["avatarUrl"] = new ValidationError { Msg = "AvatarUrl quá dài.", Path = "avatarUrl", Location = "body" };
             }
 
             if (errors.Any())
-                throw new InvalidOperationException(string.Join(" | ", errors));
+                throw new ValidationException(errors);
 
             var changed = false;
             if (request.Fullname != null && request.Fullname.Trim() != user.Fullname)
@@ -125,26 +129,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 string.IsNullOrWhiteSpace(request.NewPassword) ||
                 string.IsNullOrWhiteSpace(request.ConfirmPassword))
             {
-                throw new ArgumentException("Vui lòng cung cấp mật khẩu cũ, mật khẩu mới và xác nhận mật khẩu.");
+                throw new ValidationException("form", "Vui lòng cung cấp mật khẩu cũ, mật khẩu mới và xác nhận mật khẩu.");
             }
 
             if (request.NewPassword != request.ConfirmPassword)
-                throw new ArgumentException("Mật khẩu mới và xác nhận mật khẩu không khớp.");
+                throw new ValidationException("confirmPassword", "Mật khẩu mới và xác nhận mật khẩu không khớp.");
 
             var pwdPattern = @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{6,12}$";
             if (!Regex.IsMatch(request.NewPassword, pwdPattern))
-                throw new ArgumentException("Mật khẩu phải bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (6–12 ký tự).");
+                throw new ValidationException("newPassword", "Mật khẩu phải bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (6–12 ký tự).");
 
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (user == null)
-                throw new KeyNotFoundException("Người dùng không tồn tại.");
+                throw new NotFoundException("Người dùng không tồn tại.");
 
             if (!user.IsActive)
-                throw new UnauthorizedAccessException("Tài khoản đã bị khóa.");
+                throw new UnauthorizedException("Tài khoản đã bị khóa.");
 
             var verifyResult = _passwordHasher.VerifyHashedPassword(user, user.Password, request.OldPassword);
             if (verifyResult == PasswordVerificationResult.Failed)
-                throw new UnauthorizedAccessException("Mật khẩu cũ không chính xác.");
+                throw new UnauthorizedException("Mật khẩu cũ không chính xác.");
 
             user.Password = _passwordHasher.HashPassword(user, request.NewPassword);
 
@@ -160,8 +164,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         private static string GenerateSixDigitCode()
         {
-            var rnd = RandomNumberGenerator.GetInt32(0, 1000000);
-            return rnd.ToString("D6");
+            return RandomNumberGenerator.GetInt32(0, 1000000).ToString("D6");
         }
 
         private static byte[] HashCode(string code)
@@ -175,10 +178,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         public async Task<RequestEmailChangeResponse> RequestEmailChangeAsync(int userId)
         {
             var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId);
-            if (user == null) throw new KeyNotFoundException("User not found.");
-            if (string.IsNullOrWhiteSpace(user.Email)) throw new InvalidOperationException("User has no email configured.");
+            if (user == null) throw new NotFoundException("Người dùng không tồn tại.");
+            if (string.IsNullOrWhiteSpace(user.Email)) throw new ValidationException("account", "Tài khoản không có email để thay đổi.");
 
-            // Check existing active request (not consumed)
             var existing = await _context.EmailChangeRequests
                 .Where(r => r.UserId == userId && !r.IsConsumed)
                 .OrderByDescending(r => r.CreatedAt)
@@ -186,7 +188,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (existing != null && !IsExpired(existing.CurrentCodeExpiresAt))
             {
-                // If current code still valid and not verified, return existing request id to avoid spamming emails.
                 if (!existing.CurrentVerified)
                 {
                     return new RequestEmailChangeResponse
@@ -196,7 +197,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         CurrentVerified = existing.CurrentVerified
                     };
                 }
-                // If current already verified but new part pending, also return it
                 if (!existing.NewVerified)
                 {
                     return new RequestEmailChangeResponse
@@ -208,10 +208,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
-            // create new request (no NewEmail yet)
             var requestId = Guid.NewGuid();
             var currentCode = GenerateSixDigitCode();
-
             var now = DateTime.UtcNow;
             var currentExpires = now.AddMinutes(CodeExpiryMinutes);
 
@@ -219,7 +217,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 RequestId = requestId,
                 UserId = userId,
-                NewEmail = null, 
+                NewEmail = null,
                 CurrentCodeHash = HashCode(currentCode),
                 NewCodeHash = null,
                 CurrentCodeExpiresAt = currentExpires,
@@ -234,7 +232,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context.EmailChangeRequests.Add(changeReq);
             await _context.SaveChangesAsync();
 
-            // send code to current email
             var subject = "Xác nhận thay đổi email - mã xác thực";
             var body = $"Xin chào {user.Fullname},\n\n" +
                        $"Bạn vừa yêu cầu thay đổi email cho tài khoản. Mã xác thực (gửi tới email hiện tại) là: {currentCode}\n" +
@@ -254,22 +251,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         public async Task VerifyCurrentEmailCodeAsync(int userId, Guid requestId, string code)
         {
             if (string.IsNullOrWhiteSpace(code))
-                throw new ArgumentException("Code không được rỗng.");
+                throw new ValidationException("code", "Code không được rỗng.");
 
             var req = await _context.EmailChangeRequests
                 .FirstOrDefaultAsync(r => r.RequestId == requestId && r.UserId == userId && !r.IsConsumed);
 
             if (req == null)
-                throw new KeyNotFoundException("Yêu cầu đổi email không tồn tại hoặc đã được sử dụng.");
+                throw new NotFoundException("Yêu cầu đổi email không tồn tại hoặc đã được sử dụng.");
 
-            // Defensive: check that we actually have a stored code hash
             if (req.CurrentCodeHash == null || req.CurrentCodeHash.Length == 0)
             {
-                // mark consumed to avoid reuse & give a clear message
                 req.IsConsumed = true;
                 req.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
-                throw new InvalidOperationException("Không tìm thấy mã hiện tại trên hệ thống — vui lòng tạo lại yêu cầu đổi email.");
+                throw new ValidationException("request", "Không tìm thấy mã hiện tại trên hệ thống — vui lòng tạo lại yêu cầu đổi email.");
             }
 
             if (IsExpired(req.CurrentCodeExpiresAt))
@@ -277,51 +272,55 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 req.IsConsumed = true;
                 req.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
-                throw new UnauthorizedAccessException("Mã xác thực hiện tại đã hết hạn.");
+                throw new UnauthorizedException("Mã xác thực hiện tại đã hết hạn.");
             }
 
             var hashed = HashCode(code);
 
-            // Compare safely
             if (!hashed.SequenceEqual(req.CurrentCodeHash))
             {
-                // optionally: increment attempts here (if you add Attempts column)
-                throw new UnauthorizedAccessException("Mã xác thực không hợp lệ.");
+                throw new UnauthorizedException("Mã xác thực không hợp lệ.");
             }
 
             req.CurrentVerified = true;
             req.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
+
         public async Task<RequestEmailChangeResponse> SubmitNewEmailAsync(int userId, SubmitNewEmailRequest model)
         {
-            if (model == null) throw new ArgumentException("Request body null.");
-            if (model.RequestId == Guid.Empty) throw new ArgumentException("Missing requestId.");
-            if (string.IsNullOrWhiteSpace(model.NewEmail)) throw new ArgumentException("NewEmail không được rỗng.");
+            if (model == null)
+                throw new ValidationException("request", "Request body không được rỗng.");
+            if (model.RequestId == Guid.Empty)
+                throw new ValidationException("requestId", "Thiếu requestId.");
+            if (string.IsNullOrWhiteSpace(model.NewEmail))
+                throw new ValidationException("newEmail", "NewEmail không được rỗng.");
 
             var req = await _context.EmailChangeRequests
                 .FirstOrDefaultAsync(r => r.RequestId == model.RequestId && r.UserId == userId && !r.IsConsumed);
 
-            if (req == null) throw new KeyNotFoundException("Yêu cầu đổi email không tồn tại hoặc đã được sử dụng.");
+            if (req == null)
+                throw new NotFoundException("Yêu cầu đổi email không tồn tại hoặc đã được sử dụng.");
 
-            if (!req.CurrentVerified) throw new UnauthorizedAccessException("Chưa xác thực email hiện tại.");
+            if (!req.CurrentVerified)
+                throw new UnauthorizedException("Chưa xác thực email hiện tại.");
 
             if (IsExpired(req.CurrentCodeExpiresAt))
             {
                 req.IsConsumed = true;
                 req.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
-                throw new UnauthorizedAccessException("Yêu cầu đã hết hạn. Vui lòng tạo lại yêu cầu.");
+                throw new UnauthorizedException("Yêu cầu đã hết hạn. Vui lòng tạo lại yêu cầu.");
             }
 
             var newEmail = model.NewEmail.Trim().ToLowerInvariant();
             if (!Regex.IsMatch(newEmail, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
-                throw new ArgumentException("Định dạng email mới không hợp lệ.");
+                throw new ValidationException("newEmail", "Định dạng email mới không hợp lệ.");
 
             var exists = await _context.Users.AnyAsync(u => u.Email == newEmail && u.UserId != userId);
-            if (exists) throw new ArgumentException("Email mới đã được sử dụng bởi tài khoản khác.");
+            if (exists)
+                throw new ConflictException("newEmail", "Email mới đã được sử dụng bởi tài khoản khác.");
 
-            // generate and send new code
             var newCode = GenerateSixDigitCode();
             req.NewEmail = newEmail;
             req.NewCodeHash = HashCode(newCode);
@@ -346,14 +345,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 CurrentVerified = req.CurrentVerified
             };
         }
+
         public async Task VerifyNewEmailCodeAsync(int userId, Guid requestId, string code)
         {
-            if (string.IsNullOrWhiteSpace(code)) throw new ArgumentException("Code không được rỗng.");
+            if (string.IsNullOrWhiteSpace(code))
+                throw new ValidationException("code", "Code không được rỗng.");
 
             var req = await _context.EmailChangeRequests
                 .FirstOrDefaultAsync(r => r.RequestId == requestId && r.UserId == userId && !r.IsConsumed);
 
-            if (req == null) throw new KeyNotFoundException("Yêu cầu đổi email không tồn tại hoặc đã được sử dụng.");
+            if (req == null)
+                throw new NotFoundException("Yêu cầu đổi email không tồn tại hoặc đã được sử dụng.");
 
             if (req.NewVerified) return;
 
@@ -362,12 +364,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 req.IsConsumed = true;
                 req.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
-                throw new UnauthorizedAccessException("Mã xác thực email mới đã hết hạn.");
+                throw new UnauthorizedException("Mã xác thực email mới đã hết hạn.");
             }
 
             var hashed = HashCode(code);
             if (!hashed.SequenceEqual(req.NewCodeHash ?? Array.Empty<byte>()))
-                throw new UnauthorizedAccessException("Mã xác thực không hợp lệ.");
+                throw new UnauthorizedException("Mã xác thực không hợp lệ.");
 
             req.NewVerified = true;
             req.UpdatedAt = DateTime.UtcNow;
@@ -380,26 +382,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Include(r => r.User)
                 .FirstOrDefaultAsync(r => r.RequestId == requestId && r.UserId == userId && !r.IsConsumed);
 
-            if (req == null) throw new KeyNotFoundException("Yêu cầu đổi email không tồn tại hoặc đã được sử dụng.");
+            if (req == null)
+                throw new NotFoundException("Yêu cầu đổi email không tồn tại hoặc đã được sử dụng.");
 
             if (!req.CurrentVerified || !req.NewVerified)
-                throw new UnauthorizedAccessException("Cần xác nhận cả email hiện tại và email mới trước khi hoàn tất.");
+                throw new UnauthorizedException("Cần xác nhận cả email hiện tại và email mới trước khi hoàn tất.");
 
             if (IsExpired(req.CurrentCodeExpiresAt) || IsExpired(req.NewCodeExpiresAt))
             {
                 req.IsConsumed = true;
                 req.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
-                throw new UnauthorizedAccessException("Một trong các mã xác thực đã hết hạn.");
+                throw new UnauthorizedException("Một trong các mã xác thực đã hết hạn.");
             }
 
             if (string.IsNullOrWhiteSpace(req.NewEmail))
-                throw new InvalidOperationException("Email mới chưa được thiết lập trên request.");
+                throw new ValidationException("request", "Email mới chưa được thiết lập trên request.");
 
             var newEmail = req.NewEmail.Trim().ToLowerInvariant();
             var existing = await _context.Users.AnyAsync(u => u.Email == newEmail && u.UserId != userId);
             if (existing)
-                throw new InvalidOperationException("Email mới đã được sử dụng bởi tài khoản khác.");
+                throw new ConflictException("newEmail", "Email mới đã được sử dụng bởi tài khoản khác.");
 
             var user = req.User!;
             user.Email = newEmail;
