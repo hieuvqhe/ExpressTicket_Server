@@ -44,7 +44,7 @@
             return new List<RoleOption>
             {
                 new RoleOption { Value = "customer", Label = "Customer" },
-                new RoleOption { Value = "employee", Label = "Employee" },
+                new RoleOption { Value = "employee", Label = "employee" },
                 new RoleOption { Value = "partner", Label = "Partner" },
                 new RoleOption { Value = "manager", Label = "Manager" },
                 new RoleOption { Value = "admin", Label = "Admin" }
