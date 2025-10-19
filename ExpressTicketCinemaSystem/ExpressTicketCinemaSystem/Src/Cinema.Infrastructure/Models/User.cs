@@ -27,6 +27,13 @@ public partial class User
 
     public string AvatarUrl { get; set; } = null!;
     public DateTime? UpdatedAt { get; set; }
+    public bool IsBanned { get; set; }
+
+    public DateTime? BannedAt { get; set; }
+
+    public DateTime? UnbannedAt { get; set; }
+
+    public DateTime? DeactivatedAt { get; set; }
 
     public virtual Customer? Customer { get; set; }
 

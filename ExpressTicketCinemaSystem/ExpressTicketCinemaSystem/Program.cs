@@ -1,10 +1,11 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
+using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
-using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner;
@@ -14,6 +15,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using System.Text.Json;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -102,6 +104,8 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
+    options.OperationFilter<AdminUserExamplesFilter>();
+
 });
 
 // DATABASE 
@@ -116,7 +120,7 @@ builder.Services.AddScoped<ExpressTicketCinemaSystem.Src.Cinema.Application.Serv
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<PartnerService>();
 builder.Services.AddScoped<ContractService>();
-
+builder.Services.AddScoped<AdminService>();
 
 
 
@@ -205,7 +209,9 @@ app.UseCors("AllowAll");
 app.UseSwagger();
 app.UseSwaggerUI();
 
+
 app.UseAuthentication();
+
 app.UseAuthorization();
 app.MapControllers();
 
