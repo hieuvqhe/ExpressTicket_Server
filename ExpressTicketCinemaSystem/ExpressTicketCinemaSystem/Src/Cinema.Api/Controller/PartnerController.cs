@@ -41,6 +41,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             throw new UnauthorizedException("Token không hợp lệ hoặc không chứa ID người dùng.");
         }
 
+        // THÊM METHOD MỚI: Lấy PartnerId từ UserId
+        private async Task<int> GetCurrentPartnerId()
+        {
+            var userId = GetCurrentUserId();
+
+            // Tìm partner từ userId
+            var partner = await _contractService.GetPartnerByUserId(userId);
+            return partner.PartnerId;
+        }
+
         /// <summary>
         /// Register a new partner
         /// </summary>
@@ -207,7 +217,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                var partnerId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
                 var result = await _contractService.UploadPartnerSignatureAsync(id, partnerId, request);
 
                 var response = new SuccessResponse<ContractResponse>
@@ -270,7 +280,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                var partnerId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
                 var result = await _contractService.GetPartnerContractsAsync(
                     partnerId, page, limit, status, contractType, search, sortBy, sortOrder);
 

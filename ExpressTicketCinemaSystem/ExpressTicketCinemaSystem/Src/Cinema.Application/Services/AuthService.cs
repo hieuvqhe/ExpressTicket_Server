@@ -73,7 +73,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new ConflictException("username", "Tên đăng nhập đã tồn tại");
 
             if (await _context.Users.AnyAsync(u => u.Email == request.Email))
-                throw new ConflictException("email", "Email đã tồnại");
+                throw new ConflictException("email", "Email đã tồn tại");
 
             var user = new User
             {
@@ -230,7 +230,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         Path = "email"
                     }
                 });
-
+            if (user.IsBanned)
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["account"] = new ValidationError
+                    {
+                        Msg = "Tài khoản đang bị cấm. Vui lòng liên hệ admin để mở khóa",
+                        Path = "account"
+                    }
+                });
             if (!user.IsActive)
                 throw new UnauthorizedException(new Dictionary<string, ValidationError>
                 {
@@ -384,7 +392,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ExpireAt = tokenDescriptor.Expires!.Value,
                 FullName = user.Fullname ?? "",
                 Role = user.UserType ?? "User",
-                PartnerInfo = null 
+                PartnerInfo = null,
+                // CHỈ CẦN THÊM THÔNG TIN TRẠNG THÁI VÀO RESPONSE
+                AccountStatus = GetAccountStatus(user),
+                IsBanned = user.IsBanned,
+                IsActive = user.IsActive,
+                EmailConfirmed = user.EmailConfirmed
             };
 
             // Thêm thông tin partner vào response nếu là partner
@@ -400,7 +413,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             return response;
         }
-
+        private string GetAccountStatus(User user)
+        {
+            if (user.IsBanned) return "banned";
+            if (!user.IsActive) return "inactive";
+            if (!user.EmailConfirmed) return "email_not_verified";
+            return "active";
+        }
         public async Task<LoginResponse> RefreshTokenAsync(string refreshToken)
         {
             var errors = new Dictionary<string, ValidationError>();

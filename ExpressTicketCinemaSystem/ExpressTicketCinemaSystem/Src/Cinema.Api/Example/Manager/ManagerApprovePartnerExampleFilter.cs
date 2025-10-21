@@ -95,7 +95,33 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     });
                 }
             }
-
+            // Response 401 Unauthorized
+            if (operation.Responses.ContainsKey("401"))
+            {
+                var response = operation.Responses["401"];
+                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Unauthorized", new OpenApiExample
+                    {
+                        Value = new OpenApiString(
+                        """
+            {
+              "message": "Xác thực thất bại",
+              "errors": {
+                "auth": {
+                  "msg": "Manager không tồn tại.",
+                  "path": "form",
+                  "location": "body"
+                }
+              }
+            }
+            """
+                        )
+                    });
+                }
+            }
             // Response 404 Not Found
             if (operation.Responses.ContainsKey("404"))
             {

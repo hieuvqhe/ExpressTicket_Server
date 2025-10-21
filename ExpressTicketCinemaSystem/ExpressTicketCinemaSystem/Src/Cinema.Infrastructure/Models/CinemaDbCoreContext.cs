@@ -227,7 +227,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
             entity.Property(e => e.Address)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("address");
             entity.Property(e => e.CinemaName)
                 .HasMaxLength(255)
@@ -300,9 +300,10 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("draft")
                 .HasColumnName("status");
-            entity.Property(e => e.TermsAndConditions).HasColumnName("terms_and_conditions");
+            entity.Property(e => e.TermsAndConditions).IsUnicode(true).HasColumnName("terms_and_conditions");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
+                .IsUnicode(true)
                 .HasColumnName("title");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(getutcdate())")
@@ -330,7 +331,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.CustomerId).HasColumnName("customer_id");
             entity.Property(e => e.Address)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("address");
             entity.Property(e => e.DateOfBirth).HasColumnName("date_of_birth");
             entity.Property(e => e.Gender)
@@ -396,7 +397,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
             entity.Property(e => e.FullName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("full_name");
             entity.Property(e => e.HireDate).HasColumnName("hire_date");
             entity.Property(e => e.IsActive)
@@ -429,6 +430,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.GameshowId).HasColumnName("gameshow_id");
             entity.Property(e => e.Description)
                 .HasColumnType("text")
+                .IsUnicode(true)
                 .HasColumnName("description");
             entity.Property(e => e.EndDate).HasColumnName("end_date");
             entity.Property(e => e.PartnerId).HasColumnName("partner_id");
@@ -455,11 +457,11 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.ManagerId).HasColumnName("manager_id");
             entity.Property(e => e.Department)
                 .HasMaxLength(100)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("department");
             entity.Property(e => e.FullName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("full_name");
             entity.Property(e => e.UserId).HasColumnName("user_id");
 
@@ -583,7 +585,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.PartnerId).HasColumnName("partner_id");
             entity.Property(e => e.Address)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("address");
             entity.Property(e => e.ApprovedAt)
                 .HasColumnType("datetime")
@@ -613,7 +615,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.ManagerId).HasColumnName("manager_id");
             entity.Property(e => e.PartnerName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("partner_name");
             entity.Property(e => e.Phone)
                 .HasMaxLength(20)
@@ -624,7 +626,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("rejection_reason");
             entity.Property(e => e.Status)
                 .HasMaxLength(10)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasDefaultValue("pending")
                 .HasColumnName("status");
             entity.Property(e => e.TaxCode)
@@ -1069,7 +1071,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.EmailConfirmed).HasColumnName("email_confirmed");
             entity.Property(e => e.Fullname)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("fullname");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)

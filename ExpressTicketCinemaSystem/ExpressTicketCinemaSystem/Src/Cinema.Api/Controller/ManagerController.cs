@@ -456,7 +456,40 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+        /// <summary>
+        /// Get list of partners without any contracts
+        /// </summary>
+        /// <param name="page">Page number (default: 1)</param>
+        /// <param name="limit">Number of items per page (default: 10)</param>
+        /// <param name="search">Search term for partner name</param>
+        /// <returns>Paginated list of partners without contracts</returns>
+        [HttpGet("/manager/partners/without-contracts")]
+        [ProducesResponseType(typeof(SuccessResponse<PaginatedPartnersWithoutContractsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetPartnersWithoutContracts(
+            [FromQuery] int page = 1,
+            [FromQuery] int limit = 10,
+            [FromQuery] string? search = null)
+        {
+            try
+            {
+                var result = await _partnerService.GetPartnersWithoutContractsAsync(page, limit, search);
 
+                var response = new SuccessResponse<PaginatedPartnersWithoutContractsResponse>
+                {
+                    Message = "Lấy danh sách partner chưa có hợp đồng thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách partner chưa có hợp đồng."
+                });
+            }
+        }
 
     }
 }
