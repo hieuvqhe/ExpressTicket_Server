@@ -11,19 +11,50 @@ public partial class Contract
 
     public int PartnerId { get; set; }
 
+    public int? CreatedBy { get; set; }
+
     public string ContractNumber { get; set; } = null!;
 
-    public string? ContractType { get; set; }
+    public string ContractType { get; set; } = null!;
 
-    public DateOnly StartDate { get; set; }
+    public string Title { get; set; } = null!;
 
-    public DateOnly EndDate { get; set; }
+    public string? Description { get; set; }
 
-    public decimal? CommissionRate { get; set; }
+    public string? TermsAndConditions { get; set; }
+
+    public DateTime StartDate { get; set; }
+
+    public DateTime EndDate { get; set; }
+
+    public decimal CommissionRate { get; set; }
+
+    public decimal? MinimumRevenue { get; set; }
 
     public string Status { get; set; } = null!;
 
+    public bool IsActive { get; set; }
+
+    public bool IsLocked { get; set; }
+
+    public string? ContractHash { get; set; }
+
+    public string? PartnerSignatureUrl { get; set; }
+
+    public string? ManagerSignature { get; set; }
+
     public DateTime? SignedAt { get; set; }
+
+    public DateTime? PartnerSignedAt { get; set; }
+
+    public DateTime? ManagerSignedAt { get; set; }
+
+    public DateTime? LockedAt { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+    public string? PdfUrl { get; set; }
 
     public virtual Manager Manager { get; set; } = null!;
 

@@ -7,5 +7,8 @@
 
         // Gửi email chung 
         Task SendEmailAsync(string email, string subject, string body);
+        // Gui email dang ky partner 
+
+        Task SendPartnerRegistrationConfirmationAsync(string email, string fullName, string partnerName);
     }
 }

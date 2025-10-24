@@ -15,6 +15,12 @@ public partial class Screen
 
     public bool IsActive { get; set; }
 
+    // Thêm trường capacity
+    public int Capacity { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
     public virtual Cinema Cinema { get; set; } = null!;
 
     public virtual SeatMap? SeatMap { get; set; }

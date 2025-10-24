@@ -1,5 +1,8 @@
 ﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Requests;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -26,20 +29,51 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _config = config;
         }
 
-        // Đăng ký tài khoản
         public async Task<User> RegisterAsync(RegisterRequest request)
         {
+            var errors = new Dictionary<string, ValidationError>();
+
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(request.FullName))
+                errors["fullName"] = new ValidationError { Msg = "Họ và tên là bắt buộc", Path = "fullName" };
+
+            if (string.IsNullOrWhiteSpace(request.Username))
+                errors["username"] = new ValidationError { Msg = "Tên đăng nhập là bắt buộc", Path = "username" };
+
+            if (string.IsNullOrWhiteSpace(request.Email))
+                errors["email"] = new ValidationError { Msg = "Email là bắt buộc", Path = "email" };
+
+            if (string.IsNullOrWhiteSpace(request.Password))
+                errors["password"] = new ValidationError { Msg = "Mật khẩu là bắt buộc", Path = "password" };
+
+            if (string.IsNullOrWhiteSpace(request.ConfirmPassword))
+                errors["confirmPassword"] = new ValidationError { Msg = "Xác nhận mật khẩu là bắt buộc", Path = "confirmPassword" };
+
+            // Validate password match
+            if (request.Password != request.ConfirmPassword)
+                errors["confirmPassword"] = new ValidationError { Msg = "Mật khẩu và xác nhận mật khẩu không khớp", Path = "confirmPassword" };
+
+            // Validate username format
+            if (!string.IsNullOrWhiteSpace(request.Username) && !Regex.IsMatch(request.Username, @"^[a-zA-Z0-9_]{8,15}$"))
+                errors["username"] = new ValidationError { Msg = "Tên đăng nhập phải từ 8-15 ký tự và chỉ chứa chữ cái, số và dấu gạch dưới", Path = "username" };
+
+            // Validate email format
+            if (!string.IsNullOrWhiteSpace(request.Email) && !Regex.IsMatch(request.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                errors["email"] = new ValidationError { Msg = "Định dạng email không hợp lệ", Path = "email" };
+
+            // Validate password strength
+            if (!string.IsNullOrWhiteSpace(request.Password) && !Regex.IsMatch(request.Password, @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,12}$"))
+                errors["password"] = new ValidationError { Msg = "Mật khẩu phải từ 6-12 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt", Path = "password" };
+
+            if (errors.Any())
+                throw new ValidationException(errors);
+
+            // Check for existing users
             if (await _context.Users.AnyAsync(u => u.Username == request.Username))
-                throw new ArgumentException("Tên đăng nhập đã tồn tại.");
+                throw new ConflictException("username", "Tên đăng nhập đã tồn tại");
 
             if (await _context.Users.AnyAsync(u => u.Email == request.Email))
-                throw new ArgumentException("Email đã tồn tại.");
-
-            if (!Regex.IsMatch(request.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
-                throw new Exception("Định dạng email không hợp lệ.");
-
-            if (!Regex.IsMatch(request.Password, @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{6,12}$"))
-                throw new Exception("Mật khẩu phải bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (6–12 ký tự).");
+                throw new ConflictException("email", "Email đã tồn tại");
 
             var user = new User
             {
@@ -75,9 +109,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return user;
         }
 
-        // Xác minh email
         public async Task<bool> VerifyEmailAsync(string token)
         {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                errors["token"] = new ValidationError { Msg = "Token là bắt buộc", Path = "token" };
+                throw new ValidationException(errors);
+            }
+
             var tokenBytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
 
             var verification = await _context.EmailVerificationTokens
@@ -85,9 +126,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .FirstOrDefaultAsync(e => e.TokenHash == tokenBytes);
 
             if (verification == null)
-                throw new Exception("Token không hợp lệ.");
+            {
+                errors["token"] = new ValidationError { Msg = "Token không hợp lệ", Path = "token" };
+                throw new ValidationException(errors);
+            }
+
             if (verification.ExpiresAt < DateTime.UtcNow)
-                throw new Exception("Token đã hết hạn.");
+            {
+                errors["token"] = new ValidationError { Msg = "Token đã hết hạn", Path = "token" };
+                throw new ValidationException(errors);
+            }
 
             verification.User.EmailConfirmed = true;
             verification.ConsumedAt = DateTime.UtcNow;
@@ -97,14 +145,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return true;
         }
 
-        // Gửi lại email xác minh
         public async Task ResendVerificationEmailAsync(string email)
         {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                errors["email"] = new ValidationError { Msg = "Email là bắt buộc", Path = "email" };
+                throw new ValidationException(errors);
+            }
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user == null)
-                throw new Exception("Không tìm thấy người dùng với email này.");
+            {
+                errors["email"] = new ValidationError { Msg = "Không tìm thấy người dùng với email này", Path = "email" };
+                throw new ValidationException(errors);
+            }
+
             if (user.EmailConfirmed)
-                throw new Exception("Email đã được xác minh.");
+                throw new ConflictException("email", "Email đã được xác minh");
 
             var oldTokens = _context.EmailVerificationTokens.Where(v => v.UserId == user.UserId);
             _context.EmailVerificationTokens.RemoveRange(oldTokens);
@@ -126,44 +185,185 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await _emailService.SendVerificationEmailAsync(user.Email, newToken);
         }
 
-        // Đăng nhập
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.EmailOrUsername) || string.IsNullOrWhiteSpace(request.Password))
-                throw new ArgumentException("Email/Tên đăng nhập và mật khẩu không được để trống.");
+            var errors = new Dictionary<string, ValidationError>();
 
+            // Validate required fields
+            if (string.IsNullOrWhiteSpace(request.EmailOrUsername))
+                errors["emailOrUsername"] = new ValidationError { Msg = "Email/Tên đăng nhập không được để trống", Path = "emailOrUsername" };
+
+            if (string.IsNullOrWhiteSpace(request.Password))
+                errors["password"] = new ValidationError { Msg = "Mật khẩu không được để trống", Path = "password" };
+
+            if (errors.Any())
+                throw new ValidationException(errors);
+
+            // Tìm user - INCLUDE PARTNER INFORMATION
             var user = await _context.Users
+                .Include(u => u.Partner) // QUAN TRỌNG: Include partner info
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername || u.Username == request.EmailOrUsername);
 
             if (user == null)
-                throw new UnauthorizedAccessException("Tài khoản chưa được đăng ký.");
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["emailOrUsername"] = new ValidationError
+                    {
+                        Msg = "Tài khoản hoặc mật khẩu không chính xác",
+                        Path = "emailOrUsername"
+                    }
+                });
+
+            // ==================== PARTNER SPECIFIC VALIDATION ====================
+            if (user.UserType == "Partner")
+            {
+                ValidatePartnerLogin(user);
+            }
+
+            // ==================== COMMON VALIDATION ====================
             if (!user.EmailConfirmed)
-                throw new UnauthorizedAccessException("Email chưa được xác minh. Vui lòng kiểm tra email.");
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["email"] = new ValidationError
+                    {
+                        Msg = "Email chưa được xác minh. Vui lòng kiểm tra email",
+                        Path = "email"
+                    }
+                });
+            if (user.IsBanned)
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["account"] = new ValidationError
+                    {
+                        Msg = "Tài khoản đang bị cấm. Vui lòng liên hệ admin để mở khóa",
+                        Path = "account"
+                    }
+                });
             if (!user.IsActive)
-                throw new UnauthorizedAccessException("Tài khoản đã bị khóa.");
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["account"] = new ValidationError
+                    {
+                        Msg = "Tài khoản đã bị khóa",
+                        Path = "account"
+                    }
+                });
 
             var verifyResult = _passwordHasher.VerifyHashedPassword(user, user.Password, request.Password);
             if (verifyResult == PasswordVerificationResult.Failed)
-                throw new UnauthorizedAccessException("Mật khẩu không chính xác.");
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["password"] = new ValidationError
+                    {
+                        Msg = "Tài khoản hoặc mật khẩu không chính xác",
+                        Path = "password"
+                    }
+                });
 
             return await CreateJwtResponseAsync(user);
         }
 
-        // Tạo token JWT (dùng chung cho login thường và login Google)
+        // ==================== NEW METHOD: VALIDATE PARTNER LOGIN ====================
+        private void ValidatePartnerLogin(User user)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            // Kiểm tra partner record có tồn tại không
+            if (user.Partner == null)
+            {
+                errors["partner"] = new ValidationError
+                {
+                    Msg = "Tài khoản partner chưa được thiết lập đầy đủ. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra partner status
+            switch (user.Partner.Status?.ToLower())
+            {
+                case "pending":
+                    errors["status"] = new ValidationError
+                    {
+                        Msg = "Tài khoản partner đang chờ duyệt. Vui lòng chờ quản trị viên xét duyệt.",
+                        Path = "account"
+                    };
+                    break;
+
+                case "rejected":
+                    var reason = string.IsNullOrEmpty(user.Partner.RejectionReason)
+                        ? "Lý do: Không được cung cấp"
+                        : $"Lý do: {user.Partner.RejectionReason}";
+
+                    errors["status"] = new ValidationError
+                    {
+                        Msg = $"Tài khoản partner đã bị từ chối. {reason}",
+                        Path = "account"
+                    };
+                    break;
+
+                case "approved":
+                    // Partner approved - cho phép login
+                    break;
+
+                case null:
+                case "":
+                    errors["status"] = new ValidationError
+                    {
+                        Msg = "Trạng thái partner không hợp lệ. Vui lòng liên hệ quản trị viên.",
+                        Path = "account"
+                    };
+                    break;
+
+                default:
+                    errors["status"] = new ValidationError
+                    {
+                        Msg = $"Trạng thái partner không xác định: {user.Partner.Status}",
+                        Path = "account"
+                    };
+                    break;
+            }
+
+            if (errors.Any())
+                throw new UnauthorizedException(errors);
+        }
+
         public async Task<LoginResponse> CreateJwtResponseAsync(User user)
         {
+            var jwtKey = _config["Jwt:Key"];
+            if (string.IsNullOrEmpty(jwtKey))
+            {
+                throw new Exception("Lỗi cấu hình server: Jwt:Key không được thiết lập");
+            }
+
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.UTF8.GetBytes(_config["Jwt:Key"]);
+            var key = Encoding.UTF8.GetBytes(jwtKey);
+
+            // Tạo claims
+            var claims = new List<Claim>
+    {
+        new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
+        new Claim(ClaimTypes.Name, user.Fullname ?? ""),
+        new Claim(ClaimTypes.Email, user.Email ?? ""),
+        new Claim(ClaimTypes.Role, user.UserType ?? "User")
+    };
+
+            // ==================== ADD PARTNER SPECIFIC CLAIMS ====================
+            if (user.UserType == "Partner" && user.Partner != null)
+            {
+                claims.Add(new Claim("PartnerId", user.Partner.PartnerId.ToString()));
+                claims.Add(new Claim("PartnerStatus", user.Partner.Status ?? ""));
+                claims.Add(new Claim("PartnerName", user.Partner.PartnerName ?? ""));
+
+                if (user.Partner.CommissionRate > 0)
+                {
+                    claims.Add(new Claim("CommissionRate", user.Partner.CommissionRate.ToString()));
+                }
+            }
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new[]
-                {
-            new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
-            new Claim(ClaimTypes.Name, user.Fullname ?? ""),
-            new Claim(ClaimTypes.Email, user.Email ?? ""),
-            new Claim(ClaimTypes.Role, user.UserType ?? "User")
-        }),
+                Subject = new ClaimsIdentity(claims),
                 Expires = DateTime.UtcNow.AddHours(2),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(key),
@@ -173,7 +373,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             var accessToken = tokenHandler.WriteToken(tokenHandler.CreateToken(tokenDescriptor));
 
-            // Lưu refresh token vào DB
             var refresh = new RefreshToken
             {
                 Token = Guid.NewGuid().ToString(),
@@ -185,28 +384,74 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context.RefreshTokens.Add(refresh);
             await _context.SaveChangesAsync();
 
-            return new LoginResponse
+            // ==================== ENHANCE LOGIN RESPONSE FOR PARTNER ====================
+            var response = new LoginResponse
             {
                 AccessToken = accessToken,
                 RefreshToken = refresh.Token,
                 ExpireAt = tokenDescriptor.Expires!.Value,
                 FullName = user.Fullname ?? "",
-                Role = user.UserType ?? "User"
+                Role = user.UserType ?? "User",
+                PartnerInfo = null,
+                // CHỈ CẦN THÊM THÔNG TIN TRẠNG THÁI VÀO RESPONSE
+                AccountStatus = GetAccountStatus(user),
+                IsBanned = user.IsBanned,
+                IsActive = user.IsActive,
+                EmailConfirmed = user.EmailConfirmed
             };
+
+            // Thêm thông tin partner vào response nếu là partner
+            if (user.UserType == "Partner" && user.Partner != null)
+            {
+                response.PartnerInfo = new PartnerLoginInfo
+                {
+                    PartnerId = user.Partner.PartnerId,
+                    PartnerName = user.Partner.PartnerName,
+                    PartnerStatus = user.Partner.Status ?? ""
+                };
+            }
+
+            return response;
         }
-        public async Task<LoginResponse?> RefreshTokenAsync(string refreshToken)
+        private string GetAccountStatus(User user)
         {
-            if (string.IsNullOrWhiteSpace(refreshToken)) return null;
+            if (user.IsBanned) return "banned";
+            if (!user.IsActive) return "inactive";
+            if (!user.EmailConfirmed) return "email_not_verified";
+            return "active";
+        }
+        public async Task<LoginResponse> RefreshTokenAsync(string refreshToken)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (string.IsNullOrWhiteSpace(refreshToken))
+            {
+                errors["refreshToken"] = new ValidationError { Msg = "Refresh Token không hợp lệ", Path = "refreshToken" };
+                throw new UnauthorizedException(errors);
+            }
 
             var token = await _context.RefreshTokens
                 .Include(t => t.User)
                 .FirstOrDefaultAsync(t => t.Token == refreshToken && !t.IsRevoked);
 
-            if (token == null) return null;
-            if (token.ExpiresAt <= DateTime.UtcNow) return null;
-            if (token.User == null || !token.User.IsActive) return null;
+            if (token == null)
+            {
+                errors["refreshToken"] = new ValidationError { Msg = "Refresh Token không hợp lệ", Path = "refreshToken" };
+                throw new UnauthorizedException(errors);
+            }
 
-            // Thu hồi token cũ, phát hành token mới
+            if (token.ExpiresAt <= DateTime.UtcNow)
+            {
+                errors["refreshToken"] = new ValidationError { Msg = "Refresh Token đã hết hạn", Path = "refreshToken" };
+                throw new UnauthorizedException(errors);
+            }
+
+            if (token.User == null || !token.User.IsActive)
+            {
+                errors["account"] = new ValidationError { Msg = "Tài khoản liên kết với token này đã bị khóa", Path = "account" };
+                throw new UnauthorizedException(errors);
+            }
+
             token.IsRevoked = true;
 
             var newToken = new RefreshToken
@@ -222,28 +467,51 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             return await CreateJwtResponseAsync(token.User);
         }
+
         public async Task<bool> LogoutAsync(string refreshToken)
         {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (string.IsNullOrWhiteSpace(refreshToken))
+            {
+                errors["refreshToken"] = new ValidationError { Msg = "Refresh token không hợp lệ", Path = "refreshToken" };
+                throw new ValidationException(errors);
+            }
+
             var token = await _context.RefreshTokens.FirstOrDefaultAsync(t => t.Token == refreshToken);
-            if (token == null) return false;
+            if (token == null)
+            {
+                errors["refreshToken"] = new ValidationError { Msg = "Refresh token không hợp lệ", Path = "refreshToken" };
+                throw new ValidationException(errors);
+            }
 
             token.IsRevoked = true;
             await _context.SaveChangesAsync();
             return true;
         }
-        // Gửi mã khôi phục (6 số)
+
         public async Task ForgotPasswordAsync(ForgotPasswordRequest request)
         {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (string.IsNullOrWhiteSpace(request.EmailOrUsername))
+            {
+                errors["emailOrUsername"] = new ValidationError { Msg = "Email hoặc tên đăng nhập là bắt buộc", Path = "emailOrUsername" };
+                throw new ValidationException(errors);
+            }
+
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername || u.Username == request.EmailOrUsername);
 
             if (user == null)
-                throw new ArgumentException("Không tìm thấy tài khoản với email hoặc username này.");
-            if (string.IsNullOrWhiteSpace(request.EmailOrUsername))
-                throw new ArgumentException("Vui lòng nhập email hoặc username.");
+            {
+                errors["emailOrUsername"] = new ValidationError { Msg = "Không tìm thấy tài khoản với email hoặc username này", Path = "emailOrUsername" };
+                throw new ValidationException(errors);
+            }
 
-            if (user != null && user.IsActive == false)
-                throw new UnauthorizedAccessException("Tài khoản đã bị khóa, không thể khôi phục mật khẩu.");
+            if (!user.IsActive)
+                throw new ConflictException("emailOrUsername", "Tài khoản đã bị khóa, không thể khôi phục mật khẩu");
+
             var code = new Random().Next(100000, 999999).ToString();
 
             var reset = new PasswordResetCode
@@ -266,46 +534,96 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await _emailService.SendEmailAsync(user.Email, subject, body);
         }
 
-        //  Xác minh mã OTP
         public async Task VerifyResetCodeAsync(VerifyResetCodeRequest request)
         {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (string.IsNullOrWhiteSpace(request.EmailOrUsername))
+            {
+                errors["emailOrUsername"] = new ValidationError { Msg = "Email hoặc tên đăng nhập là bắt buộc", Path = "emailOrUsername" };
+                throw new ValidationException(errors);
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Code))
+            {
+                errors["code"] = new ValidationError { Msg = "Mã xác minh là bắt buộc", Path = "code" };
+                throw new ValidationException(errors);
+            }
+
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername || u.Username == request.EmailOrUsername);
 
             if (user == null)
-                throw new ArgumentException("Không tìm thấy người dùng.");
+            {
+                errors["emailOrUsername"] = new ValidationError { Msg = "Không tìm thấy người dùng", Path = "emailOrUsername" };
+                throw new ValidationException(errors);
+            }
 
             var record = await _context.PasswordResetCodes
                 .Where(c => c.UserId == user.UserId && c.Code == request.Code && !c.IsUsed)
                 .OrderByDescending(c => c.CreatedAt)
                 .FirstOrDefaultAsync();
 
-            if (record == null || record.ExpiredAt < DateTime.UtcNow)
-                throw new UnauthorizedAccessException("Mã không hợp lệ hoặc đã hết hạn.");
-            if (string.IsNullOrWhiteSpace(request.Code))
-                throw new ArgumentException("Vui lòng nhập mã xác minh.");
+            if (record == null)
+            {
+                errors["code"] = new ValidationError { Msg = "Mã không hợp lệ", Path = "code" };
+                throw new ValidationException(errors);
+            }
+
             if (record.ExpiredAt < DateTime.UtcNow)
-                throw new UnauthorizedAccessException("Mã xác minh đã hết hạn, vui lòng yêu cầu mã mới.");
+            {
+                errors["code"] = new ValidationError { Msg = "Mã xác minh đã hết hạn, vui lòng yêu cầu mã mới", Path = "code" };
+                throw new ValidationException(errors);
+            }
+
             record.IsVerified = true;
             record.VerifiedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
         }
 
-        //  Đặt lại mật khẩu
         public async Task ResetPasswordAsync(ResetPasswordRequest request)
         {
-            if (request.NewPassword != request.VerifyPassword)
-                throw new ArgumentException("Hai mật khẩu không khớp.");
+            var errors = new Dictionary<string, ValidationError>();
 
-            if (!Regex.IsMatch(request.NewPassword, @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{6,12}$"))
-                throw new ArgumentException("Mật khẩu phải có chữ hoa, chữ thường, số và ký tự đặc biệt (6–12 ký tự).");
+            if (string.IsNullOrWhiteSpace(request.EmailOrUsername))
+            {
+                errors["emailOrUsername"] = new ValidationError { Msg = "Email hoặc tên đăng nhập là bắt buộc", Path = "emailOrUsername" };
+                throw new ValidationException(errors);
+            }
+
+            if (string.IsNullOrWhiteSpace(request.NewPassword))
+            {
+                errors["newPassword"] = new ValidationError { Msg = "Mật khẩu mới là bắt buộc", Path = "newPassword" };
+                throw new ValidationException(errors);
+            }
+
+            if (string.IsNullOrWhiteSpace(request.VerifyPassword))
+            {
+                errors["verifyPassword"] = new ValidationError { Msg = "Xác nhận mật khẩu là bắt buộc", Path = "verifyPassword" };
+                throw new ValidationException(errors);
+            }
+
+            if (request.NewPassword != request.VerifyPassword)
+            {
+                errors["verifyPassword"] = new ValidationError { Msg = "Hai mật khẩu không khớp", Path = "verifyPassword" };
+                throw new ValidationException(errors);
+            }
+
+            if (!Regex.IsMatch(request.NewPassword, @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,12}$"))
+            {
+                errors["newPassword"] = new ValidationError { Msg = "Mật khẩu phải có chữ hoa, chữ thường, số và ký tự đặc biệt (6–12 ký tự)", Path = "newPassword" };
+                throw new ValidationException(errors);
+            }
 
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername || u.Username == request.EmailOrUsername);
 
             if (user == null)
-                throw new ArgumentException("Không tìm thấy người dùng.");
+            {
+                errors["emailOrUsername"] = new ValidationError { Msg = "Không tìm thấy người dùng", Path = "emailOrUsername" };
+                throw new ValidationException(errors);
+            }
 
             var verified = await _context.PasswordResetCodes
                 .Where(c => c.UserId == user.UserId && c.IsVerified && !c.IsUsed && c.ExpiredAt > DateTime.UtcNow)
@@ -313,7 +631,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .FirstOrDefaultAsync();
 
             if (verified == null)
-                throw new UnauthorizedAccessException("Mã xác minh không hợp lệ hoặc chưa được xác minh.");
+            {
+                errors["code"] = new ValidationError { Msg = "Mã xác minh không hợp lệ hoặc chưa được xác minh", Path = "code" };
+                throw new ValidationException(errors);
+            }
 
             user.Password = _passwordHasher.HashPassword(user, request.NewPassword);
             verified.IsUsed = true;

@@ -2,7 +2,7 @@
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
+namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
 {
     public class AddGenericMovieExampleFilter : IOperationFilter
     {

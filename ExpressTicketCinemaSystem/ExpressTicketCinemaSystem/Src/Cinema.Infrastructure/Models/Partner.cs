@@ -9,7 +9,7 @@ public partial class Partner
 
     public int UserId { get; set; }
 
-    public int ManagerId { get; set; }
+    public int? ManagerId { get; set; }
 
     public string PartnerName { get; set; } = null!;
 
@@ -27,6 +27,24 @@ public partial class Partner
 
     public DateTime CreatedAt { get; set; }
 
+    public string? BusinessRegistrationCertificateUrl { get; set; }
+
+    public string? TaxRegistrationCertificateUrl { get; set; }
+
+    public string? IdentityCardUrl { get; set; }
+
+    public string? TheaterPhotosUrl { get; set; }
+
+    public string? Status { get; set; }
+
+    public string? RejectionReason { get; set; }
+
+    public DateTime? ApprovedAt { get; set; }
+
+    public int? ApprovedBy { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
+
     public virtual ICollection<Advertisement> Advertisements { get; set; } = new List<Advertisement>();
 
     public virtual ICollection<Cinema> Cinemas { get; set; } = new List<Cinema>();
@@ -37,9 +55,7 @@ public partial class Partner
 
     public virtual ICollection<GameShow> GameShows { get; set; } = new List<GameShow>();
 
-    public virtual Manager Manager { get; set; } = null!;
-
-    public virtual ICollection<MovieSubmission> MovieSubmissions { get; set; } = new List<MovieSubmission>();
+    public virtual Manager? Manager { get; set; } = null!;
 
     public virtual ICollection<PartnerReport> PartnerReports { get; set; } = new List<PartnerReport>();
 
