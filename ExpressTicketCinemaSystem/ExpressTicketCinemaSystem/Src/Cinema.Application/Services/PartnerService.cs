@@ -832,5 +832,5 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 _ => isAscending ? query.OrderBy(p => p.CreatedAt) : query.OrderByDescending(p => p.CreatedAt) // default
             };
         }
-    }
-}
+     }
+ }
