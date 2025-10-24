@@ -1,6 +1,7 @@
 ﻿using Amazon;
 using Amazon.S3;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
