@@ -45,8 +45,6 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<MovieActor> MovieActors { get; set; }
 
-    public virtual DbSet<MovieSubmission> MovieSubmissions { get; set; }
-
     public virtual DbSet<Partner> Partners { get; set; }
 
     public virtual DbSet<PartnerReport> PartnerReports { get; set; }
@@ -294,6 +292,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(500)
                 .HasColumnName("partner_signature_url");
             entity.Property(e => e.PartnerSignedAt).HasColumnName("partner_signed_at");
+            entity.Property(e => e.PdfUrl).HasMaxLength(500);
             entity.Property(e => e.SignedAt).HasColumnName("signed_at");
             entity.Property(e => e.StartDate).HasColumnName("start_date");
             entity.Property(e => e.Status)
@@ -476,6 +475,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasKey(e => e.MovieId).HasName("PK__Movie__83CDF7494F73DF92");
 
             entity.ToTable("Movie");
+            entity.HasIndex(e => e.ManagerId, "IX_Movies_ManagerId");
 
             entity.Property(e => e.MovieId).HasColumnName("movie_id");
             entity.Property(e => e.AverageRating)
@@ -507,6 +507,9 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("language");
+            entity.Property(e => e.ManagerId)
+                .HasDefaultValue(1)
+                .HasColumnName("manager_id");
             entity.Property(e => e.PosterUrl).HasColumnName("poster_url");
             entity.Property(e => e.PremiereDate).HasColumnName("premiereDate");
             entity.Property(e => e.Production)
@@ -522,6 +525,10 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("trailer_url");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne(d => d.Manager).WithMany(p => p.Movies)
+                .HasForeignKey(d => d.ManagerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Movies_Manager");
         });
 
         modelBuilder.Entity<MovieActor>(entity =>
@@ -545,33 +552,6 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.MovieId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__MovieActo__movie__236943A5");
-        });
-
-        modelBuilder.Entity<MovieSubmission>(entity =>
-        {
-            entity.HasKey(e => e.SubmissionId).HasName("PK__MovieSub__9B535595013C563F");
-
-            entity.ToTable("MovieSubmission");
-
-            entity.Property(e => e.SubmissionId).HasColumnName("submission_id");
-            entity.Property(e => e.MovieId).HasColumnName("movie_id");
-            entity.Property(e => e.PartnerId).HasColumnName("partner_id");
-            entity.Property(e => e.Status)
-                .HasMaxLength(50)
-                .IsUnicode(false)
-                .HasColumnName("status");
-            entity.Property(e => e.SubmittedAt)
-                .HasDefaultValueSql("(sysutcdatetime())")
-                .HasColumnName("submitted_at");
-
-            entity.HasOne(d => d.Movie).WithMany(p => p.MovieSubmissions)
-                .HasForeignKey(d => d.MovieId)
-                .HasConstraintName("FK_MovieSubmission_Movie");
-
-            entity.HasOne(d => d.Partner).WithMany(p => p.MovieSubmissions)
-                .HasForeignKey(d => d.PartnerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_MovieSubmission_Partner");
         });
 
         modelBuilder.Entity<Partner>(entity =>

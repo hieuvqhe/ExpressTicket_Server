@@ -1,6 +1,11 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+using static ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests.CreateMovieRequest;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -845,9 +850,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             return "upcoming"; 
         }
-
-
-
     }
 
 }

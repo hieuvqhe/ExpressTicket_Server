@@ -12,6 +12,8 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using System.Collections.Generic;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+using System.IO; 
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -22,10 +24,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
     {
         private readonly PartnerService _partnerService;
         private readonly ContractService _contractService;
-        public PartnersController(PartnerService partnerService , ContractService contractService)
+        private readonly IAzureBlobService _azureBlobService;
+        public PartnersController(PartnerService partnerService , ContractService contractService , IAzureBlobService azureBlobService)
         {
             _partnerService = partnerService;
             _contractService = contractService;
+            _azureBlobService = azureBlobService;
         }
 
         private int GetCurrentUserId()
@@ -340,6 +344,66 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin hợp đồng."
+                });
+            }
+        }
+        /// <summary>
+        /// (Partner) Tạo SAS URL để upload file ảnh chữ ký (PNG/JPG)
+        /// </summary>
+        /// <param name="request">Chứa tên file, ví dụ: "signature.png"</param>
+        /// <returns>SAS URL (for uploading) and Blob URL (for saving)</returns>
+        [HttpPost("/partners/contracts/generate-signature-upload-sas")]
+        [Authorize(Roles = "Partner")] // Đảm bảo chỉ partner mới được gọi
+        [ProducesResponseType(typeof(SuccessResponse<GeneratePdfUploadUrlResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GenerateSignatureUploadUrl([FromBody] GeneratePdfUploadUrlRequest request)
+        {
+            // === VALIDATION ===
+            if (string.IsNullOrWhiteSpace(request.FileName))
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Tên file là bắt buộc",
+                    Errors = new Dictionary<string, ValidationError>
+                    {
+                        ["fileName"] = new ValidationError { Msg = "Tên file không được để trống" }
+                    }
+                });
+            }
+
+            var allowedExtensions = new[] { ".png", ".jpg", ".jpeg" };
+            var extension = Path.GetExtension(request.FileName).ToLower();
+            if (!allowedExtensions.Contains(extension))
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Định dạng file không hợp lệ",
+                    Errors = new Dictionary<string, ValidationError>
+                    {
+                        ["fileName"] = new ValidationError { Msg = "Chỉ chấp nhận file ảnh (.png, .jpg, .jpeg)" }
+                    }
+                });
+            }
+
+            // === BUSINESS LOGIC ===
+            try
+            {
+                var result = await _azureBlobService.GeneratePdfUploadUrlAsync(request.FileName);
+
+                var response = new SuccessResponse<GeneratePdfUploadUrlResponse>
+                {
+                    Message = "Tạo SAS URL cho chữ ký thành công",
+                    Result = result
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo URL upload chữ ký."
                 });
             }
         }
