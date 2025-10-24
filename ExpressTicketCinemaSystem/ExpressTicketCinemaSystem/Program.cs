@@ -94,6 +94,12 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<ManagerSendContractPdfExampleFilter>();
     options.OperationFilter<ManagerApprovePartnerExampleFilter>();
     options.OperationFilter<ManagerRejectPartnerExampleFilter>();
+    options.OperationFilter<CreateScreenExampleFilter>();
+    options.OperationFilter<UpdateScreenExampleFilter>();
+    options.OperationFilter<GetScreenByIdExampleFilter>();
+    options.OperationFilter<GetScreensExampleFilter>();
+   
+    
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
     options.AddSecurityDefinition("Bearer", jwtSecurityScheme);
@@ -121,7 +127,7 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<PartnerService>();
 builder.Services.AddScoped<ContractService>();
 builder.Services.AddScoped<AdminService>();
-
+builder.Services.AddScoped<ScreenService>();
 
 
 //  JWT AUTHENTICATION 

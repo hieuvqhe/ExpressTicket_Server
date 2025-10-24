@@ -6,7 +6,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 public partial class MovieSubmission
 {
     public int SubmissionId { get; set; }
-
     public int PartnerId { get; set; }
 
     public int? MovieId { get; set; }

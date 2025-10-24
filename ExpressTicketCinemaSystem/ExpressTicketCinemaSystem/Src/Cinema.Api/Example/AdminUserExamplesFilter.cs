@@ -37,7 +37,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             else if (method == "PUT" && path?.StartsWith("api/admin/users/") == true &&
                      !path.Contains("/ban") && !path.Contains("/unban") && !path.Contains("/role"))
             {
-                ApplyUpdateUserExamples(operation); 
+                ApplyUpdateUserExamples(operation);
             }
             else if (method == "GET" && path?.StartsWith("api/admin/users/") == true &&
                      !path.Contains("/ban") && !path.Contains("/unban") && !path.Contains("/role"))
@@ -64,7 +64,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                     {
                         "email": "updated.user@example.com",
                         "phone": "+1234567890",
-                        "userType": "customer",
+                        "userType": "User",
                         "fullname": "Updated User Name",
                         "isActive": true,
                         "emailConfirmed": true,
@@ -92,12 +92,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                         Value = new OpenApiString(
                             """
                     {
-                        "message": "Update user successful",
+                        "message": "Cập nhật người dùng thành công",
                         "result": {
                             "userId": "123",
                             "email": "updated.user@example.com",
                             "phone": "+1234567890",
-                            "userType": "customer",
+                            "userType": "User",
                             "fullname": "Updated User Name",
                             "isActive": true,
                             "createdAt": "2024-01-15T10:30:00Z",
@@ -121,10 +121,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request - Invalid User Id",
                 """
         {
-            "message": "Invalid User Id",
+            "message": "ID người dùng không hợp lệ",
             "errorInfo": {
                 "name": "ValidationError",
-                "message": "User ID must be a valid number"
+                "message": "ID người dùng phải là số hợp lệ"
             }
         }
         """);
@@ -132,10 +132,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "404", "Not Found",
                 """
         {
-            "message": "User not found",
+            "message": "Không tìm thấy người dùng",
             "errorInfo": {
                 "name": "NotFoundError",
-                "message": "User not found"
+                "message": "Không tìm thấy người dùng"
             }
         }
         """);
@@ -143,10 +143,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "409", "Conflict - Username already exists",
                 """
         {
-            "message": "Username already exists",
+            "message": "Tên người dùng đã tồn tại",
             "errorInfo": {
                 "name": "ConflictError",
-                "message": "Username already exists"
+                "message": "Tên người dùng đã tồn tại"
             }
         }
         """);
@@ -154,10 +154,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "409", "Conflict - Email already exists",
                 """
         {
-            "message": "Email already exists",
+            "message": "Email đã tồn tại",
             "errorInfo": {
                 "name": "ConflictError",
-                "message": "Email already exists"
+                "message": "Email đã tồn tại"
             }
         }
         """);
@@ -165,10 +165,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "409", "Conflict - Multiple fields exist",
                 """
         {
-            "message": "Username and email already exist",
+            "message": "Tên người dùng và email đã tồn tại",
             "errorInfo": {
                 "name": "ConflictError",
-                "message": "Username and email already exist"
+                "message": "Tên người dùng và email đã tồn tại"
             }
         }
         """);
@@ -176,7 +176,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "500", "Internal Server Error",
                 """
         {
-            "message": "An internal server error occurred",
+            "message": "Đã xảy ra lỗi máy chủ nội bộ",
             "errorInfo": {
                 "name": "ServerError",
                 "message": "Internal server error details"
@@ -201,12 +201,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                         Value = new OpenApiString(
                             """
                     {
-                        "message": "Get user successful",
+                        "message": "Lấy thông tin người dùng thành công",
                         "result": {
                             "userId": 123,
                             "email": "john.doe@example.com",
                             "phone": "+1234567890",
-                            "userType": "customer",
+                            "userType": "User",
                             "fullname": "John Doe",
                             "isActive": true,
                             "createdAt": "2024-01-15T10:30:00Z",
@@ -230,10 +230,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request - Invalid User Id",
                 """
         {
-            "message": "Invalid User Id",
+            "message": "ID người dùng không hợp lệ",
             "errorInfo": {
                 "name": "ValidationError",
-                "message": "User ID must be a valid number"
+                "message": "ID người dùng phải là số hợp lệ"
             }
         }
         """);
@@ -241,10 +241,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "404", "Not Found",
                 """
         {
-            "message": "User not found",
+            "message": "Không tìm thấy người dùng",
             "errorInfo": {
                 "name": "NotFoundError",
-                "message": "User not found"
+                "message": "Không tìm thấy người dùng"
             }
         }
         """);
@@ -252,10 +252,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "401", "Unauthorized",
                 """
         {
-            "message": "Unauthorized access",
+            "message": "Truy cập không được ủy quyền",
             "errorInfo": {
                 "name": "AuthenticationError",
-                "message": "User is not authenticated"
+                "message": "Người dùng chưa được xác thực"
             }
         }
         """);
@@ -263,10 +263,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "403", "Forbidden",
                 """
         {
-            "message": "Access forbidden",
+            "message": "Truy cập bị cấm",
             "errorInfo": {
                 "name": "AuthorizationError",
-                "message": "User does not have Admin role"
+                "message": "Người dùng không có vai trò Quản trị viên"
             }
         }
         """);
@@ -274,7 +274,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "500", "Internal Server Error",
                 """
         {
-            "message": "An internal server error occurred",
+            "message": "Đã xảy ra lỗi máy chủ nội bộ",
             "errorInfo": {
                 "name": "ServerError",
                 "message": "Internal server error details"
@@ -298,7 +298,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                         Value = new OpenApiString(
                             """
                     {
-                        "role": "customer"
+                        "role": "User"
                     }
                     """
                         )
@@ -320,10 +320,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                         Value = new OpenApiString(
                             """
                     {
-                        "message": "Update user role success",
+                        "message": "Cập nhật vai trò người dùng thành công",
                         "result": {
                             "userId": "123",
-                            "role": "customer",
+                            "role": "user",
                             "updatedAt": "2024-01-25T17:30:00Z"
                         }
                     }
@@ -337,10 +337,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "401", "Unauthorized",
                 """
         {
-            "message": "Unauthorized access",
+            "message": "Truy cập không được ủy quyền",
             "errorInfo": {
                 "name": "AuthenticationError",
-                "message": "User is not authenticated"
+                "message": "Người dùng chưa được xác thực"
             }
         }
         """);
@@ -348,10 +348,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "403", "Forbidden",
                 """
         {
-            "message": "Access forbidden",
+            "message": "Truy cập bị cấm",
             "errorInfo": {
                 "name": "AuthorizationError",
-                "message": "User does not have Admin role"
+                "message": "Người dùng không có vai trò Quản trị viên"
             }
         }
         """);
@@ -359,10 +359,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request - Invalid role",
                 """
         {
-            "message": "Invalid role. Available values: customer, employee, partner, manager, admin",
+            "message": "Vai trò không hợp lệ. Các giá trị có sẵn: user, staff, partner, manager, admin",
             "errorInfo": {
                 "name": "ValidationError",
-                "message": "Invalid role parameter"
+                "message": "Tham số vai trò không hợp lệ"
             }
         }
         """);
@@ -370,10 +370,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request - Role is required",
                 """
         {
-            "message": "Role is required",
+            "message": "Vai trò là bắt buộc",
             "errorInfo": {
                 "name": "ValidationError",
-                "message": "Role field cannot be empty"
+                "message": "Trường vai trò không được để trống"
             }
         }
         """);
@@ -381,10 +381,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "404", "Not Found",
                 """
         {
-            "message": "User not found",
+            "message": "Không tìm thấy người dùng",
             "errorInfo": {
                 "name": "NotFoundError",
-                "message": "User not found"
+                "message": "Không tìm thấy người dùng"
             }
         }
         """);
@@ -392,7 +392,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "500", "Internal Server Error",
                 """
         {
-            "message": "An internal server error occurred",
+            "message": "Đã xảy ra lỗi máy chủ nội bộ",
             "errorInfo": {
                 "name": "ServerError",
                 "message": "Internal server error details"
@@ -417,7 +417,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                         Value = new OpenApiString(
                             """
                     {
-                        "message": "Unban user success",
+                        "message": "Bỏ cấm người dùng thành công",
                         "result": {
                             "userId": "123",
                             "isBanned": false,
@@ -434,10 +434,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "401", "Unauthorized",
                 """
         {
-            "message": "Unauthorized access",
+            "message": "Truy cập không được ủy quyền",
             "errorInfo": {
                 "name": "AuthenticationError",
-                "message": "User is not authenticated"
+                "message": "Người dùng chưa được xác thực"
             }
         }
         """);
@@ -445,10 +445,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "403", "Forbidden",
                 """
         {
-            "message": "Access forbidden",
+            "message": "Truy cập bị cấm",
             "errorInfo": {
                 "name": "AuthorizationError",
-                "message": "User does not have Admin role"
+                "message": "Người dùng không có vai trò Quản trị viên"
             }
         }
         """);
@@ -456,10 +456,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request - User is not banned",
                 """
         {
-            "message": "User is not banned",
+            "message": "Người dùng không bị cấm",
             "errorInfo": {
                 "name": "BusinessRuleError",
-                "message": "User is not banned"
+                "message": "Người dùng không bị cấm"
             }
         }
         """);
@@ -467,10 +467,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "404", "Not Found",
                 """
         {
-            "message": "User not found",
+            "message": "Không tìm thấy người dùng",
             "errorInfo": {
                 "name": "NotFoundError",
-                "message": "User not found"
+                "message": "Không tìm thấy người dùng"
             }
         }
         """);
@@ -478,7 +478,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "500", "Internal Server Error",
                 """
         {
-            "message": "An internal server error occurred",
+            "message": "Đã xảy ra lỗi máy chủ nội bộ",
             "errorInfo": {
                 "name": "ServerError",
                 "message": "Internal server error details"
@@ -503,7 +503,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                         Value = new OpenApiString(
                             """
                             {
-                                "message": "Ban user success",
+                                "message": "Cấm người dùng thành công",
                                 "result": {
                                     "userId": "123",
                                     "isBanned": true,
@@ -520,10 +520,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "401", "Unauthorized",
                 """
                 {
-                    "message": "Unauthorized access",
+                    "message": "Truy cập không được ủy quyền",
                     "errorInfo": {
                         "name": "AuthenticationError",
-                        "message": "User is not authenticated"
+                        "message": "Người dùng chưa được xác thực"
                     }
                 }
                 """);
@@ -531,10 +531,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "403", "Forbidden",
                 """
                 {
-                    "message": "Access forbidden",
+                    "message": "Truy cập bị cấm",
                     "errorInfo": {
                         "name": "AuthorizationError",
-                        "message": "User does not have Admin role"
+                        "message": "Người dùng không có vai trò Quản trị viên"
                     }
                 }
                 """);
@@ -542,10 +542,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request - User already banned",
                 """
                 {
-                    "message": "User already banned",
+                    "message": "Người dùng đã bị cấm",
                     "errorInfo": {
                         "name": "BusinessRuleError",
-                        "message": "User already banned"
+                        "message": "Người dùng đã bị cấm"
                     }
                 }
                 """);
@@ -553,10 +553,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "404", "Not Found",
                 """
                 {
-                    "message": "User not found",
+                    "message": "Không tìm thấy người dùng",
                     "errorInfo": {
                         "name": "NotFoundError",
-                        "message": "User not found"
+                        "message": "Không tìm thấy người dùng"
                     }
                 }
                 """);
@@ -564,7 +564,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "500", "Internal Server Error",
                 """
                 {
-                    "message": "An internal server error occurred",
+                    "message": "Đã xảy ra lỗi máy chủ nội bộ",
                     "errorInfo": {
                         "name": "ServerError",
                         "message": "Internal server error details"
@@ -589,7 +589,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                         Value = new OpenApiString(
                             """
                             {
-                                "message": "Get users success",
+                                "message": "Lấy danh sách người dùng thành công",
                                 "result": {
                                     "users": [
                                         {
@@ -597,7 +597,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                                             "name": "John Doe",
                                             "email": "john.doe@example.com",
                                             "username": "johndoe",
-                                            "role": "customer",
+                                            "role": "user",
                                             "verify": 1,
                                             "createdAt": "2024-01-15T10:30:00Z",
                                             "stats": {
@@ -623,10 +623,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "401", "Unauthorized",
                 """
                 {
-                    "message": "Unauthorized access",
+                    "message": "Truy cập không được ủy quyền",
                     "errorInfo": {
                         "name": "AuthenticationError",
-                        "message": "User is not authenticated"
+                        "message": "Người dùng chưa được xác thực"
                     }
                 }
                 """);
@@ -634,10 +634,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "403", "Forbidden",
                 """
                 {
-                    "message": "Access forbidden",
+                    "message": "Truy cập bị cấm",
                     "errorInfo": {
                         "name": "AuthorizationError",
-                        "message": "User does not have Admin role"
+                        "message": "Người dùng không có vai trò Quản trị viên"
                     }
                 }
                 """);
@@ -645,10 +645,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request",
                 """
                 {
-                    "message": "Invalid role value. Available values: customer, employee, admin, manager, partner",
+                    "message": "Giá trị vai trò không hợp lệ. Các giá trị có sẵn: user, staff, admin, manager, partner",
                     "errorInfo": {
                         "name": "ValidationError",
-                        "message": "Invalid role parameter"
+                        "message": "Tham số vai trò không hợp lệ"
                     }
                 }
                 """);
@@ -656,7 +656,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "500", "Internal Server Error",
                 """
                 {
-                    "message": "An internal server error occurred.",
+                    "message": "Đã xảy ra lỗi máy chủ nội bộ.",
                     "errorInfo": {
                         "name": "ServerError",
                         "message": "Internal server error details"
@@ -681,7 +681,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                         Value = new OpenApiString(
                             """
                             {
-                                "message": "Delete user success",
+                                "message": "Xóa người dùng thành công",
                                 "result": {
                                     "userId": "123",
                                     "deleted": true,
@@ -698,10 +698,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "401", "Unauthorized",
                 """
                 {
-                    "message": "Unauthorized access",
+                    "message": "Truy cập không được ủy quyền",
                     "errorInfo": {
                         "name": "AuthenticationError",
-                        "message": "User is not authenticated"
+                        "message": "Người dùng chưa được xác thực"
                     }
                 }
                 """);
@@ -709,10 +709,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "403", "Forbidden",
                 """
                 {
-                    "message": "Access forbidden",
+                    "message": "Truy cập bị cấm",
                     "errorInfo": {
                         "name": "AuthorizationError",
-                        "message": "User does not have Admin role"
+                        "message": "Người dùng không có vai trò Quản trị viên"
                     }
                 }
                 """);
@@ -720,10 +720,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "400", "Bad Request",
                 """
                 {
-                    "message": "Invalid user ID format",
+                    "message": "Định dạng ID người dùng không hợp lệ",
                     "errorInfo": {
                         "name": "ValidationError",
-                        "message": "User ID must be a valid number"
+                        "message": "ID người dùng phải là số hợp lệ"
                     }
                 }
                 """);
@@ -731,10 +731,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "404", "Not Found",
                 """
                 {
-                    "message": "User not found",
+                    "message": "Không tìm thấy người dùng",
                     "errorInfo": {
                         "name": "NotFoundError",
-                        "message": "User not found"
+                        "message": "Không tìm thấy người dùng"
                     }
                 }
                 """);
@@ -742,7 +742,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
             AddErrorResponseExamples(operation, "500", "Internal Server Error",
                 """
                 {
-                    "message": "An internal server error occurred",
+                    "message": "Đã xảy ra lỗi máy chủ nội bộ",
                     "errorInfo": {
                         "name": "ServerError",
                         "message": "Internal server error details"
@@ -768,7 +768,5 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example
                 }
             }
         }
-
-
     }
 }

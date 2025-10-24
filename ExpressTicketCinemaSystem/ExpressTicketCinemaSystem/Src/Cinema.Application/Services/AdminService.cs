@@ -16,10 +16,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
         public async Task<(List<User>, int)> GetFilteredUsersAsync(
-            int page, int limit, string? search, string? role, string? verify,
-            string sortBy = "created_at", string sortOrder = "desc")
+    int page, int limit, string? search, string? role, string? verify,
+    string sortBy = "created_at", string sortOrder = "desc")
         {
             var query = _context.Users.AsQueryable();
+
+            // QUAN TRỌNG: Chỉ lấy các user còn active (IsActive = true)
+            query = query.Where(u => u.IsActive);
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -31,17 +34,24 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 query = query.Where(u => u.UserType.ToLower() == role.ToLower());
             }
 
-            if (verify == "0")
+            // SỬA LỖI FILTER VERIFY - Logic mới đơn giản
+            if (!string.IsNullOrWhiteSpace(verify))
             {
-                query = query.Where(u => !u.EmailConfirmed);
-            }
-            else if (verify == "1")
-            {
-                query = query.Where(u => u.EmailConfirmed && u.IsActive && !u.IsBanned);
-            }
-            else if (verify == "2")
-            {
-                query = query.Where(u => u.IsBanned);
+                switch (verify)
+                {
+                    case "0": // Unverified: email_confirmed = 0
+                        query = query.Where(u => !u.EmailConfirmed);
+                        break;
+                    case "1": // Verified: email_confirmed = 1
+                        query = query.Where(u => u.EmailConfirmed);
+                        break;
+                    case "2": // Banned: is_banned = 1
+                        query = query.Where(u => u.IsBanned);
+                        break;
+                    default:
+                        // Nếu giá trị verify không hợp lệ, không filter gì cả
+                        break;
+                }
             }
 
             var total = await query.CountAsync();
@@ -87,35 +97,36 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Kiểm tra không được xóa chính mình
             if (userId == currentAdminId)
             {
-                return (false, "Cannot delete your own account", null);
+                return (false, " Không thể xóa account của chính bạn", null);
             }
 
             // Tìm user cần xóa
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (user == null)
             {
-                return (false, "User not found", null);
+                return (false, "User không tìm thấy", null);
             }
 
             // Kiểm tra không được xóa admin khác
             if (user.UserType.ToLower() == "admin" && userId != currentAdminId)
             {
-                return (false, "Not authorized to delete another admin", null);
+                return (false, "Không được cấp quyền để xóa admin khác", null);
             }
 
             // Kiểm tra user đã bị deactivated chưa
             if (!user.IsActive)
             {
-                return (false, "User is already deactivated", null);
+                return (false, "User đã bị deactivate", null);
             }
 
             // Kiểm tra user có active bookings không
             bool hasActiveBookings = await CheckUserHasActiveBookings(userId);
             if (hasActiveBookings)
             {
-                return (false, "Cannot delete user with active bookings", null);
+                return (false, "Không thể xóa user có active bookings", null);
             }
 
+            // QUAN TRỌNG: Set IsActive = false để không hiển thị trong get all users
             user.IsActive = false;
             user.DeactivatedAt = DateTime.UtcNow;
             user.UpdatedAt = DateTime.UtcNow;
@@ -123,7 +134,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context.Users.Update(user);
             await _context.SaveChangesAsync();
 
-            return (true, "Delete user success", user);
+            return (true, "Xóa user thành công", user);
         }
 
         private async Task<bool> CheckUserHasActiveBookings(int userId)
