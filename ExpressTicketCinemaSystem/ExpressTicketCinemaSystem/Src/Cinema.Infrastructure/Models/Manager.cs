@@ -6,9 +6,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 public partial class Manager
 {
     public int ManagerId { get; set; }
-
     public int UserId { get; set; }
-
     public string FullName { get; set; } = null!;
 
     public string? Department { get; set; }

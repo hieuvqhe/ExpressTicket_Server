@@ -105,6 +105,12 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<CreateActorExampleFilter>();
     options.OperationFilter<UpdateActorExampleFilter>();
     options.OperationFilter<DeleteActorExampleFilter>();
+    options.OperationFilter<CreateScreenExampleFilter>();
+    options.OperationFilter<UpdateScreenExampleFilter>();
+    options.OperationFilter<GetScreenByIdExampleFilter>();
+    options.OperationFilter<GetScreensExampleFilter>();
+   
+    
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
     options.AddSecurityDefinition("Bearer", jwtSecurityScheme);
@@ -139,8 +145,10 @@ builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IManagerService, ManagerService>();
 builder.Services.AddScoped<IAzureBlobService, AzureBlobService>();
 builder.Services.AddScoped<MovieManagementService>();
+builder.Services.AddScoped<ScreenService>();
 
-// JWT AUTHENTICATION 
+
+//  JWT AUTHENTICATION 
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

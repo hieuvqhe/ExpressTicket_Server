@@ -3,7 +3,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses; 
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using System.Collections.Generic;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
-using System.IO; 
+using System.IO;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
@@ -25,17 +25,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly PartnerService _partnerService;
         private readonly ContractService _contractService;
         private readonly IAzureBlobService _azureBlobService;
-        public PartnersController(PartnerService partnerService , ContractService contractService , IAzureBlobService azureBlobService)
+        private readonly ScreenService _screenService;
+        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, ScreenService screenService)
         {
             _partnerService = partnerService;
             _contractService = contractService;
             _azureBlobService = azureBlobService;
+            _screenService = screenService;
         }
-
         private int GetCurrentUserId()
         {
             var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                          ?? User.FindFirst("sub")?.Value;
+                            ?? User.FindFirst("sub")?.Value;
 
             if (int.TryParse(idClaim, out var id))
             {
@@ -61,7 +62,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         [HttpPost("/partners/register")]
         [ProducesResponseType(typeof(SuccessResponse<PartnerRegisterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)] 
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> Register([FromBody] PartnerRegisterRequest request)
         {
@@ -76,7 +77,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
-            catch (ValidationException ex) 
+            catch (ValidationException ex)
             {
                 return BadRequest(new ValidationErrorResponse
                 {
@@ -84,7 +85,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     Errors = ex.Errors
                 });
             }
-            catch (ConflictException ex) 
+            catch (ConflictException ex)
             {
                 return Conflict(new ValidationErrorResponse
                 {
@@ -114,7 +115,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                var userId = GetCurrentUserId(); 
+                var userId = GetCurrentUserId();
                 var result = await _partnerService.GetPartnerProfileAsync(userId);
 
                 var response = new SuccessResponse<PartnerProfileResponse>
@@ -124,7 +125,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
-            catch (UnauthorizedException ex) 
+            catch (UnauthorizedException ex)
             {
                 return Unauthorized(new ValidationErrorResponse
                 {
@@ -132,7 +133,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     Errors = ex.Errors
                 });
             }
-            catch (NotFoundException ex) 
+            catch (NotFoundException ex)
             {
                 return NotFound(new ErrorResponse { Message = ex.Message });
             }
@@ -404,6 +405,291 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi tạo URL upload chữ ký."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Create a new screen for partner's cinema
+        /// </summary>
+        /// <param name="cinemaId">Cinema ID</param>
+        [HttpPost("/partners/cinema/{cinema_id}/screen")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<CreateScreenResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)] // Thêm 409
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CreateScreen(
+            [FromRoute(Name = "cinema_id")] int cinemaId,
+            [FromBody] CreateScreenRequest request)
+        {
+            try
+            {
+                var partnerId = GetCurrentUserId();
+                var result = await _screenService.CreateScreenAsync(cinemaId, partnerId, request);
+
+                var response = new SuccessResponse<CreateScreenResponse>
+                {
+                    Message = "Tạo screen thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Lỗi xác thực dữ liệu",
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex) // Thêm xử lý ConflictException
+            {
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = "Dữ liệu bị xung đột",
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = "Xác thực thất bại",
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo screen."
+                });
+            }
+        }
+
+
+        /// <summary>
+        /// Update screen for partner's cinema
+        /// </summary>
+        /// <param name="screenId">Screen ID</param>
+        [HttpPut("/partners/screens/{screen_id}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<UpdateScreenResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateScreen(
+            [FromRoute(Name = "screen_id")] int screenId,
+            [FromBody] UpdateScreenRequest request)
+        {
+            try
+            {
+                var partnerId = GetCurrentUserId();
+                var result = await _screenService.UpdateScreenAsync(screenId, partnerId, request);
+
+                var response = new SuccessResponse<UpdateScreenResponse>
+                {
+                    Message = "Update thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Lỗi xác thực dữ liệu",
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = "Dữ liệu bị xung đột",
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = "Xác thực thất bại",
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi update screen."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get screen by ID for partner
+        /// </summary>
+        /// <param name="screenId">Screen ID</param>
+        [HttpGet("/partners/screens/{screen_id}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<GetScreenResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetScreenById(
+            [FromRoute(Name = "screen_id")] int screenId)
+        {
+            try
+            {
+                var partnerId = GetCurrentUserId();
+                var result = await _screenService.GetScreenByIdAsync(screenId, partnerId);
+
+                var response = new SuccessResponse<GetScreenResponse>
+                {
+                    Message = "Get screen thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = "Xác thực thất bại",
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin screen."
+                });
+            }
+        }
+
+
+        /// <summary>
+        /// Get screens for partner's cinema with filtering and pagination
+        /// </summary>
+        /// <param name="page">Page number (default: 1)</param>
+        /// <param name="limit">Number of items per page (default: 10)</param>
+        /// <param name="cinemaId">Cinema ID</param>
+        /// <param name="screen_type">Filter by screen type (standard, premium, 3d, 4dx)</param>
+        /// <param name="status">Filter by screen status (active, inactive)</param>
+        /// <param name="sort_by">Field to sort by (name)</param>
+        /// <param name="sort_order">Sort order (asc, desc)</param>
+        /// <returns>Paginated list of contracts</returns>
+        [HttpGet("/partners/cinema/{cinema_id}/screens")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<GetAllScreenResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetScreens(
+            [FromRoute(Name = "cinema_id")] int cinemaId,
+            [FromQuery] int page = 1,
+            [FromQuery] int limit = 10,
+            [FromQuery] string? screen_type = null,
+            [FromQuery] string? status = null,
+            [FromQuery] string? sort_by = "name",
+            [FromQuery] string? sort_order = "asc")
+        {
+            try
+            {
+                var partnerId = GetCurrentUserId();
+                var result = await _screenService.GetScreensAsync(
+                    cinemaId, partnerId, page, limit, screen_type, status, sort_by, sort_order);
+
+                var response = new SuccessResponse<GetAllScreenResponse>
+                {
+                    Message = "Get screens thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = "Xác thực thất bại",
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách screens."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Delete screen by ID for partner
+        /// </summary>
+        /// <param name="screenId">Screen ID</param>
+        [HttpDelete("/partners/screens/{screen_id}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<DeleteScreenResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+
+        public async Task<IActionResult> DeleteScreen(
+            [FromRoute(Name = "screen_id")] int screenId)
+        {
+            try
+            {
+                var partnerId = GetCurrentUserId();
+                var result = await _screenService.DeleteScreenAsync(screenId, partnerId);
+
+                var response = new SuccessResponse<DeleteScreenResponse>
+                {
+                    Message = "Xóa screen thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = "Xác thực thất bại",
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa screen."
                 });
             }
         }

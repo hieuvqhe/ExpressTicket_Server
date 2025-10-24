@@ -799,6 +799,20 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("screen_type");
 
+            // Thêm cấu hình cho trường capacity
+            entity.Property(e => e.Capacity)
+                .HasColumnName("capacity")
+                .HasDefaultValue(100); // Giá trị mặc định khớp với SQL
+
+            // Thêm cấu hình cho created_at và updated_at
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(GETUTCDATE())")
+                .HasColumnName("created_at");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at")
+                .IsRequired(false);
+
             entity.HasOne(d => d.Cinema).WithMany(p => p.Screens)
                 .HasForeignKey(d => d.CinemaId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
