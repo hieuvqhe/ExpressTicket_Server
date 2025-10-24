@@ -3,7 +3,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses; 
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
@@ -12,6 +12,8 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using System.Collections.Generic;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+using System.IO;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -22,18 +24,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
     {
         private readonly PartnerService _partnerService;
         private readonly ContractService _contractService;
+        private readonly IAzureBlobService _azureBlobService;
         private readonly ScreenService _screenService;
-        public PartnersController(PartnerService partnerService , ContractService contractService, ScreenService screenService)
+        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, ScreenService screenService)
         {
             _partnerService = partnerService;
             _contractService = contractService;
+            _azureBlobService = azureBlobService;
             _screenService = screenService;
         }
-
         private int GetCurrentUserId()
         {
             var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                          ?? User.FindFirst("sub")?.Value;
+                            ?? User.FindFirst("sub")?.Value;
 
             if (int.TryParse(idClaim, out var id))
             {
@@ -43,13 +46,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             throw new UnauthorizedException("Token không hợp lệ hoặc không chứa ID người dùng.");
         }
 
+        // THÊM METHOD MỚI: Lấy PartnerId từ UserId
+        private async Task<int> GetCurrentPartnerId()
+        {
+            var userId = GetCurrentUserId();
+
+            // Tìm partner từ userId
+            var partner = await _contractService.GetPartnerByUserId(userId);
+            return partner.PartnerId;
+        }
+
         /// <summary>
         /// Register a new partner
         /// </summary>
         [HttpPost("/partners/register")]
         [ProducesResponseType(typeof(SuccessResponse<PartnerRegisterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)] 
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> Register([FromBody] PartnerRegisterRequest request)
         {
@@ -64,7 +77,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
-            catch (ValidationException ex) 
+            catch (ValidationException ex)
             {
                 return BadRequest(new ValidationErrorResponse
                 {
@@ -72,7 +85,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     Errors = ex.Errors
                 });
             }
-            catch (ConflictException ex) 
+            catch (ConflictException ex)
             {
                 return Conflict(new ValidationErrorResponse
                 {
@@ -102,7 +115,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                var userId = GetCurrentUserId(); 
+                var userId = GetCurrentUserId();
                 var result = await _partnerService.GetPartnerProfileAsync(userId);
 
                 var response = new SuccessResponse<PartnerProfileResponse>
@@ -112,7 +125,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
-            catch (UnauthorizedException ex) 
+            catch (UnauthorizedException ex)
             {
                 return Unauthorized(new ValidationErrorResponse
                 {
@@ -120,7 +133,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     Errors = ex.Errors
                 });
             }
-            catch (NotFoundException ex) 
+            catch (NotFoundException ex)
             {
                 return NotFound(new ErrorResponse { Message = ex.Message });
             }
@@ -209,7 +222,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                var partnerId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
                 var result = await _contractService.UploadPartnerSignatureAsync(id, partnerId, request);
 
                 var response = new SuccessResponse<ContractResponse>
@@ -272,7 +285,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                var partnerId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
                 var result = await _contractService.GetPartnerContractsAsync(
                     partnerId, page, limit, status, contractType, search, sortBy, sortOrder);
 
@@ -332,6 +345,66 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin hợp đồng."
+                });
+            }
+        }
+        /// <summary>
+        /// (Partner) Tạo SAS URL để upload file ảnh chữ ký (PNG/JPG)
+        /// </summary>
+        /// <param name="request">Chứa tên file, ví dụ: "signature.png"</param>
+        /// <returns>SAS URL (for uploading) and Blob URL (for saving)</returns>
+        [HttpPost("/partners/contracts/generate-signature-upload-sas")]
+        [Authorize(Roles = "Partner")] // Đảm bảo chỉ partner mới được gọi
+        [ProducesResponseType(typeof(SuccessResponse<GeneratePdfUploadUrlResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GenerateSignatureUploadUrl([FromBody] GeneratePdfUploadUrlRequest request)
+        {
+            // === VALIDATION ===
+            if (string.IsNullOrWhiteSpace(request.FileName))
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Tên file là bắt buộc",
+                    Errors = new Dictionary<string, ValidationError>
+                    {
+                        ["fileName"] = new ValidationError { Msg = "Tên file không được để trống" }
+                    }
+                });
+            }
+
+            var allowedExtensions = new[] { ".png", ".jpg", ".jpeg" };
+            var extension = Path.GetExtension(request.FileName).ToLower();
+            if (!allowedExtensions.Contains(extension))
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Định dạng file không hợp lệ",
+                    Errors = new Dictionary<string, ValidationError>
+                    {
+                        ["fileName"] = new ValidationError { Msg = "Chỉ chấp nhận file ảnh (.png, .jpg, .jpeg)" }
+                    }
+                });
+            }
+
+            // === BUSINESS LOGIC ===
+            try
+            {
+                var result = await _azureBlobService.GeneratePdfUploadUrlAsync(request.FileName);
+
+                var response = new SuccessResponse<GeneratePdfUploadUrlResponse>
+                {
+                    Message = "Tạo SAS URL cho chữ ký thành công",
+                    Result = result
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo URL upload chữ ký."
                 });
             }
         }
@@ -584,7 +657,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
-       
+
         public async Task<IActionResult> DeleteScreen(
             [FromRoute(Name = "screen_id")] int screenId)
         {

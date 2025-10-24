@@ -54,6 +54,7 @@ public partial class Contract
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
+    public string? PdfUrl { get; set; }
 
     public virtual Manager Manager { get; set; } = null!;
 

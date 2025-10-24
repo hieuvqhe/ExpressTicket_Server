@@ -2,16 +2,16 @@
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
+namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement
 {
-    public class ManagerApprovePartnerExampleFilter : IOperationFilter
+    public class DeleteActorExampleFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var controllerName = context.ApiDescription.ActionDescriptor.RouteValues["controller"];
             var actionName = context.ApiDescription.ActionDescriptor.RouteValues["action"];
 
-            if (controllerName != "Manager" || actionName != "ApprovePartner")
+            if (controllerName != "MovieManagement" || actionName != "DeleteActor")
             {
                 return;
             }
@@ -22,7 +22,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
             var idParam = operation.Parameters.FirstOrDefault(p => p.Name == "id");
             if (idParam != null)
             {
-                idParam.Description = "Partner ID";
+                idParam.Description = "Actor ID";
                 idParam.Examples = new Dictionary<string, OpenApiExample>
                 {
                     ["Example"] = new OpenApiExample
@@ -44,100 +44,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Duyệt partner thành công. Partner đã có thể đăng nhập vào hệ thống.",
-                          "result": {
-                            "partnerId": 1,
-                            "partnerName": "CÔNG TY TNHH RẠP PHIM ABC",
-                            "taxCode": "0123456789",
-                            "status": "approved",
-                            "commissionRate": 15.5,
-                            "approvedAt": "2024-01-20T10:00:00Z",
-                            "approvedBy": 1,
-                            "managerName": "Trần Văn B",
-                            "userId": 101,
-                            "fullname": "Nguyễn Văn A",
-                            "email": "nguyenvana@example.com",
-                            "phone": "0912345678",
-                            "isActive": true,
-                            "emailConfirmed": true
-                          }
-                        }
-                        """
-                        )
-                    });
-                }
-            }
-
-            // Response 400 Bad Request
-            if (operation.Responses.ContainsKey("400"))
-            {
-                var response = operation.Responses["400"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Validation Error", new OpenApiExample
                     {
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "message": "Lỗi xác thực dữ liệu",
-                          "errors": {
-                            "status": {
-                              "msg": "Chỉ có thể duyệt partner với trạng thái 'pending'. Hiện tại: approved",
-                              "path": "status"
-                            }
-                          }
-                        }
-                        """
-                        )
-                    });
-                }
-            }
-            // Response 401 Unauthorized
-            if (operation.Responses.ContainsKey("401"))
-            {
-                var response = operation.Responses["401"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Unauthorized", new OpenApiExample
-                    {
-                        Value = new OpenApiString(
-                        """
-            {
-              "message": "Xác thực thất bại",
-              "errors": {
-                "auth": {
-                  "msg": "Manager không tồn tại.",
-                  "path": "form",
-                  "location": "body"
-                }
-              }
-            }
-            """
-                        )
-                    });
-                }
-            }
-            // Response 404 Not Found
-            if (operation.Responses.ContainsKey("404"))
-            {
-                var response = operation.Responses["404"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Not Found", new OpenApiExample
-                    {
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "message": "Không tìm thấy partner với ID này."
-                        }
-                        """
+                      "message": "Xóa diễn viên thành công"
+                    }
+                    """
                         )
                     });
                 }
@@ -155,16 +65,65 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Dữ liệu bị xung đột",
-                          "errors": {
-                            "email": {
-                              "msg": "Partner chưa xác thực email, không thể duyệt",
-                              "path": "email"
-                            }
-                          }
+                    {
+                      "message": "Dữ liệu bị xung đột",
+                      "errors": {
+                        "actor": {
+                          "msg": "Không thể xóa diễn viên đã được sử dụng trong phim",
+                          "path": "actor"
                         }
+                      }
+                    }
+                    """
+                        )
+                    });
+                }
+            }
+            // Thêm vào DeleteActorExampleFilter
+            // Response 401 Unauthorized
+            if (operation.Responses.ContainsKey("401"))
+            {
+                var response = operation.Responses["401"];
+                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Unauthorized", new OpenApiExample
+                    {
+                        Value = new OpenApiString(
                         """
+            {
+              "message": "Xác thực thất bại",
+              "errors": {
+                "manager": {
+                  "msg": "Manager không tồn tại hoặc không có quyền",
+                  "path": "managerId",
+                  "location": "auth"
+                }
+              }
+            }
+            """
+                        )
+                    });
+                }
+            }
+
+            // Response 404 Not Found
+            if (operation.Responses.ContainsKey("404"))
+            {
+                var response = operation.Responses["404"];
+                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Not Found", new OpenApiExample
+                    {
+                        Value = new OpenApiString(
+                        """
+            {
+              "message": "Không tìm thấy diễn viên với ID này."
+            }
+            """
                         )
                     });
                 }
@@ -182,17 +141,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Đã xảy ra lỗi hệ thống khi duyệt partner."
-                        }
-                        """
+            {
+              "message": "Đã xảy ra lỗi hệ thống khi xóa diễn viên."
+            }
+            """
                         )
                     });
                 }
             }
-
-            operation.Summary = "Approve a pending partner";
-            operation.Description = "Approve partner registration and activate their account for system access.";
+            operation.Summary = "Delete actor";
+            operation.Description = "Delete actor (only allowed if actor is not used in any movies).";
         }
     }
 }

@@ -21,11 +21,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
     {
         private readonly ContractService _contractService;
         private readonly PartnerService _partnerService;
+        private readonly IAzureBlobService _azureBlobService;
 
-        public ManagerController(ContractService contractService , PartnerService partnerService )
+        public ManagerController(ContractService contractService , PartnerService partnerService, IAzureBlobService azureBlobService)
         {
             _contractService = contractService;
             _partnerService = partnerService;
+            _azureBlobService = azureBlobService;
         }
 
         private int GetCurrentManagerId()
@@ -456,7 +458,234 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+        /// <summary>
+        /// Get list of partners without any contracts
+        /// </summary>
+        /// <param name="page">Page number (default: 1)</param>
+        /// <param name="limit">Number of items per page (default: 10)</param>
+        /// <param name="search">Search term for partner name</param>
+        /// <returns>Paginated list of partners without contracts</returns>
+        [HttpGet("/manager/partners/without-contracts")]
+        [ProducesResponseType(typeof(SuccessResponse<PaginatedPartnersWithoutContractsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetPartnersWithoutContracts(
+            [FromQuery] int page = 1,
+            [FromQuery] int limit = 10,
+            [FromQuery] string? search = null)
+        {
+            try
+            {
+                var result = await _partnerService.GetPartnersWithoutContractsAsync(page, limit, search);
 
+                var response = new SuccessResponse<PaginatedPartnersWithoutContractsResponse>
+                {
+                    Message = "Lấy danh sách partner chưa có hợp đồng thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách partner chưa có hợp đồng."
+                });
+            }
+        }
+        /// <summary>
+        /// Update contract draft (only for draft status)
+        /// </summary>
+        /// <param name="id">Contract ID</param>
+        /// <param name="request">Update contract request</param>
+        /// <returns>Updated contract details</returns>
+        [HttpPut("/manager/contracts/{id}")]
+        [ProducesResponseType(typeof(SuccessResponse<ContractResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateContract(int id, [FromBody] UpdateContractRequest request)
+        {
+            try
+            {
+                var managerId = GetCurrentManagerId();
+                var result = await _contractService.UpdateContractDraftAsync(id, managerId, request);
+
+                var response = new SuccessResponse<ContractResponse>
+                {
+                    Message = "Cập nhật hợp đồng draft thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Lỗi xác thực dữ liệu",
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = "Xác thực thất bại",
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (ConflictException ex)
+            {
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = "Dữ liệu bị xung đột",
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật hợp đồng."
+                });
+            }
+        }
+        /// <summary>
+        /// Cancel contract draft (soft delete with cancelled status)
+        /// </summary>
+        /// <param name="id">Contract ID</param>
+        /// <returns>Success message</returns>
+        [HttpDelete("/manager/contracts/{id}")]
+        [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CancelContract(int id)
+        {
+            try
+            {
+                var managerId = GetCurrentManagerId();
+                await _contractService.CancelContractAsync(id, managerId);
+
+                var response = new SuccessResponse<object>
+                {
+                    Message = "Hủy hợp đồng thành công"
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Lỗi xác thực dữ liệu",
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = "Xác thực thất bại",
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (ConflictException ex)
+            {
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = "Dữ liệu bị xung đột",
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi hủy hợp đồng."
+                });
+            }
+        }
+        /// <summary>
+        /// Generate SAS URL for PDF upload to Azure Blob Storage
+        /// </summary>
+        /// <param name="request">File name information</param>
+        /// <returns>SAS URL for upload and permanent blob URL</returns>
+        [HttpPost("/manager/contracts/generate-upload-sas")]
+        [ProducesResponseType(typeof(SuccessResponse<GeneratePdfUploadUrlResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GeneratePdfUploadUrl([FromBody] GeneratePdfUploadUrlRequest request)
+        {
+            try
+            {
+                // ==================== VALIDATION SECTION ====================
+                if (string.IsNullOrWhiteSpace(request.FileName))
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Tên file là bắt buộc",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["fileName"] = new ValidationError
+                            {
+                                Msg = "Tên file không được để trống",
+                                Path = "fileName",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate file extension
+                var allowedExtensions = new[] { ".pdf" };
+                var extension = Path.GetExtension(request.FileName).ToLower();
+                if (!allowedExtensions.Contains(extension))
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Định dạng file không hợp lệ",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["fileName"] = new ValidationError
+                            {
+                                Msg = "Chỉ chấp nhận file PDF",
+                                Path = "fileName",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // ==================== BUSINESS LOGIC SECTION ====================
+                var result = await _azureBlobService.GeneratePdfUploadUrlAsync(request.FileName);
+
+                var response = new SuccessResponse<GeneratePdfUploadUrlResponse>
+                {
+                    Message = "Tạo SAS URL thành công",
+                    Result = result
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            { 
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo URL upload PDF."
+                });
+            }
+        }
 
     }
 }

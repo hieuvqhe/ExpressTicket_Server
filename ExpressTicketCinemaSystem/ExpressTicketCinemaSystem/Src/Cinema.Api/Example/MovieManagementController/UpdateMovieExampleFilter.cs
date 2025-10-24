@@ -2,16 +2,16 @@
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
+namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement
 {
-    public class ManagerRejectPartnerExampleFilter : IOperationFilter
+    public class UpdateMovieExampleFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var controllerName = context.ApiDescription.ActionDescriptor.RouteValues["controller"];
             var actionName = context.ApiDescription.ActionDescriptor.RouteValues["action"];
 
-            if (controllerName != "Manager" || actionName != "RejectPartner")
+            if (controllerName != "MovieManagement" || actionName != "UpdateMovie")
             {
                 return;
             }
@@ -22,7 +22,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
             var idParam = operation.Parameters.FirstOrDefault(p => p.Name == "id");
             if (idParam != null)
             {
-                idParam.Description = "Partner ID";
+                idParam.Description = "Movie ID";
                 idParam.Examples = new Dictionary<string, OpenApiExample>
                 {
                     ["Example"] = new OpenApiExample
@@ -32,22 +32,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                 };
             }
 
-            // Request Body example
+            // Request Body Example
             if (operation.RequestBody != null)
             {
-                operation.RequestBody.Description = "Reject partner request";
+                operation.RequestBody.Description = "Movie update data";
                 var content = operation.RequestBody.Content.FirstOrDefault(c => c.Key == "application/json").Value;
                 if (content != null)
                 {
                     content.Examples.Clear();
-                    content.Examples.Add("Reject Request", new OpenApiExample
+                    content.Examples.Add("Update Movie", new OpenApiExample
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "rejectionReason": "Giấy tờ kinh doanh không đầy đủ. Vui lòng cung cấp giấy phép kinh doanh và giấy đăng ký thuế bản gốc."
-                        }
-                        """
+                    {
+                      "title": "The Matrix Resurrections (Updated)",
+                      "description": "Updated description with more details...",
+                      "averageRating": 9.0,
+                      "ratingsCount": 20,
+                      "isActive": true
+                    }
+                    """
                         )
                     });
                 }
@@ -65,26 +69,39 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Từ chối partner thành công.",
-                          "result": {
-                            "partnerId": 1,
-                            "partnerName": "CÔNG TY TNHH RẠP PHIM ABC",
-                            "taxCode": "0123456789",
-                            "status": "rejected",
-                            "rejectionReason": "Giấy tờ kinh doanh không đầy đủ. Vui lòng cung cấp giấy phép kinh doanh và giấy đăng ký thuế bản gốc.",
-                            "rejectedAt": "2024-01-20T10:00:00Z",
-                            "rejectedBy": 1,
-                            "managerName": "Trần Văn B",
-                            "userId": 101,
-                            "fullname": "Nguyễn Văn A",
-                            "email": "nguyenvana@example.com",
-                            "phone": "0912345678",
-                            "isActive": false,
-                            "emailConfirmed": false
+                    {
+                      "message": "Cập nhật phim thành công",
+                      "result": {
+                        "movieId": 1,
+                        "title": "The Matrix Resurrections (Updated)",
+                        "genre": "Sci-Fi, Action",
+                        "durationMinutes": 148,
+                        "premiereDate": "2025-03-22",
+                        "endDate": "2025-04-22",
+                        "director": "Lana Wachowski",
+                        "language": "English",
+                        "country": "USA",
+                        "isActive": true,
+                        "posterUrl": "https://www.themoviedb.org/t/p/w600_and_h900_bestv2/8c4a8kE7PizaKQQpvzKu6M2L1Vj.jpg",
+                        "production": "Warner Bros. Pictures",
+                        "description": "Updated description with more details...",
+                        "status": "upcoming",
+                        "trailerUrl": "https://www.youtube.com/watch?v=9ix7TUGVYIo",
+                        "averageRating": 9.0,
+                        "ratingsCount": 20,
+                        "createdAt": "2024-01-24T10:30:00Z",
+                        "createdBy": "Nguyễn Văn A",
+                        "updateAt": "2024-01-24T11:30:00Z",
+                        "actor": [
+                          {
+                            "id": 1,
+                            "name": "Keanu Reeves",
+                            "profileImage": "https://www.themoviedb.org/t/p/w300_and_h450_bestv2/4D0PpNI0kmP58hgrwGC3wCjxhnm.jpg"
                           }
-                        }
-                        """
+                        ]
+                      }
+                    }
+                    """
                         )
                     });
                 }
@@ -102,20 +119,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Lỗi xác thực dữ liệu",
-                          "errors": {
-                            "rejectionReason": {
-                              "msg": "Lý do từ chối là bắt buộc",
-                              "path": "rejectionReason"
-                            }
-                          }
+                    {
+                      "message": "Lỗi xác thực dữ liệu",
+                      "errors": {
+                        "movie": {
+                          "msg": "Không thể cập nhật phim đã có lịch chiếu",
+                          "path": "movieId"
                         }
-                        """
+                      }
+                    }
+                    """
                         )
                     });
                 }
             }
+            // Thêm vào UpdateMovieExampleFilter
             // Response 401 Unauthorized
             if (operation.Responses.ContainsKey("401"))
             {
@@ -131,10 +149,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
             {
               "message": "Xác thực thất bại",
               "errors": {
-                "auth": {
-                  "msg": "Manager không tồn tại.",
-                  "path": "form",
-                  "location": "body"
+                "access": {
+                  "msg": "Bạn không có quyền chỉnh sửa phim này",
+                  "path": "movieId",
+                  "location": "path"
                 }
               }
             }
@@ -143,6 +161,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     });
                 }
             }
+
             // Response 404 Not Found
             if (operation.Responses.ContainsKey("404"))
             {
@@ -155,10 +174,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Không tìm thấy partner với ID này."
-                        }
-                        """
+            {
+              "message": "Không tìm thấy phim với ID này."
+            }
+            """
                         )
                     });
                 }
@@ -176,16 +195,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Dữ liệu bị xung đột",
-                          "errors": {
-                            "status": {
-                              "msg": "Chỉ có thể từ chối partner với trạng thái 'pending'. Hiện tại: approved",
-                              "path": "status"
-                            }
-                          }
-                        }
-                        """
+            {
+              "message": "Dữ liệu bị xung đột",
+              "errors": {
+                "premiereDate": {
+                  "msg": "Không thể thay đổi ngày công chiếu cho phim đã/đang chiếu",
+                  "path": "premiereDate",
+                  "location": "body"
+                }
+              }
+            }
+            """
                         )
                     });
                 }
@@ -203,17 +223,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Đã xảy ra lỗi hệ thống khi từ chối partner."
-                        }
-                        """
+            {
+              "message": "Đã xảy ra lỗi hệ thống khi cập nhật phim."
+            }
+            """
                         )
                     });
                 }
             }
-
-            operation.Summary = "Reject a pending partner";
-            operation.Description = "Reject partner registration with detailed reason and send notification email.";
+            operation.Summary = "Update movie information";
+            operation.Description = "Update movie details (only allowed for movies without showtimes).";
         }
     }
 }

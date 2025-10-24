@@ -12,6 +12,7 @@ using System;
 using System.Threading.Tasks;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
+using System.Text;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -20,15 +21,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly CinemaDbCoreContext _context;
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
+        private readonly IManagerService _managerService;
 
         public PartnerService(
             CinemaDbCoreContext context,
             IPasswordHasher<User> passwordHasher,
-            IEmailService emailService)
+            IEmailService emailService,
+            IManagerService managerService  )
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _emailService = emailService;
+            _managerService = managerService;
         }
 
         public async Task<PartnerRegisterResponse> RegisterPartnerAsync(PartnerRegisterRequest request)
@@ -45,7 +49,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateTheaterPhotos(request.TheaterPhotosUrls);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var defaultManager = await _context.Managers
+       .OrderBy(m => m.ManagerId)
+       .FirstOrDefaultAsync();
 
+            if (defaultManager == null)
+            {
+                throw new InvalidOperationException("Không tìm thấy manager để phân công");
+            }
             var user = new User
             {
                 Email = request.Email,
@@ -65,7 +76,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var partner = new Partner
             {
                 UserId = user.UserId,
-                ManagerId = null, 
+                ManagerId = defaultManager.ManagerId, 
                 PartnerName = request.PartnerName,
                 TaxCode = request.TaxCode,
                 Address = request.Address,
@@ -93,7 +104,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             return new PartnerRegisterResponse
             {
-                Message = "Đăng ký đối tác thành công. Hồ sơ của bạn đang chờ xét duyệt.",
                 PartnerId = partner.PartnerId,
                 Status = partner.Status,
                 CreatedAt = partner.CreatedAt
@@ -575,16 +585,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Pagination = pagination
             };
         }
-        public async Task<PartnerApprovalResponse> ApprovePartnerAsync(int partnerId, int managerId) // XÓA request parameter
+        public async Task<PartnerApprovalResponse> ApprovePartnerAsync(int partnerId, int managerId)
         {
             var partner = await _context.Partners
-                .Include(p => p.User)
-                .Include(p => p.Manager)
-                .ThenInclude(m => m.User)
-                .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
+            .Include(p => p.User)
+            .Include(p => p.Manager)
+            .ThenInclude(m => m.User)
+            .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
 
             if (partner == null)
                 throw new NotFoundException("Không tìm thấy partner với ID này.");
+
+            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
+            if (!managerExists)
+            {
+                var defaultManagerId = await _managerService.GetDefaultManagerIdAsync();
+                managerId = defaultManagerId;
+            }
 
             var manager = await _context.Managers
                 .Include(m => m.User)
@@ -598,24 +615,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
-            // Cập nhật thông tin partner - CHỈ SET STATUS VÀ ACTIVE
             partner.Status = "approved";
             partner.ApprovedAt = DateTime.UtcNow;
-            partner.ApprovedBy = managerId;
+            partner.ApprovedBy = manager.ManagerId; // ← DÙNG manager.ManagerId THAY VÌ managerId parameter
             partner.UpdatedAt = DateTime.UtcNow;
-            partner.ManagerId = managerId;
+            partner.ManagerId = manager.ManagerId;  // ← DÙNG manager.ManagerId THAY VÌ managerId parameter
 
-            // Kích hoạt tài khoản user - SET EMAIL_CONFIRMED VÀ IS_ACTIVE
             if (partner.User != null)
             {
                 partner.User.IsActive = true;
-                partner.User.EmailConfirmed = true; // QUAN TRỌNG: Xác thực email
+                partner.User.EmailConfirmed = true;
                 partner.User.UpdatedAt = DateTime.UtcNow;
             }
 
             await _context.SaveChangesAsync();
 
-            // Gửi email thông báo cho partner
             await SendPartnerApprovalEmailAsync(partner, manager);
 
             return new PartnerApprovalResponse
@@ -624,12 +638,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 PartnerName = partner.PartnerName,
                 TaxCode = partner.TaxCode,
                 Status = partner.Status,
-                CommissionRate = partner.CommissionRate, // Giữ nguyên rate từ đăng ký
+                CommissionRate = partner.CommissionRate,
                 ApprovedAt = partner.ApprovedAt.Value,
-                ApprovedBy = managerId,
+                ApprovedBy = manager.ManagerId, 
                 ManagerName = manager.User?.Fullname ?? "",
 
-                // User information
                 UserId = partner.UserId,
                 Fullname = partner.User?.Fullname ?? "",
                 Email = partner.User?.Email ?? "",
@@ -660,31 +673,78 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 if (partner.User?.Email != null)
                 {
-                    var subject = "ĐƠN ĐĂNG KÝ ĐỐI TÁC ĐÃ ĐƯỢC DUYỆT";
-                    var body = $"""
-            Kính gửi Ông/Bà {partner.User.Fullname},
+                    var subject = "THÔNG BÁO DUYỆT ĐƠN ĐĂNG KÝ ĐỐI TÁC THÀNH CÔNG";
 
-            Chúc mừng! Đơn đăng ký đối tác của Quý công ty {partner.PartnerName} đã được duyệt.
+                    var htmlBody = $@"
+<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+    <div style='background: linear-gradient(135deg, #28a745 0%, #20c997 100%); padding: 30px; text-align: center; color: white;'>
+        <h1 style='margin: 0; font-size: 28px;'>🎬 TicketExpress</h1>
+        <p style='margin: 10px 0 0 0; font-size: 16px;'>Hệ thống đặt vé rạp chiếu phim</p>
+    </div>
+    
+    <div style='padding: 30px; background: #f9f9f9;'>
+        <div style='text-align: center; margin-bottom: 20px;'>
+            <div style='font-size: 48px; margin-bottom: 10px;'>🎉</div>
+            <h2 style='color: #28a745; margin-bottom: 10px;'>CHÚC MỪNG!</h2>
+            <p style='color: #666; font-size: 18px;'>Đơn đăng ký đối tác đã được duyệt thành công</p>
+        </div>
+        
+        <div style='background: white; padding: 25px; border-radius: 8px; border-left: 4px solid #28a745;'>
+            <p style='margin-bottom: 10px;'>Kính gửi Ông/Bà <strong>{partner.User.Fullname}</strong>,</p>
+            <p style='margin-bottom: 20px;'>Đơn đăng ký đối tác của Quý công ty <strong>{partner.PartnerName}</strong> đã được duyệt thành công.</p>
+            
+            <h4 style='color: #333; margin-bottom: 15px;'> THÔNG TIN DUYỆT:</h4>
+            <div style='background: #f8f9fa; padding: 15px; border-radius: 5px;'>
+                <table style='width: 100%; border-collapse: collapse;'>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666; width: 140px;'>Mã đối tác:</td>
+                        <td style='padding: 8px 0;'><strong>{partner.PartnerId}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Tên công ty:</td>
+                        <td style='padding: 8px 0;'><strong>{partner.PartnerName}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Tỷ lệ hoa hồng:</td>
+                        <td style='padding: 8px 0;'><strong style='color: #28a745;'>{partner.CommissionRate}%</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Người duyệt:</td>
+                        <td style='padding: 8px 0;'><strong>{manager.User?.Fullname ?? "Hệ thống"}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Thời gian duyệt:</td>
+                        <td style='padding: 8px 0;'><strong>{DateTime.UtcNow.AddHours(7):dd/MM/yyyy HH:mm} (GMT+7)</strong></td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div style='margin-top: 25px; padding: 20px; background: #d4edda; border-radius: 5px; border: 1px solid #c3e6cb;'>
+                <h4 style='color: #155724; margin: 0 0 10px 0;'> Bắt đầu ngay:</h4>
+                <p style='margin: 0; color: #155724;'>
+                    Từ thời điểm này, Quý đối tác có thể đăng nhập vào hệ thống 
+                    <strong>Express Ticket Cinema</strong> để quản lý rạp chiếu phim và bắt đầu 
+                    thực hiện ký hợp đồng hợp tác kinh doanh.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div style='padding: 20px; text-align: center; background: #333; color: white;'>
+        <p style='margin: 0 0 10px 0; font-size: 16px; font-weight: bold;'>ĐỘI NGŨ HỖ TRỢ TICKET EXPRESS</p>
+        <p style='margin: 5px 0;'>Hotline: 1900 1234 | Email: support@ticketexpress.com</p>
+        <p style='margin: 15px 0 0 0; font-size: 12px; opacity: 0.8;'>
+            © 2024 TicketExpress. All rights reserved.<br>
+            Đây là email tự động, vui lòng không trả lời.
+        </p>
+    </div>
+</div>";
 
-            Thông tin duyệt:
-            - Mã đối tác: {partner.PartnerId}
-            - Tỷ lệ hoa hồng: {partner.CommissionRate}%
-            - Người duyệt: {manager.User?.Fullname}
-            - Thời gian duyệt: {DateTime.UtcNow:dd/MM/yyyy HH:mm}
-
-            Từ thời điểm này, Quý đối tác có thể đăng nhập vào hệ thống Express Ticket Cinema 
-            để quản lý rạp chiếu phim và bắt đầu hợp tác kinh doanh.
-
-            Trân trọng,
-            TICKET EXPRESS
-            """;
-
-                    await _emailService.SendEmailAsync(partner.User.Email, subject, body);
+                    await _emailService.SendEmailAsync(partner.User.Email, subject, htmlBody);
                 }
             }
             catch (Exception ex)
             {
-                // Log lỗi nhưng không throw để không ảnh hưởng business logic
                 Console.WriteLine($"Failed to send approval email: {ex.Message}");
             }
         }
@@ -693,13 +753,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateRejectRequest(request);
 
             var partner = await _context.Partners
-                .Include(p => p.User)
-                .Include(p => p.Manager)
-                .ThenInclude(m => m.User)
-                .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
+             .Include(p => p.User)
+             .Include(p => p.Manager)
+             .ThenInclude(m => m.User)
+             .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
 
             if (partner == null)
                 throw new NotFoundException("Không tìm thấy partner với ID này.");
+
+            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
+            if (!managerExists)
+            {
+                var defaultManagerId = await _managerService.GetDefaultManagerIdAsync();
+                managerId = defaultManagerId;
+            }
 
             var manager = await _context.Managers
                 .Include(m => m.User)
@@ -712,23 +779,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
-            // Cập nhật thông tin partner
             partner.Status = "rejected";
             partner.RejectionReason = request.RejectionReason;
             partner.UpdatedAt = DateTime.UtcNow;
-            partner.ManagerId = managerId;
+            partner.ManagerId = manager.ManagerId;
 
-            // DEACTIVATE tài khoản user - SET VỀ false
             if (partner.User != null)
             {
                 partner.User.IsActive = false;
-                partner.User.EmailConfirmed = false; // QUAN TRỌNG: Hủy xác thực email
+                partner.User.EmailConfirmed = false;
                 partner.User.UpdatedAt = DateTime.UtcNow;
             }
 
             await _context.SaveChangesAsync();
 
-            // Gửi email thông báo cho partner
             await SendPartnerRejectionEmailAsync(partner, manager, request.RejectionReason);
 
             return new PartnerRejectionResponse
@@ -739,7 +803,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Status = partner.Status,
                 RejectionReason = partner.RejectionReason,
                 RejectedAt = DateTime.UtcNow,
-                RejectedBy = managerId,
+                RejectedBy = manager.ManagerId, // ← DÙNG manager.ManagerId
                 ManagerName = manager.User?.Fullname ?? "",
 
                 // User information
@@ -785,35 +849,126 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 if (partner.User?.Email != null)
                 {
                     var subject = "THÔNG BÁO TỪ CHỐI ĐƠN ĐĂNG KÝ ĐỐI TÁC";
-                    var body = $"""
-            Kính gửi Ông/Bà {partner.User.Fullname},
 
-            Chúng tôi rất tiếc phải thông báo rằng đơn đăng ký đối tác của Quý công ty {partner.PartnerName} 
-            không được chấp thuận tại thời điểm này.
+                    var htmlBody = $@"
+<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+    <div style='background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); padding: 30px; text-align: center; color: white;'>
+        <h1 style='margin: 0; font-size: 28px;'>🎬 TicketExpress</h1>
+        <p style='margin: 10px 0 0 0; font-size: 16px;'>Hệ thống đặt vé rạp chiếu phim</p>
+    </div>
+    
+    <div style='padding: 30px; background: #f9f9f9;'>
+        <h2 style='color: #333; margin-bottom: 20px;'>Thông báo từ chối đơn đăng ký đối tác</h2>
+        
+        <div style='background: white; padding: 25px; border-radius: 8px; border-left: 4px solid #dc3545;'>
+            <p style='margin-bottom: 10px;'>Kính gửi Ông/Bà <strong>{partner.User.Fullname}</strong>,</p>
+            <p style='margin-bottom: 15px;'>Chúng tôi rất tiếc phải thông báo rằng đơn đăng ký đối tác của Quý công ty <strong>{partner.PartnerName}</strong> không được chấp thuận tại thời điểm này.</p>
+            
+            <div style='background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 5px; margin: 20px 0;'>
+                <h4 style='color: #721c24; margin: 0 0 10px 0;'>📝 LÝ DO TỪ CHỐI:</h4>
+                <p style='margin: 0; color: #721c24; line-height: 1.5;'>{rejectionReason}</p>
+            </div>
+            
+            <h4 style='color: #333; margin-bottom: 15px;'>📋 THÔNG TIN CHI TIẾT:</h4>
+            <div style='background: #f8f9fa; padding: 15px; border-radius: 5px;'>
+                <table style='width: 100%; border-collapse: collapse;'>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666; width: 140px;'>Mã đối tác:</td>
+                        <td style='padding: 8px 0;'><strong>{partner.PartnerId}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Tên công ty:</td>
+                        <td style='padding: 8px 0;'><strong>{partner.PartnerName}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Người xử lý:</td>
+                        <td style='padding: 8px 0;'><strong>{manager.User?.Fullname ?? "Hệ thống"}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Thời gian:</td>
+                        <td style='padding: 8px 0;'><strong>{DateTime.UtcNow.AddHours(7):dd/MM/yyyy HH:mm} (GMT+7)</strong></td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div style='margin-top: 25px; padding: 15px; background: #e7f3ff; border-radius: 5px;'>
+                <p style='margin: 0; color: #0c5460;'>
+                    <strong>💡 Thông tin hỗ trợ:</strong><br>
+                    Nếu Quý đối tác có bất kỳ thắc mắc nào hoặc muốn cung cấp thêm thông tin, 
+                    vui lòng liên hệ với chúng tôi để được hỗ trợ.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div style='padding: 20px; text-align: center; background: #333; color: white;'>
+        <p style='margin: 0 0 10px 0; font-size: 16px; font-weight: bold;'>ĐỘI NGŨ HỖ TRỢ TICKET EXPRESS</p>
+        <p style='margin: 5px 0;'>Hotline: 1900 1234 | Email: support@ticketexpress.com</p>
+        <p style='margin: 15px 0 0 0; font-size: 12px; opacity: 0.8;'>
+            © 2024 TicketExpress. All rights reserved.<br>
+            Đây là email tự động, vui lòng không trả lời.
+        </p>
+    </div>
+</div>";
 
-            Lý do từ chối:
-            {rejectionReason}
-
-            Thông tin:
-            - Mã đối tác: {partner.PartnerId}
-            - Người xử lý: {manager.User?.Fullname}
-            - Thời gian: {DateTime.UtcNow:dd/MM/yyyy HH:mm}
-
-            Nếu Quý đối tác có bất kỳ thắc mắc nào hoặc muốn cung cấp thêm thông tin, 
-            vui lòng liên hệ với chúng tôi để được hỗ trợ.
-
-            Trân trọng,
-            TICKET EXPRESS
-            """;
-
-                    await _emailService.SendEmailAsync(partner.User.Email, subject, body);
+                    await _emailService.SendEmailAsync(partner.User.Email, subject, htmlBody);
                 }
             }
             catch (Exception ex)
             {
-                // Log lỗi nhưng không throw để không ảnh hưởng business logic
                 Console.WriteLine($"Failed to send rejection email: {ex.Message}");
             }
+        }
+        public async Task<PaginatedPartnersWithoutContractsResponse> GetPartnersWithoutContractsAsync(
+    int page = 1,
+    int limit = 10,
+    string? search = null)
+        {
+            if (page < 1) page = 1;
+            if (limit < 1 || limit > 100) limit = 10;
+
+            var partnersWithContracts = _context.Contracts
+                .Where(c => c.Status != "draft") 
+                .Select(c => c.PartnerId)
+                .Distinct();
+
+            var query = _context.Partners
+                .Where(p => p.Status == "approved" && !partnersWithContracts.Contains(p.PartnerId))
+                .AsQueryable();
+
+            // Apply search filter
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                search = search.ToLower();
+                query = query.Where(p => p.PartnerName.ToLower().Contains(search));
+            }
+
+            var totalCount = await query.CountAsync();
+
+            var partners = await query
+                .OrderBy(p => p.PartnerName)
+                .Skip((page - 1) * limit)
+                .Take(limit)
+                .Select(p => new PartnerWithoutContractResponse
+                {
+                    PartnerId = p.PartnerId,
+                    PartnerName = p.PartnerName
+                })
+                .ToListAsync();
+
+            var pagination = new PaginationMetadata
+            {
+                CurrentPage = page,
+                PageSize = limit,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)limit)
+            };
+
+            return new PaginatedPartnersWithoutContractsResponse
+            {
+                Partners = partners,
+                Pagination = pagination
+            };
         }
         private IQueryable<Partner> ApplyPendingPartnersSorting(IQueryable<Partner> query, string? sortBy, string? sortOrder)
         {

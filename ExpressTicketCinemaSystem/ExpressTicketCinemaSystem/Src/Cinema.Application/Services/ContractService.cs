@@ -1,5 +1,4 @@
-﻿// 4. ContractService.cs
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
@@ -21,11 +20,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     {
         private readonly CinemaDbCoreContext _context;
         private readonly IEmailService _emailService;
+        private readonly IManagerService _managerService;
+        private readonly IAzureBlobService _azureBlobService;
 
-        public ContractService(CinemaDbCoreContext context , IEmailService emailService)
+        public ContractService(CinemaDbCoreContext context , IEmailService emailService , IManagerService managerService , IAzureBlobService azureBlobService )
         {
             _context = context;
             _emailService = emailService;
+            _managerService = managerService;
+            _azureBlobService = azureBlobService;
         }
 
         public async Task<ContractResponse> CreateContractDraftAsync(int managerId, CreateContractRequest request)
@@ -33,7 +36,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // ==================== VALIDATION SECTION ====================
             ValidateRequiredFields(request);
             await ValidatePartnerAsync(request.PartnerId);
-            await ValidateManagerAsync(managerId);
+            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
+            if (!managerExists)
+            {
+                managerId = await _managerService.GetDefaultManagerIdAsync();
+            }
             ValidateContractDates(request.StartDate, request.EndDate);
             ValidateCommissionRate(request.CommissionRate);
             await ValidateContractNumberAsync(request.ContractNumber);
@@ -95,7 +102,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (contract == null)
                 throw new NotFoundException("Không tìm thấy hợp đồng với ID này.");
 
-            // Security check
+            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
+            if (!managerExists)
+            {
+                managerId = await _managerService.GetDefaultManagerIdAsync();
+            }
             if (contract.ManagerId != managerId)
             {
                 throw new UnauthorizedException(new Dictionary<string, ValidationError>
@@ -109,19 +120,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 });
             }
 
-            // Business logic validation
             ValidateContractForSending(contract);
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
-            // Cập nhật trạng thái hợp đồng
             contract.Status = "pending_signature";
+            contract.PdfUrl = request.PdfUrl; 
             contract.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
 
-            // Gửi email với PDF link cho partner
-            await SendContractPdfEmailAsync(contract, request.PdfUrl, request.Notes);
+            string readableSasUrl = await _azureBlobService.GeneratePdfReadUrlAsync(request.PdfUrl, expiryInDays: 7);
+
+            await SendContractPdfEmailAsync(contract, readableSasUrl, request.Notes);
         }
         private void ValidateContractForSending(Contract contract)
         {
@@ -224,16 +235,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new ValidationException("partnerId", "Partner chưa được duyệt, không thể tạo hợp đồng.");
         }
 
-        private async Task ValidateManagerAsync(int managerId)
-        {
-            var manager = await _context.Managers
-                .Include(m => m.User)
-                .FirstOrDefaultAsync(m => m.ManagerId == managerId);
-
-            if (manager == null)
-                throw new NotFoundException("Không tìm thấy manager với ID này.");
-        }
-
         private void ValidateContractDates(DateTime startDate, DateTime endDate)
         {
             var errors = new Dictionary<string, ValidationError>();
@@ -328,19 +329,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
         public async Task<PaginatedContractsResponse> GetAllContractsAsync(
-            int currentManagerId,
-            int page = 1,
-            int limit = 10,
-            int? managerId = null,
-            int? partnerId = null,
-            string? status = null,
-            string? search = null,
-            string? sortBy = "created_at",
-            string? sortOrder = "desc")
+    int currentManagerId,
+    int page = 1,
+    int limit = 10,
+    int? managerId = null,
+    int? partnerId = null,
+    string? status = null,
+    string? search = null,
+    string? sortBy = "created_at",
+    string? sortOrder = "desc")
         {
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 10;
-
+            var managerExists = await _managerService.ValidateManagerExistsAsync(currentManagerId);
+            if (!managerExists)
+            {
+                currentManagerId = await _managerService.GetDefaultManagerIdAsync();
+            }
             var query = _context.Contracts
                 .Include(c => c.Partner)
                     .ThenInclude(p => p.User)
@@ -348,9 +353,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(m => m.User)
                 .AsQueryable();
 
-            if (managerId.HasValue && managerId.Value != currentManagerId)
+            if (managerId.HasValue)
             {
-                query = query.Where(c => c.ManagerId == currentManagerId);
+                var filterManagerExists = await _managerService.ValidateManagerExistsAsync(managerId.Value);
+                if (!filterManagerExists)
+                {
+                    managerId = await _managerService.GetDefaultManagerIdAsync();
+                }
+
+                query = query.Where(c => c.ManagerId == managerId.Value);
             }
             else
             {
@@ -361,7 +372,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 query = query.Where(c => c.PartnerId == partnerId.Value);
 
             if (!string.IsNullOrWhiteSpace(status))
-                query = query.Where(c => c.Status == status);
+            {
+                if (status.ToLower() == "active")
+                {
+                    query = query.Where(c => c.Status == "active" || c.Status == "pending" || c.Status == "pending_signature");
+                }
+                else
+                {
+                    query = query.Where(c => c.Status == status);
+                }
+            }
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -451,7 +471,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (contract == null)
                 throw new NotFoundException("Không tìm thấy hợp đồng với ID này.");
-
+            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
+            if (!managerExists)
+            {
+                managerId = await _managerService.GetDefaultManagerIdAsync();
+            }
             // Security check: Ensure manager can only access their contracts
             if (contract.ManagerId != managerId)
             {
@@ -530,7 +554,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (contract == null)
                 throw new NotFoundException("Không tìm thấy hợp đồng với ID này.");
-
+            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
+            if (!managerExists)
+            {
+                managerId = await _managerService.GetDefaultManagerIdAsync();
+            }
             // Security check
             if (contract.ManagerId != managerId)
             {
@@ -683,6 +711,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     }
                 });
             }
+            if (contract.Status != "pending_signature")
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["status"] = new ValidationError
+                    {
+                        Msg = $"Chỉ có thể upload signature cho hợp đồng với trạng thái 'pending_signature'. Hiện tại: {contract.Status}",
+                        Path = "contract",
+                        Location = "body"
+                    }
+                });
+            }
 
             // Business logic validation
             ValidateContractForSignatureUpload(contract);
@@ -692,7 +732,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Cập nhật thông tin signature
             contract.PartnerSignatureUrl = request.SignatureImageUrl;
             contract.PartnerSignedAt = DateTime.UtcNow;
-            contract.Status = "pending"; // Chuyển sang trạng thái chờ manager finalize
+            contract.Status = "pending"; 
             contract.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -785,26 +825,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
         }
         public async Task<PaginatedContractsResponse> GetPartnerContractsAsync(
-    int partnerId,
-    int page = 1,
-    int limit = 10,
-    string? status = null,
-    string? contractType = null,
-    string? search = null,
-    string? sortBy = "created_at",
-    string? sortOrder = "desc")
+     int partnerId,
+     int page = 1,
+     int limit = 10,
+     string? status = null,
+     string? contractType = null,
+     string? search = null,
+     string? sortBy = "created_at",
+     string? sortOrder = "desc")
         {
             // Validate pagination
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 10;
 
-            // Base query - chỉ lấy contracts của partner hiện tại
+            // Base query - chỉ lấy contracts của partner hiện tại VÀ ĐÃ ĐƯỢC GỬI
             var query = _context.Contracts
                 .Include(c => c.Partner)
                     .ThenInclude(p => p.User)
                 .Include(c => c.Manager)
                     .ThenInclude(m => m.User)
-                .Where(c => c.PartnerId == partnerId) // Chỉ contracts của partner này
+                .Where(c => c.PartnerId == partnerId &&
+                           (c.Status == "pending_signature" || c.Status == "active" || c.Status == "expired")) // ← CHỈ HIỂN THỊ CÁC STATUS ĐÃ ĐƯỢC GỬI
                 .AsQueryable();
 
             // Apply filters
@@ -935,6 +976,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     }
                 });
             }
+            if (contract.Status == "draft")
+            {
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["access"] = new ValidationError
+                    {
+                        Msg = "Không có hợp đồng này . Vui lòng kiểm tra lại",
+                        Path = "contractId",
+                        Location = "path"
+                    }
+                });
+            }
 
             var companyInfo = GetCompanyInfo();
 
@@ -988,10 +1041,194 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 CompanyTaxCode = companyInfo.TaxCode
             };
         }
+        public async Task<ContractResponse> UpdateContractDraftAsync(int contractId, int managerId, UpdateContractRequest request)
+        {
+            // ==================== VALIDATION SECTION ====================
+            var contract = await _context.Contracts
+                .Include(c => c.Partner)
+                    .ThenInclude(p => p.User)
+                .Include(c => c.Manager)
+                    .ThenInclude(m => m.User)
+                .FirstOrDefaultAsync(c => c.ContractId == contractId);
+
+            if (contract == null)
+                throw new NotFoundException("Không tìm thấy hợp đồng với ID này.");
+
+            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
+            if (!managerExists)
+            {
+                managerId = await _managerService.GetDefaultManagerIdAsync();
+            }
+
+            // Security check
+            if (contract.ManagerId != managerId)
+            {
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["access"] = new ValidationError
+                    {
+                        Msg = "Bạn không có quyền chỉnh sửa hợp đồng này",
+                        Path = "contractId",
+                        Location = "path"
+                    }
+                });
+            }
+
+            // Business logic validation - chỉ cho phép sửa draft
+            ValidateContractForUpdate(contract);
+
+            // ==================== BUSINESS LOGIC SECTION ====================
+
+            // Cập nhật các field nếu có giá trị
+            if (!string.IsNullOrWhiteSpace(request.ContractNumber) && request.ContractNumber != contract.ContractNumber)
+            {
+                await ValidateContractNumberAsync(request.ContractNumber);
+                contract.ContractNumber = request.ContractNumber;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.ContractType))
+            {
+                ValidateContractType(request.ContractType);
+                contract.ContractType = request.ContractType;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Title))
+                contract.Title = request.Title;
+
+            if (request.Description != null)
+                contract.Description = request.Description;
+
+            if (!string.IsNullOrWhiteSpace(request.TermsAndConditions))
+                contract.TermsAndConditions = request.TermsAndConditions;
+
+            if (request.StartDate.HasValue || request.EndDate.HasValue)
+            {
+                var startDate = request.StartDate ?? contract.StartDate;
+                var endDate = request.EndDate ?? contract.EndDate;
+                ValidateContractDates(startDate, endDate);
+
+                contract.StartDate = startDate;
+                contract.EndDate = endDate;
+            }
+
+            if (request.CommissionRate.HasValue)
+            {
+                ValidateCommissionRate(request.CommissionRate.Value);
+                contract.CommissionRate = request.CommissionRate.Value;
+            }
+
+            if (request.MinimumRevenue.HasValue)
+                contract.MinimumRevenue = request.MinimumRevenue.Value;
+
+            // Regenerate contract hash vì nội dung đã thay đổi
+            contract.ContractHash = GenerateContractHash(new CreateContractRequest
+            {
+                ContractNumber = contract.ContractNumber,
+                Title = contract.Title,
+                TermsAndConditions = contract.TermsAndConditions,
+                StartDate = contract.StartDate,
+                EndDate = contract.EndDate,
+                CommissionRate = contract.CommissionRate,
+                MinimumRevenue = contract.MinimumRevenue
+            });
+
+            contract.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return await GetContractWithFullDetailsAsync(contract.ContractId);
+        }
+
+        public async Task CancelContractAsync(int contractId, int managerId)
+        {
+            var contract = await _context.Contracts
+                .FirstOrDefaultAsync(c => c.ContractId == contractId);
+
+            if (contract == null)
+                throw new NotFoundException("Không tìm thấy hợp đồng với ID này.");
+
+            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
+            if (!managerExists)
+            {
+                managerId = await _managerService.GetDefaultManagerIdAsync();
+            }
+
+            // Security check
+            if (contract.ManagerId != managerId)
+            {
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["access"] = new ValidationError
+                    {
+                        Msg = "Bạn không có quyền hủy hợp đồng này",
+                        Path = "contractId",
+                        Location = "path"
+                    }
+                });
+            }
+
+            // Business logic validation - chỉ cho phép hủy draft
+            ValidateContractForCancellation(contract);
+
+            // ==================== BUSINESS LOGIC SECTION ====================
+
+            // Soft delete: cập nhật status thành cancelled
+            contract.Status = "cancelled";
+            contract.IsLocked = true; // Khóa không cho chỉnh sửa
+            contract.UpdatedAt = DateTime.UtcNow;
+            contract.LockedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
+
+        private void ValidateContractForUpdate(Contract contract)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (contract.Status != "draft")
+                errors["status"] = new ValidationError
+                {
+                    Msg = $"Chỉ có thể chỉnh sửa hợp đồng với trạng thái 'draft'. Hiện tại: {contract.Status}",
+                    Path = "status"
+                };
+
+            if (contract.IsLocked)
+                errors["contract"] = new ValidationError
+                {
+                    Msg = "Hợp đồng đã được khóa, không thể chỉnh sửa",
+                    Path = "contract"
+                };
+
+            if (errors.Any())
+                throw new ValidationException(errors);
+        }
+
+        private void ValidateContractForCancellation(Contract contract)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (contract.Status != "draft")
+                errors["status"] = new ValidationError
+                {
+                    Msg = $"Chỉ có thể hủy hợp đồng với trạng thái 'draft'. Hiện tại: {contract.Status}",
+                    Path = "status"
+                };
+
+            if (contract.IsLocked)
+                errors["contract"] = new ValidationError
+                {
+                    Msg = "Hợp đồng đã được khóa, không thể hủy",
+                    Path = "contract"
+                };
+
+            if (errors.Any())
+                throw new ValidationException(errors);
+        }
         private CompanyInfo GetCompanyInfo()
         {
             // Trong thực tế, lấy từ database hoặc configuration
             return new CompanyInfo
+            
             {
                 Name = "CÔNG TY TNHH EXPRESS TICKET CINEMA SYSTEM",
                 Address = "123 Đường ABC, Quận 1, TP.HCM",

@@ -50,10 +50,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Phone = user.Phone,
                 AvatarUrl = string.IsNullOrWhiteSpace(user.AvatarUrl) ? defaultAvatar : user.AvatarUrl,
                 Email = user.Email ?? string.Empty,
-                Role = user.UserType ?? "User"
+                Role = user.UserType ?? "User",
+                AccountStatus = GetAccountStatus(user),
+                IsBanned = user.IsBanned,
+                IsActive = user.IsActive,
+                EmailConfirmed = user.EmailConfirmed,
+                CreatedAt = user.CreatedAt
             };
         }
-
+        private string GetAccountStatus(User user)
+        {
+            if (user.IsBanned) return "banned";
+            if (!user.IsActive) return "inactive";
+            if (!user.EmailConfirmed) return "email_not_verified";
+            return "active";
+        }
         public async Task<UserProfileResponse> UpdateProfileAsync(int userId, UpdateUserRequest request)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);

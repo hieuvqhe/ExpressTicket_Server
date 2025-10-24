@@ -14,6 +14,7 @@ public partial class Manager
     public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
 
     public virtual ICollection<Partner> Partners { get; set; } = new List<Partner>();
+    public virtual ICollection<Movie> Movies { get; set; } = new List<Movie>();
 
     public virtual User User { get; set; } = null!;
 }

@@ -45,8 +45,6 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<MovieActor> MovieActors { get; set; }
 
-    public virtual DbSet<MovieSubmission> MovieSubmissions { get; set; }
-
     public virtual DbSet<Partner> Partners { get; set; }
 
     public virtual DbSet<PartnerReport> PartnerReports { get; set; }
@@ -227,7 +225,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
             entity.Property(e => e.Address)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("address");
             entity.Property(e => e.CinemaName)
                 .HasMaxLength(255)
@@ -294,15 +292,17 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(500)
                 .HasColumnName("partner_signature_url");
             entity.Property(e => e.PartnerSignedAt).HasColumnName("partner_signed_at");
+            entity.Property(e => e.PdfUrl).HasMaxLength(500);
             entity.Property(e => e.SignedAt).HasColumnName("signed_at");
             entity.Property(e => e.StartDate).HasColumnName("start_date");
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
                 .HasDefaultValue("draft")
                 .HasColumnName("status");
-            entity.Property(e => e.TermsAndConditions).HasColumnName("terms_and_conditions");
+            entity.Property(e => e.TermsAndConditions).IsUnicode(true).HasColumnName("terms_and_conditions");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
+                .IsUnicode(true)
                 .HasColumnName("title");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(getutcdate())")
@@ -330,7 +330,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.CustomerId).HasColumnName("customer_id");
             entity.Property(e => e.Address)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("address");
             entity.Property(e => e.DateOfBirth).HasColumnName("date_of_birth");
             entity.Property(e => e.Gender)
@@ -396,7 +396,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
             entity.Property(e => e.FullName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("full_name");
             entity.Property(e => e.HireDate).HasColumnName("hire_date");
             entity.Property(e => e.IsActive)
@@ -429,6 +429,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.GameshowId).HasColumnName("gameshow_id");
             entity.Property(e => e.Description)
                 .HasColumnType("text")
+                .IsUnicode(true)
                 .HasColumnName("description");
             entity.Property(e => e.EndDate).HasColumnName("end_date");
             entity.Property(e => e.PartnerId).HasColumnName("partner_id");
@@ -455,11 +456,11 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.ManagerId).HasColumnName("manager_id");
             entity.Property(e => e.Department)
                 .HasMaxLength(100)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("department");
             entity.Property(e => e.FullName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("full_name");
             entity.Property(e => e.UserId).HasColumnName("user_id");
 
@@ -474,6 +475,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasKey(e => e.MovieId).HasName("PK__Movie__83CDF7494F73DF92");
 
             entity.ToTable("Movie");
+            entity.HasIndex(e => e.ManagerId, "IX_Movies_ManagerId");
 
             entity.Property(e => e.MovieId).HasColumnName("movie_id");
             entity.Property(e => e.AverageRating)
@@ -505,6 +507,9 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("language");
+            entity.Property(e => e.ManagerId)
+                .HasDefaultValue(1)
+                .HasColumnName("manager_id");
             entity.Property(e => e.PosterUrl).HasColumnName("poster_url");
             entity.Property(e => e.PremiereDate).HasColumnName("premiereDate");
             entity.Property(e => e.Production)
@@ -520,6 +525,10 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("trailer_url");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne(d => d.Manager).WithMany(p => p.Movies)
+                .HasForeignKey(d => d.ManagerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Movies_Manager");
         });
 
         modelBuilder.Entity<MovieActor>(entity =>
@@ -545,33 +554,6 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasConstraintName("FK__MovieActo__movie__236943A5");
         });
 
-        modelBuilder.Entity<MovieSubmission>(entity =>
-        {
-            entity.HasKey(e => e.SubmissionId).HasName("PK__MovieSub__9B535595013C563F");
-
-            entity.ToTable("MovieSubmission");
-
-            entity.Property(e => e.SubmissionId).HasColumnName("submission_id");
-            entity.Property(e => e.MovieId).HasColumnName("movie_id");
-            entity.Property(e => e.PartnerId).HasColumnName("partner_id");
-            entity.Property(e => e.Status)
-                .HasMaxLength(50)
-                .IsUnicode(false)
-                .HasColumnName("status");
-            entity.Property(e => e.SubmittedAt)
-                .HasDefaultValueSql("(sysutcdatetime())")
-                .HasColumnName("submitted_at");
-
-            entity.HasOne(d => d.Movie).WithMany(p => p.MovieSubmissions)
-                .HasForeignKey(d => d.MovieId)
-                .HasConstraintName("FK_MovieSubmission_Movie");
-
-            entity.HasOne(d => d.Partner).WithMany(p => p.MovieSubmissions)
-                .HasForeignKey(d => d.PartnerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_MovieSubmission_Partner");
-        });
-
         modelBuilder.Entity<Partner>(entity =>
         {
             entity.HasKey(e => e.PartnerId).HasName("PK__Partner__576F1B2707E11F04");
@@ -583,7 +565,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.PartnerId).HasColumnName("partner_id");
             entity.Property(e => e.Address)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("address");
             entity.Property(e => e.ApprovedAt)
                 .HasColumnType("datetime")
@@ -613,7 +595,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.ManagerId).HasColumnName("manager_id");
             entity.Property(e => e.PartnerName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("partner_name");
             entity.Property(e => e.Phone)
                 .HasMaxLength(20)
@@ -624,7 +606,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("rejection_reason");
             entity.Property(e => e.Status)
                 .HasMaxLength(10)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasDefaultValue("pending")
                 .HasColumnName("status");
             entity.Property(e => e.TaxCode)
@@ -1083,7 +1065,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.EmailConfirmed).HasColumnName("email_confirmed");
             entity.Property(e => e.Fullname)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("fullname");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)

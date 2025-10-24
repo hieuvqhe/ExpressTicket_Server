@@ -99,5 +99,76 @@ public class ManagerFinalizeContractExampleFilter : IOperationFilter
                 });
             }
         }
+        // Response 401 Unauthorized
+        if (operation.Responses.ContainsKey("401"))
+        {
+            var response = operation.Responses["401"];
+            var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+            if (content != null)
+            {
+                content.Examples.Clear();
+                content.Examples.Add("Unauthorized", new OpenApiExample
+                {
+                    Summary = "Lỗi xác thực",
+                    Value = new OpenApiString(
+                    """
+            {
+              "message": "Xác thực thất bại",
+              "errors": {
+                "access": {
+                  "msg": "Bạn không có quyền thao tác với hợp đồng này",
+                  "path": "contractId",
+                  "location": "path"
+                }
+              }
+            }
+            """
+                    )
+                });
+            }
+        }
+        // Response 404 Not Found
+        if (operation.Responses.ContainsKey("404"))
+        {
+            var response = operation.Responses["404"];
+            var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+            if (content != null)
+            {
+                content.Examples.Clear();
+                content.Examples.Add("Not Found", new OpenApiExample
+                {
+                    Summary = "Không tìm thấy hợp đồng",
+                    Value = new OpenApiString(
+                    """
+            {
+              "message": "Không tìm thấy hợp đồng với ID này."
+            }
+            """
+                    )
+                });
+            }
+        }
+
+        // Response 500 Internal Server Error
+        if (operation.Responses.ContainsKey("500"))
+        {
+            var response = operation.Responses["500"];
+            var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+            if (content != null)
+            {
+                content.Examples.Clear();
+                content.Examples.Add("Server Error", new OpenApiExample
+                {
+                    Summary = "Lỗi hệ thống",
+                    Value = new OpenApiString(
+                    """
+            {
+              "message": "Đã xảy ra lỗi hệ thống khi hoàn tất hợp đồng."
+            }
+            """
+                    )
+                });
+            }
+        }
     }
 }

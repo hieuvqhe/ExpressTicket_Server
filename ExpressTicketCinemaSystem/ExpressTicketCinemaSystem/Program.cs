@@ -16,6 +16,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using System.Text.Json;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager;
 using System.Text;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,7 +26,7 @@ builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
-//  CORS 
+// CORS 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -94,6 +95,16 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<ManagerSendContractPdfExampleFilter>();
     options.OperationFilter<ManagerApprovePartnerExampleFilter>();
     options.OperationFilter<ManagerRejectPartnerExampleFilter>();
+    options.OperationFilter<PartnerPatchProfileExampleFilter>();
+    options.OperationFilter<ManagerGetPartnersWithoutContractsExampleFilter>();
+    options.OperationFilter<CreateMovieExampleFilter>();
+    options.OperationFilter<UpdateMovieExampleFilter>();
+    options.OperationFilter<DeleteMovieExampleFilter>();
+    options.OperationFilter<GetActorsExampleFilter>();
+    options.OperationFilter<GetActorByIdExampleFilter>();
+    options.OperationFilter<CreateActorExampleFilter>();
+    options.OperationFilter<UpdateActorExampleFilter>();
+    options.OperationFilter<DeleteActorExampleFilter>();
     options.OperationFilter<CreateScreenExampleFilter>();
     options.OperationFilter<UpdateScreenExampleFilter>();
     options.OperationFilter<GetScreenByIdExampleFilter>();
@@ -118,7 +129,11 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<CinemaDbCoreContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn")));
 
-//  DEPENDENCY INJECTION 
+// CONFIGURATION FOR AZURE BLOB STORAGE
+builder.Services.Configure<AzureBlobStorageSettings>(
+    builder.Configuration.GetSection("AzureBlobStorage"));
+
+// DEPENDENCY INJECTION 
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -127,6 +142,9 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<PartnerService>();
 builder.Services.AddScoped<ContractService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<IManagerService, ManagerService>();
+builder.Services.AddScoped<IAzureBlobService, AzureBlobService>();
+builder.Services.AddScoped<MovieManagementService>();
 builder.Services.AddScoped<ScreenService>();
 
 
@@ -162,14 +180,14 @@ builder.Services.AddAuthentication(options =>
 
             var responseBody = new ValidationErrorResponse
             {
-                Message = "Xác thực thất bại", 
+                Message = "Xác thực thất bại",
                 Errors = new Dictionary<string, ValidationError>
                 {
-                    ["auth"] = new ValidationError 
+                    ["auth"] = new ValidationError
                     {
-                        Msg = "Yêu cầu cần được xác thực. Vui lòng cung cấp token hợp lệ.", 
-                        Path = "header", 
-                        Location = "Authorization" 
+                        Msg = "Yêu cầu cần được xác thực. Vui lòng cung cấp token hợp lệ.",
+                        Path = "header",
+                        Location = "Authorization"
                     }
                 }
             };
@@ -177,11 +195,11 @@ builder.Services.AddAuthentication(options =>
             var jsonResponse = JsonSerializer.Serialize(responseBody);
             await context.Response.WriteAsync(jsonResponse);
         },
-        OnForbidden = async context => 
+        OnForbidden = async context =>
         {
             context.Response.StatusCode = 403;
             context.Response.ContentType = "application/json";
-            var responseBody = new ValidationErrorResponse 
+            var responseBody = new ValidationErrorResponse
             {
                 Message = "Truy cập bị cấm",
                 Errors = new Dictionary<string, ValidationError>
@@ -206,18 +224,16 @@ builder.Services.AddAuthentication(options =>
     options.ClientSecret = googleSection["ClientSecret"];
 });
 
-//  BUILD APP 
+// BUILD APP 
 var app = builder.Build();
 
-// - MIDDLEWARE 
+// MIDDLEWARE 
 app.UseCors("AllowAll");
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
-
 app.UseAuthentication();
-
 app.UseAuthorization();
 app.MapControllers();
 

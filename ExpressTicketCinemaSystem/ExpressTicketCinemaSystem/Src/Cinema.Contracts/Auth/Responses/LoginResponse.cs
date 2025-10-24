@@ -18,5 +18,9 @@
 
         // Thêm partner info - có thể null nếu không phải partner
         public PartnerLoginInfo? PartnerInfo { get; set; }
+        public string AccountStatus { get; set; } = "Active";
+        public bool IsBanned { get; set; }
+        public bool IsActive { get; set; }
+        public bool EmailConfirmed { get; set; }
     }
 }

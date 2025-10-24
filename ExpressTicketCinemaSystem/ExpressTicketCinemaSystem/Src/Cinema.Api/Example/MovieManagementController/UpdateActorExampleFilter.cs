@@ -2,16 +2,16 @@
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
+namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement
 {
-    public class ManagerRejectPartnerExampleFilter : IOperationFilter
+    public class UpdateActorExampleFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var controllerName = context.ApiDescription.ActionDescriptor.RouteValues["controller"];
             var actionName = context.ApiDescription.ActionDescriptor.RouteValues["action"];
 
-            if (controllerName != "Manager" || actionName != "RejectPartner")
+            if (controllerName != "MovieManagement" || actionName != "UpdateActor")
             {
                 return;
             }
@@ -22,7 +22,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
             var idParam = operation.Parameters.FirstOrDefault(p => p.Name == "id");
             if (idParam != null)
             {
-                idParam.Description = "Partner ID";
+                idParam.Description = "Actor ID";
                 idParam.Examples = new Dictionary<string, OpenApiExample>
                 {
                     ["Example"] = new OpenApiExample
@@ -32,22 +32,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                 };
             }
 
-            // Request Body example
+            // Request Body Example
             if (operation.RequestBody != null)
             {
-                operation.RequestBody.Description = "Reject partner request";
+                operation.RequestBody.Description = "Actor update data";
                 var content = operation.RequestBody.Content.FirstOrDefault(c => c.Key == "application/json").Value;
                 if (content != null)
                 {
                     content.Examples.Clear();
-                    content.Examples.Add("Reject Request", new OpenApiExample
+                    content.Examples.Add("Update Actor", new OpenApiExample
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "rejectionReason": "Giấy tờ kinh doanh không đầy đủ. Vui lòng cung cấp giấy phép kinh doanh và giấy đăng ký thuế bản gốc."
-                        }
-                        """
+                    {
+                      "name": "Keanu Charles Reeves",
+                      "avatarUrl": "https://www.themoviedb.org/t/p/w300_and_h450_bestv2/4D0PpNI0kmP58hgrwGC3wCjxhnm.jpg"
+                    }
+                    """
                         )
                     });
                 }
@@ -65,100 +66,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Từ chối partner thành công.",
-                          "result": {
-                            "partnerId": 1,
-                            "partnerName": "CÔNG TY TNHH RẠP PHIM ABC",
-                            "taxCode": "0123456789",
-                            "status": "rejected",
-                            "rejectionReason": "Giấy tờ kinh doanh không đầy đủ. Vui lòng cung cấp giấy phép kinh doanh và giấy đăng ký thuế bản gốc.",
-                            "rejectedAt": "2024-01-20T10:00:00Z",
-                            "rejectedBy": 1,
-                            "managerName": "Trần Văn B",
-                            "userId": 101,
-                            "fullname": "Nguyễn Văn A",
-                            "email": "nguyenvana@example.com",
-                            "phone": "0912345678",
-                            "isActive": false,
-                            "emailConfirmed": false
-                          }
-                        }
-                        """
-                        )
-                    });
-                }
-            }
-
-            // Response 400 Bad Request
-            if (operation.Responses.ContainsKey("400"))
-            {
-                var response = operation.Responses["400"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Validation Error", new OpenApiExample
                     {
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "message": "Lỗi xác thực dữ liệu",
-                          "errors": {
-                            "rejectionReason": {
-                              "msg": "Lý do từ chối là bắt buộc",
-                              "path": "rejectionReason"
-                            }
-                          }
-                        }
-                        """
-                        )
-                    });
-                }
-            }
-            // Response 401 Unauthorized
-            if (operation.Responses.ContainsKey("401"))
-            {
-                var response = operation.Responses["401"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Unauthorized", new OpenApiExample
-                    {
-                        Value = new OpenApiString(
-                        """
-            {
-              "message": "Xác thực thất bại",
-              "errors": {
-                "auth": {
-                  "msg": "Manager không tồn tại.",
-                  "path": "form",
-                  "location": "body"
-                }
-              }
-            }
-            """
-                        )
-                    });
-                }
-            }
-            // Response 404 Not Found
-            if (operation.Responses.ContainsKey("404"))
-            {
-                var response = operation.Responses["404"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Not Found", new OpenApiExample
-                    {
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "message": "Không tìm thấy partner với ID này."
-                        }
-                        """
+                      "message": "Cập nhật diễn viên thành công",
+                      "result": {
+                        "id": 1,
+                        "name": "Keanu Charles Reeves",
+                        "profileImage": "https://www.themoviedb.org/t/p/w300_and_h450_bestv2/4D0PpNI0kmP58hgrwGC3wCjxhnm.jpg"
+                      }
+                    }
+                    """
                         )
                     });
                 }
@@ -176,16 +92,65 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Dữ liệu bị xung đột",
-                          "errors": {
-                            "status": {
-                              "msg": "Chỉ có thể từ chối partner với trạng thái 'pending'. Hiện tại: approved",
-                              "path": "status"
-                            }
-                          }
+                    {
+                      "message": "Dữ liệu bị xung đột",
+                      "errors": {
+                        "name": {
+                          "msg": "Diễn viên với tên này đã tồn tại trong hệ thống",
+                          "path": "name"
                         }
+                      }
+                    }
+                    """
+                        )
+                    });
+                }
+            }
+            // Thêm vào UpdateActorExampleFilter
+            // Response 401 Unauthorized
+            if (operation.Responses.ContainsKey("401"))
+            {
+                var response = operation.Responses["401"];
+                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Unauthorized", new OpenApiExample
+                    {
+                        Value = new OpenApiString(
                         """
+            {
+              "message": "Xác thực thất bại",
+              "errors": {
+                "manager": {
+                  "msg": "Manager không tồn tại hoặc không có quyền",
+                  "path": "managerId",
+                  "location": "auth"
+                }
+              }
+            }
+            """
+                        )
+                    });
+                }
+            }
+
+            // Response 404 Not Found
+            if (operation.Responses.ContainsKey("404"))
+            {
+                var response = operation.Responses["404"];
+                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Not Found", new OpenApiExample
+                    {
+                        Value = new OpenApiString(
+                        """
+            {
+              "message": "Không tìm thấy diễn viên với ID này."
+            }
+            """
                         )
                     });
                 }
@@ -203,17 +168,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                     {
                         Value = new OpenApiString(
                         """
-                        {
-                          "message": "Đã xảy ra lỗi hệ thống khi từ chối partner."
-                        }
-                        """
+            {
+              "message": "Đã xảy ra lỗi hệ thống khi cập nhật diễn viên."
+            }
+            """
                         )
                     });
                 }
             }
-
-            operation.Summary = "Reject a pending partner";
-            operation.Description = "Reject partner registration with detailed reason and send notification email.";
+            operation.Summary = "Update actor information";
+            operation.Description = "Update actor details including name and avatar.";
         }
     }
 }
