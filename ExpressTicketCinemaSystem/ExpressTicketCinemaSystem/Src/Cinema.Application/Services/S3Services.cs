@@ -14,7 +14,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _config = config;
         }
 
-        public async Task<string> UploadFileAsync(IFormFile file)
+        public async Task<string> UploadFileAsync(IFormFile file, string v)
         {
             var bucketName = _config["AWS:BucketName"];
             var fileName = $"{Guid.NewGuid()}_{file.FileName}";
@@ -36,26 +36,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return $"https://{bucketName}.s3.{_config["AWS:Region"]}.amazonaws.com/{fileName}";
         }
 
-        public async Task<string> UploadVideoAsync(IFormFile file)
-        {
-            var bucketName = _config["AWS:BucketName"];
-            var fileName = $"{Guid.NewGuid()}_{file.FileName}";
+        //public async Task<string> UploadVideoAsync(IFormFile file)
+        //{
+        //    var bucketName = _config["AWS:BucketName"];
+        //    var fileName = $"{Guid.NewGuid()}_{file.FileName}";
 
-            using (var stream = file.OpenReadStream())
-            {
-                var uploadRequest = new TransferUtilityUploadRequest
-                {
-                    InputStream = stream,
-                    Key = fileName,
-                    BucketName = bucketName,
-                    ContentType = file.ContentType
-                };
+        //    using (var stream = file.OpenReadStream())
+        //    {
+        //        var uploadRequest = new TransferUtilityUploadRequest
+        //        {
+        //            InputStream = stream,
+        //            Key = fileName,
+        //            BucketName = bucketName,
+        //            ContentType = file.ContentType
+        //        };
 
-                var fileTransferUtility = new TransferUtility(_s3Client);
-                await fileTransferUtility.UploadAsync(uploadRequest);
-            }
+        //        var fileTransferUtility = new TransferUtility(_s3Client);
+        //        await fileTransferUtility.UploadAsync(uploadRequest);
+        //    }
 
-            return $"https://{bucketName}.s3.{_config["AWS:Region"]}.amazonaws.com/{fileName}";
-        }
+        //    return $"https://{bucketName}.s3.{_config["AWS:Region"]}.amazonaws.com/{fileName}";
+        //}
     }
 }
