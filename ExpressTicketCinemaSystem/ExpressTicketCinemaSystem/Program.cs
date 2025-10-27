@@ -109,8 +109,9 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<UpdateScreenExampleFilter>();
     options.OperationFilter<GetScreenByIdExampleFilter>();
     options.OperationFilter<GetScreensExampleFilter>();
-   
-    
+    options.OperationFilter<SeatTypeExamplesFilter>();
+
+
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
     options.AddSecurityDefinition("Bearer", jwtSecurityScheme);
@@ -146,6 +147,8 @@ builder.Services.AddScoped<IManagerService, ManagerService>();
 builder.Services.AddScoped<IAzureBlobService, AzureBlobService>();
 builder.Services.AddScoped<MovieManagementService>();
 builder.Services.AddScoped<ScreenService>();
+builder.Services.AddScoped<ISeatTypeService, SeatTypeService>();
+builder.Services.AddScoped<ISeatLayoutService, SeatLayoutService>();
 
 
 //  JWT AUTHENTICATION 

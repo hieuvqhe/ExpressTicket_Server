@@ -7,6 +7,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using System.Security.Claims;
 using System;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Requests;
+using System.Linq; // Cần thêm using này để dùng FirstOrDefault()
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -35,18 +36,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
             throw new UnauthorizedException("Token không hợp lệ hoặc không chứa ID người dùng.");
         }
-
         /// <summary>
         /// Get all actors with pagination and filtering
         /// </summary>
-        /// <param name="page">Page number (default: 1)</param>
-        /// <param name="limit">Number of items per page (default: 10)</param>
-        /// <param name="search">Search by actor name</param>
-        /// <param name="sortBy">Field to sort by (name, actor_id)</param>
-        /// <param name="sortOrder">Sort order (asc, desc)</param>
-        /// <returns>Paginated list of actors</returns>
         [HttpGet("actors")]
         [ProducesResponseType(typeof(SuccessResponse<PaginatedActorsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)] // Thêm response type
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetActors(
             [FromQuery] int page = 1,
@@ -69,14 +64,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (UnauthorizedException ex)
             {
+                // SỬA THEO CÁCH 1
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (Exception ex)
             {
+                // Giữ nguyên
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách diễn viên."
@@ -87,8 +85,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Get actor by ID
         /// </summary>
-        /// <param name="id">Actor ID</param>
-        /// <returns>Actor details</returns>
         [HttpGet("actors/{id}")]
         [ProducesResponseType(typeof(SuccessResponse<ActorResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -110,18 +106,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (NotFoundException ex)
             {
+                // Giữ nguyên
                 return NotFound(new ErrorResponse { Message = ex.Message });
             }
             catch (UnauthorizedException ex)
             {
+                // SỬA THEO CÁCH 1
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (Exception ex)
             {
+                // Giữ nguyên
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin diễn viên."
@@ -132,8 +132,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Create new actor
         /// </summary>
-        /// <param name="request">Actor information</param>
-        /// <returns>Created actor details</returns>
         [HttpPost("actors")]
         [ProducesResponseType(typeof(SuccessResponse<ActorResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -156,30 +154,37 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (ValidationException ex)
             {
+                // Giữ nguyên (đã đúng theo Cách 1)
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
                 return BadRequest(new ValidationErrorResponse
                 {
-                    Message = "Lỗi xác thực dữ liệu",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (ConflictException ex)
             {
+                // SỬA THEO CÁCH 1
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Dữ liệu bị xung đột";
                 return Conflict(new ValidationErrorResponse
                 {
-                    Message = "Dữ liệu bị xung đột",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (UnauthorizedException ex)
             {
+                // SỬA THEO CÁCH 1
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (Exception ex)
             {
+                // Giữ nguyên
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi tạo diễn viên."
@@ -190,9 +195,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Update actor information
         /// </summary>
-        /// <param name="id">Actor ID</param>
-        /// <param name="request">Updated actor information</param>
-        /// <returns>Updated actor details</returns>
         [HttpPut("actors/{id}")]
         [ProducesResponseType(typeof(SuccessResponse<ActorResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -216,17 +218,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (ValidationException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
                 return BadRequest(new ValidationErrorResponse
                 {
-                    Message = "Lỗi xác thực dữ liệu",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (ConflictException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Dữ liệu bị xung đột";
                 return Conflict(new ValidationErrorResponse
                 {
-                    Message = "Dữ liệu bị xung đột",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
@@ -236,9 +240,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
@@ -254,8 +259,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Delete actor
         /// </summary>
-        /// <param name="id">Actor ID</param>
-        /// <returns>Success message</returns>
         [HttpDelete("actors/{id}")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -281,17 +284,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (ConflictException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Dữ liệu bị xung đột";
                 return Conflict(new ValidationErrorResponse
                 {
-                    Message = "Dữ liệu bị xung đột",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
@@ -303,6 +308,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
         /// <summary>
         /// Create new movie - Có thể chọn actor có sẵn hoặc tạo mới
         /// </summary>
@@ -328,25 +334,28 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (ValidationException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
                 return BadRequest(new ValidationErrorResponse
                 {
-                    Message = "Lỗi xác thực dữ liệu",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (ConflictException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Dữ liệu bị xung đột";
                 return Conflict(new ValidationErrorResponse
                 {
-                    Message = "Dữ liệu bị xung đột",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
@@ -385,17 +394,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (ValidationException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
                 return BadRequest(new ValidationErrorResponse
                 {
-                    Message = "Lỗi xác thực dữ liệu",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (ConflictException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Dữ liệu bị xung đột";
                 return Conflict(new ValidationErrorResponse
                 {
-                    Message = "Dữ liệu bị xung đột",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
@@ -405,9 +416,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
@@ -447,9 +459,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
