@@ -13,5 +13,10 @@ public partial class SeatMap
 
     public DateTime UpdatedAt { get; set; }
 
+    public int TotalRows { get; set; }
+
+    public int TotalColumns { get; set; }
+
     public virtual Screen Screen { get; set; } = null!;
 }
+

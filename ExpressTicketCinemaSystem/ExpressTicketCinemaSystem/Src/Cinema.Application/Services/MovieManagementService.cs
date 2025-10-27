@@ -9,32 +9,48 @@ using System.Threading.Tasks;
 using System;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Requests;
-
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
     public class MovieManagementService
     {
         private readonly CinemaDbCoreContext _context;
-        private readonly IManagerService _managerService;
 
-        public MovieManagementService(CinemaDbCoreContext context, IManagerService managerService)
+        public MovieManagementService(CinemaDbCoreContext context)
         {
             _context = context;
-            _managerService = managerService;
         }
 
         // ==================== ACTOR CRUD ====================
+        private async Task<Manager> GetManagerByUserIdAsync(int userId)
+        {
+            var manager = await _context.Managers
+                                    .Include(m => m.User) 
+                                    .FirstOrDefaultAsync(m => m.UserId == userId);
 
+            if (manager == null)
+            {
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["manager"] = new ValidationError
+                    {
+                        Msg = "Manager không tồn tại hoặc không có quyền",
+                        Path = "managerId", 
+                        Location = "auth"
+                    }
+                });
+            }
+            return manager;
+        }
         public async Task<PaginatedActorsResponse> GetActorsAsync(
-            int managerId,
-            int page = 1,
-            int limit = 10,
-            string? search = null,
-            string? sortBy = "name",
-            string? sortOrder = "asc")
+             int userId, 
+             int page = 1,
+             int limit = 10,
+             string? search = null,
+             string? sortBy = "name",
+             string? sortOrder = "asc")
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateManagerExistsAsync(managerId);
+            await GetManagerByUserIdAsync(userId); 
 
             // ==================== BUSINESS LOGIC SECTION ====================
             if (page < 1) page = 1;
@@ -77,10 +93,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
-        public async Task<ActorResponse> GetActorByIdAsync(int actorId, int managerId)
+        public async Task<ActorResponse> GetActorByIdAsync(int actorId, int userId) 
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateManagerExistsAsync(managerId);
+            await GetManagerByUserIdAsync(userId); 
 
             var actor = await _context.Actors
                 .FirstOrDefaultAsync(a => a.ActorId == actorId);
@@ -97,14 +113,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
-        public async Task<ActorResponse> CreateActorAsync(int managerId, CreateActorRequest request)
+        public async Task<ActorResponse> CreateActorAsync(int userId, CreateActorRequest request) 
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateManagerExistsAsync(managerId);
+            await GetManagerByUserIdAsync(userId); 
             ValidateActorRequest(request);
 
             if (await _context.Actors.AnyAsync(a => a.Name.ToLower() == request.Name.Trim().ToLower()))
-                throw new ConflictException("name", "Diễn viên với tên này đã tồn tại trong hệ thống");
+               throw new ConflictException("name", "Diễn viên với tên này đã tồn tại trong hệ thống");
 
             // ==================== BUSINESS LOGIC SECTION ====================
             var actor = new Actor
@@ -124,10 +140,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
-        public async Task<ActorResponse> UpdateActorAsync(int actorId, int managerId, UpdateActorRequest request)
+        public async Task<ActorResponse> UpdateActorAsync(int actorId, int userId, UpdateActorRequest request) 
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateManagerExistsAsync(managerId);
+            await GetManagerByUserIdAsync(userId); 
 
             var actor = await _context.Actors
                 .FirstOrDefaultAsync(a => a.ActorId == actorId);
@@ -138,8 +154,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateActorRequest(request);
 
             if (await _context.Actors.AnyAsync(a =>
-                a.ActorId != actorId && a.Name.ToLower() == request.Name.Trim().ToLower()))
-                throw new ConflictException("name", "Diễn viên với tên này đã tồn tại trong hệ thống");
+               a.ActorId != actorId && a.Name.ToLower() == request.Name.Trim().ToLower()))
+               throw new ConflictException("name", "Diễn viên với tên này đã tồn tại trong hệ thống");
 
             // ==================== BUSINESS LOGIC SECTION ====================
             actor.Name = request.Name.Trim();
@@ -155,10 +171,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
-        public async Task DeleteActorAsync(int actorId, int managerId)
+        public async Task DeleteActorAsync(int actorId, int userId) 
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateManagerExistsAsync(managerId);
+            await GetManagerByUserIdAsync(userId); // Chỉ cần gọi để xác thực
 
             var actor = await _context.Actors
                 .FirstOrDefaultAsync(a => a.ActorId == actorId);
@@ -175,23 +191,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // ==================== BUSINESS LOGIC SECTION ====================
             _context.Actors.Remove(actor);
             await _context.SaveChangesAsync();
-        }
-
-        private async Task ValidateManagerExistsAsync(int managerId)
-        {
-            var managerExists = await _managerService.ValidateManagerExistsAsync(managerId);
-            if (!managerExists)
-            {
-                throw new UnauthorizedException(new Dictionary<string, ValidationError>
-                {
-                    ["manager"] = new ValidationError
-                    {
-                        Msg = "Manager không tồn tại hoặc không có quyền",
-                        Path = "managerId",
-                        Location = "auth"
-                    }
-                });
-            }
         }
 
         private void ValidateActorRequest(CreateActorRequest request)
@@ -218,7 +217,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 };
 
             if (!string.IsNullOrWhiteSpace(request.AvatarUrl) &&
-                !Uri.TryCreate(request.AvatarUrl, UriKind.Absolute, out _))
+              !Uri.TryCreate(request.AvatarUrl, UriKind.Absolute, out _))
             {
                 errors["avatarUrl"] = new ValidationError
                 {
@@ -282,10 +281,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 _ => isAscending ? query.OrderBy(a => a.Name) : query.OrderByDescending(a => a.Name)
             };
         }
-        public async Task<MovieResponse> CreateMovieAsync(int managerId, CreateMovieRequest request)
+        public async Task<MovieResponse> CreateMovieAsync(int userId, CreateMovieRequest request) 
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateManagerExistsAsync(managerId);
+            var manager = await GetManagerByUserIdAsync(userId);
+
             ValidateMovieRequest(request);
             await ValidateMovieUniqueAsync(request.Title, request.PremiereDate);
             ValidateMovieDates(request.PremiereDate, request.EndDate);
@@ -308,7 +308,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
-            // Tạo movie mới
             var movie = new Movie
             {
                 Title = request.Title.Trim(),
@@ -324,12 +323,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 PremiereDate = request.PremiereDate,
                 EndDate = request.EndDate,
                 TrailerUrl = request.TrailerUrl,
-                AverageRating = request.AverageRating, 
-                RatingsCount = request.RatingsCount ?? 0, 
+                AverageRating = request.AverageRating,
+                RatingsCount = request.RatingsCount ?? 0,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
-                CreatedBy = managerId.ToString(),
-                ManagerId = managerId
+
+                // === SỬA 11: Sửa lỗi gán ID ===
+                CreatedBy = manager.User?.Fullname ?? manager.FullName ?? "Unknown",
+                ManagerId = manager.ManagerId // Gán ManagerId (PK) thật, ví dụ: 1
             };
 
             _context.Movies.Add(movie);
@@ -341,10 +342,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return await GetMovieWithDetailsAsync(movie.MovieId);
         }
 
-        public async Task<MovieResponse> UpdateMovieAsync(int movieId, int managerId, UpdateMovieRequest request)
+        public async Task<MovieResponse> UpdateMovieAsync(int movieId, int userId, UpdateMovieRequest request) 
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateManagerExistsAsync(managerId);
+            var manager = await GetManagerByUserIdAsync(userId);
 
             var movie = await _context.Movies
                 .Include(m => m.MovieActors)
@@ -355,7 +356,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy phim với ID này.");
 
             // Security check - chỉ manager tạo phim mới được sửa
-            if (movie.ManagerId != managerId)
+            if (movie.ManagerId != manager.ManagerId) // So sánh ManagerId (PK)
             {
                 throw new UnauthorizedException(new Dictionary<string, ValidationError>
                 {
@@ -541,9 +542,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 await _context.SaveChangesAsync();
             }
         }
-        public async Task DeleteMovieAsync(int movieId, int managerId)
+        public async Task DeleteMovieAsync(int movieId, int userId) // === SỬA 15: Đổi managerId thành userId ===
         {
-            await ValidateManagerExistsAsync(managerId);
+            // === SỬA 16: Lấy Manager thật từ userId ===
+            var manager = await GetManagerByUserIdAsync(userId);
 
             var movie = await _context.Movies
                 .FirstOrDefaultAsync(m => m.MovieId == movieId);
@@ -551,8 +553,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (movie == null)
                 throw new NotFoundException("Không tìm thấy phim với ID này.");
 
+            // === SỬA 17: Sửa lỗi logic bảo mật ===
             // Security check
-            if (movie.ManagerId != managerId)
+            if (movie.ManagerId != manager.ManagerId) // So sánh ManagerId (PK)
             {
                 throw new UnauthorizedException(new Dictionary<string, ValidationError>
                 {
