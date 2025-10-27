@@ -1,22 +1,25 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
+﻿using Amazon;
+using Amazon.S3;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Auth;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
-using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner;
-using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie;
-using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Auth;
-using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
-using System.Text.Json;
-using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager;
 using System.Text;
-using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,7 +29,7 @@ builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
-// CORS 
+//  CORS 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -39,11 +42,18 @@ builder.Services.AddCors(options =>
 });
 
 // CONTROLLERS & SWAGGER
-builder.Services.AddControllers()
-    .ConfigureApiBehaviorOptions(options =>
-    {
-        options.SuppressModelStateInvalidFilter = true; // Tắt auto 400
-    });
+builder.Services.AddControllers();
+
+var awsOptions = builder.Configuration.GetSection("AWS");
+builder.Services.AddSingleton<IAmazonS3>(sp =>
+{
+    return new AmazonS3Client(
+        awsOptions["AccessKey"],
+        awsOptions["SecretKey"],
+        RegionEndpoint.GetBySystemName(awsOptions["Region"])
+    );
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -110,7 +120,7 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<GetScreenByIdExampleFilter>();
     options.OperationFilter<GetScreensExampleFilter>();
     options.OperationFilter<SeatTypeExamplesFilter>();
-
+    options.OperationFilter<AdminUserExamplesFilter>();
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
@@ -122,19 +132,13 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
-    options.OperationFilter<AdminUserExamplesFilter>();
-
 });
 
 // DATABASE 
 builder.Services.AddDbContext<CinemaDbCoreContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("MyCnn")));
 
-// CONFIGURATION FOR AZURE BLOB STORAGE
-builder.Services.Configure<AzureBlobStorageSettings>(
-    builder.Configuration.GetSection("AzureBlobStorage"));
-
-// DEPENDENCY INJECTION 
+//  DEPENDENCY INJECTION 
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -150,6 +154,7 @@ builder.Services.AddScoped<ScreenService>();
 builder.Services.AddScoped<ISeatTypeService, SeatTypeService>();
 builder.Services.AddScoped<ISeatLayoutService, SeatLayoutService>();
 builder.Services.AddScoped<IContractValidationService, ContractValidationService>();
+builder.Services.AddScoped<S3Service>();
 
 
 //  JWT AUTHENTICATION 
@@ -160,65 +165,16 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    // Your existing TokenValidationParameters
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        ValidateIssuer = false, 
+        ValidateAudience = false, 
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
         ),
-        ClockSkew = TimeSpan.Zero
-    };
-
-    options.Events = new JwtBearerEvents
-    {
-        OnChallenge = async context =>
-        {
-            context.HandleResponse();
-
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-
-            var responseBody = new ValidationErrorResponse
-            {
-                Message = "Xác thực thất bại",
-                Errors = new Dictionary<string, ValidationError>
-                {
-                    ["auth"] = new ValidationError
-                    {
-                        Msg = "Yêu cầu cần được xác thực. Vui lòng cung cấp token hợp lệ.",
-                        Path = "header",
-                        Location = "Authorization"
-                    }
-                }
-            };
-
-            var jsonResponse = JsonSerializer.Serialize(responseBody);
-            await context.Response.WriteAsync(jsonResponse);
-        },
-        OnForbidden = async context =>
-        {
-            context.Response.StatusCode = 403;
-            context.Response.ContentType = "application/json";
-            var responseBody = new ValidationErrorResponse
-            {
-                Message = "Truy cập bị cấm",
-                Errors = new Dictionary<string, ValidationError>
-                {
-                    ["auth"] = new ValidationError
-                    {
-                        Msg = "Bạn không có quyền thực hiện hành động này.",
-                        Path = "role",
-                        Location = "token"
-                    }
-                }
-            };
-            var jsonResponse = JsonSerializer.Serialize(responseBody);
-            await context.Response.WriteAsync(jsonResponse);
-        }
+        ClockSkew = TimeSpan.Zero 
     };
 })
 .AddGoogle(options =>
@@ -228,17 +184,21 @@ builder.Services.AddAuthentication(options =>
     options.ClientSecret = googleSection["ClientSecret"];
 });
 
-// BUILD APP 
+//  BUILD APP 
 var app = builder.Build();
 
-// MIDDLEWARE 
+// - MIDDLEWARE 
 app.UseCors("AllowAll");
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();
