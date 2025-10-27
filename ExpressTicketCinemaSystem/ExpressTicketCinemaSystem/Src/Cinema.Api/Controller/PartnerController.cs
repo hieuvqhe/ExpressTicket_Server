@@ -31,7 +31,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly ScreenService _screenService;
         private readonly ISeatTypeService _seatTypeService;
         private readonly ISeatLayoutService _seatLayoutService;
-        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, ScreenService screenService, ISeatTypeService seatTypeService , ISeatLayoutService seatLayoutService , CinemaDbCoreContext context)
+        private readonly IContractValidationService _contractValidationService;
+        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, ScreenService screenService, ISeatTypeService seatTypeService , ISeatLayoutService seatLayoutService , CinemaDbCoreContext context, IContractValidationService contractValidationService)
         {
             _partnerService = partnerService;
             _contractService = contractService;
@@ -40,6 +41,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             _seatTypeService = seatTypeService;
             _seatLayoutService = seatLayoutService; 
             _context = context;
+            _contractValidationService = contractValidationService;
         }
         private int GetCurrentUserId()
         {
@@ -704,16 +706,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Get all seat types with pagination and filtering
         /// </summary>
-        /// <param name="page">Page number (default: 1)</param>
-        /// <param name="limit">Number of items per page (default: 10)</param>
-        /// <param name="status">Filter by seat type status</param>
-        /// <param name="code">Filter by seat type code (e.g., STANDARD, VIP, COUPLE)</param>
-        /// <param name="search">Search term for seat type name or description</param>
-        /// <param name="minSurcharge">Filter by minimum surcharge amount</param>
-        /// <param name="maxSurcharge">Filter by maximum surcharge amount</param>
-        /// <param name="sortBy">Field to sort by (code, name, surcharge, created_at)</param>
-        /// <param name="sortOrder">Sort order (asc, desc)</param>
-        /// <returns>Paginated list of seat types</returns>
         [HttpGet("/partners/seat-types")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<PaginatedSeatTypesResponse>), StatusCodes.Status200OK)]
@@ -736,6 +728,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             {
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
                 var request = new GetSeatTypesRequest
                 {
@@ -787,11 +781,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
         /// <summary>
         /// Get seat type details by ID
         /// </summary>
-        /// <param name="id">Seat type ID</param>
-        /// <returns>Seat type details</returns>
         [HttpGet("/partners/seat-types/{id}")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<SeatTypeDetailResponse>), StatusCodes.Status200OK)]
@@ -805,6 +798,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             {
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
                 var result = await _seatTypeService.GetSeatTypeByIdAsync(id, partnerId, userId);
 
@@ -843,11 +838,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
         /// <summary>
         /// Create a new seat type
         /// </summary>
-        /// <param name="request">Create seat type request</param>
-        /// <returns>Created seat type details</returns>
         [HttpPost("/partners/seat-types")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<SeatTypeActionResponse>), StatusCodes.Status200OK)]
@@ -861,6 +855,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             {
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
                 var result = await _seatTypeService.CreateSeatTypeAsync(request, partnerId, userId);
 
@@ -907,9 +903,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Update seat type by ID
         /// </summary>
-        /// <param name="id">Seat type ID</param>
-        /// <param name="request">Update seat type request</param>
-        /// <returns>Updated seat type details</returns>
         [HttpPut("/partners/seat-types/{id}")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<SeatTypeActionResponse>), StatusCodes.Status200OK)]
@@ -923,6 +916,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             {
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
                 var result = await _seatTypeService.UpdateSeatTypeAsync(id, request, partnerId, userId);
 
@@ -965,8 +960,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Delete seat type by ID (Soft Delete)
         /// </summary>
-        /// <param name="id">Seat type ID</param>
-        /// <returns>Deleted seat type details</returns>
         [HttpDelete("/partners/seat-types/{id}")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<SeatTypeActionResponse>), StatusCodes.Status200OK)]
@@ -980,6 +973,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             {
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
                 var result = await _seatTypeService.DeleteSeatTypeAsync(id, partnerId, userId);
 
@@ -1018,11 +1013,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
         /// <summary>
         /// Get seat layout for screen
         /// </summary>
-        /// <param name="screenId">Screen ID</param>
-        /// <returns>Seat layout with seats and available seat types</returns>
         [HttpGet("/partners/screens/{screenId}/seat-layout")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<SeatLayoutResponse>), StatusCodes.Status200OK)]
@@ -1049,6 +1043,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
                 // ==================== BUSINESS LOGIC SECTION ====================
                 var result = await _seatLayoutService.GetSeatLayoutAsync(screenId, partnerId, userId);
@@ -1094,8 +1090,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Get available seat types for screen
         /// </summary>
-        /// <param name="screenId">Screen ID</param>
-        /// <returns>List of available seat types</returns>
         [HttpGet("/partners/screens/{screenId}/seat-types")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<ScreenSeatTypesResponse>), StatusCodes.Status200OK)]
@@ -1122,6 +1116,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
                 // ==================== BUSINESS LOGIC SECTION ====================
                 var result = await _seatLayoutService.GetScreenSeatTypesAsync(screenId, partnerId, userId);
@@ -1161,12 +1157,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
         /// <summary>
         /// Create new seat layout for screen
         /// </summary>
-        /// <param name="screenId">Screen ID</param>
-        /// <param name="request">Create seat layout request</param>
-        /// <returns>Seat layout creation result</returns>
         [HttpPost("/partners/screens/{screenId}/seat-layout")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<SeatLayoutActionResponse>), StatusCodes.Status200OK)]
@@ -1204,6 +1198,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     });
                 }
 
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+
                 // VALIDATE: Screen chưa có layout
                 var existingLayout = await _context.SeatMaps.AnyAsync(sm => sm.ScreenId == screenId);
                 if (existingLayout)
@@ -1218,15 +1217,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     });
                 }
 
-                var userId = GetCurrentUserId();
-                var partnerId = await GetCurrentPartnerId();
-
                 // ==================== BUSINESS LOGIC SECTION ====================
                 var result = await _seatLayoutService.CreateOrUpdateSeatLayoutAsync(screenId, request, partnerId, userId);
 
                 var response = new SuccessResponse<SeatLayoutActionResponse>
                 {
-                    Message = "Tạo layout ghế thành công", // Tùy chỉnh thông báo
+                    Message = "Tạo layout ghế thành công",
                     Result = result
                 };
                 return Ok(response);
@@ -1259,12 +1255,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
         /// <summary>
         /// Update existing seat layout for screen
         /// </summary>
-        /// <param name="screenId">Screen ID</param>
-        /// <param name="request">Update seat layout request</param>
-        /// <returns>Seat layout update result</returns>
         [HttpPut("/partners/screens/{screenId}/seat-layout")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<SeatLayoutActionResponse>), StatusCodes.Status200OK)]
@@ -1301,6 +1295,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     });
                 }
 
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+
                 // VALIDATE: Screen đã có layout
                 var existingLayout = await _context.SeatMaps.AnyAsync(sm => sm.ScreenId == screenId);
                 if (!existingLayout)
@@ -1308,15 +1307,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     return NotFound(new ErrorResponse { Message = "Chưa có layout, sử dụng API POST để tạo mới" });
                 }
 
-                var userId = GetCurrentUserId();
-                var partnerId = await GetCurrentPartnerId();
-
                 // ==================== BUSINESS LOGIC SECTION ====================
                 var result = await _seatLayoutService.CreateOrUpdateSeatLayoutAsync(screenId, request, partnerId, userId);
 
                 var response = new SuccessResponse<SeatLayoutActionResponse>
                 {
-                    Message = "Cập nhật layout ghế thành công", // Tùy chỉnh thông báo
+                    Message = "Cập nhật layout ghế thành công",
                     Result = result
                 };
                 return Ok(response);
@@ -1349,13 +1345,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
         /// <summary>
         /// Update individual seat
         /// </summary>
-        /// <param name="screenId">Screen ID</param>
-        /// <param name="seatId">Seat ID</param>
-        /// <param name="request">Update seat request</param>
-        /// <returns>Updated seat information</returns>
         [HttpPut("/partners/screens/{screenId}/seat-layout/{seatId}")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<SeatActionResponse>), StatusCodes.Status200OK)]
@@ -1407,6 +1400,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
 
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+
                 // ==================== BUSINESS LOGIC SECTION ====================
                 var result = await _seatLayoutService.UpdateSeatAsync(screenId, seatId, request, partnerId, userId);
 
@@ -1449,9 +1444,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <summary>
         /// Bulk update multiple seats
         /// </summary>
-        /// <param name="screenId">Screen ID</param>
-        /// <param name="request">Bulk update seats request</param>
-        /// <returns>Bulk update result</returns>
         [HttpPost("/partners/screens/{screenId}/seat-layout/bulk")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<BulkSeatActionResponse>), StatusCodes.Status200OK)]
@@ -1490,6 +1482,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
                 var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
                 // ==================== BUSINESS LOGIC SECTION ====================
                 var result = await _seatLayoutService.BulkUpdateSeatsAsync(screenId, request, partnerId, userId);
