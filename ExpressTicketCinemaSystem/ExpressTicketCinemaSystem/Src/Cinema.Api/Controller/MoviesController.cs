@@ -1,8 +1,8 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
-using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Enum;
-
+using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,11 +14,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
     public class MoviesController : ControllerBase
     {
         private readonly IMovieService _movieService;
+        private readonly S3Service _s3Service;
+        private readonly CinemaDbCoreContext _context;
 
-        public MoviesController(IMovieService movieService)
+        public MoviesController(IMovieService movieService, S3Service s3Service, CinemaDbCoreContext context)
         {
             _movieService = movieService;
+            _s3Service = s3Service;
+            _context = context;
         }
+        
 
         /// <summary>
         /// Get all movies 
@@ -356,6 +361,43 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
             catch (Exception ex)
             {
                 return StatusCode(500, new ErrorResponse { Message = "An internal server error occurred." });
+            }
+        }
+
+        /// <summary>
+        /// Upload poster cho phim theo MovieId
+        /// </summary>
+        /// <param name="movieId">ID của phim</param>
+        /// <param name="file">Ảnh poster (form-data)</param>
+        /// <returns>URL ảnh đã upload</returns>
+        [HttpPost("{movieId}/poster")]
+        public async Task<IActionResult> UploadMoviePoster([FromRoute] int movieId, IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "File không hợp lệ." });
+
+            var movie = await _context.Movies.FindAsync(movieId);
+            if (movie == null)
+                return NotFound(new { message = $"Không tìm thấy phim có ID = {movieId}" });
+
+            try
+            {
+                // Upload ảnh lên S3
+                var posterUrl = await _s3Service.UploadFileAsync(file, "posters");
+
+                // Cập nhật URL trong DB
+                movie.PosterUrl = posterUrl;
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    message = "Upload poster thành công",
+                    posterUrl
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Lỗi khi upload ảnh", error = ex.Message });
             }
         }
 
