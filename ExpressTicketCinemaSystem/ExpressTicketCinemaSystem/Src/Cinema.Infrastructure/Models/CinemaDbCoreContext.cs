@@ -65,6 +65,8 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<SeatMap> SeatMaps { get; set; }
 
+    public virtual DbSet<SeatType> SeatTypes { get; set; }
+
     public virtual DbSet<Service> Services { get; set; }
 
     public virtual DbSet<ServiceOrder> ServiceOrders { get; set; }
@@ -834,10 +836,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("row_code");
             entity.Property(e => e.ScreenId).HasColumnName("screen_id");
             entity.Property(e => e.SeatNumber).HasColumnName("seat_number");
-            entity.Property(e => e.SeatType)
-                .HasMaxLength(50)
-                .IsUnicode(false)
-                .HasColumnName("seat_type");
+            entity.Property(e => e.SeatTypeId).HasColumnName("seat_type_id");
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
                 .IsUnicode(false)
@@ -847,6 +846,9 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.ScreenId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Seat_Screen");
+            entity.HasOne(d => d.SeatType).WithMany(p => p.Seats)
+                .HasForeignKey(d => d.SeatTypeId)
+                .HasConstraintName("FK_Seat_SeatType");
         });
 
         modelBuilder.Entity<SeatMap>(entity =>
@@ -854,12 +856,19 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasKey(e => e.SeatMapId).HasName("PK__SeatMap__55CFDE03A2A6F0A8");
 
             entity.ToTable("SeatMap");
+            entity.HasIndex(e => e.ScreenId, "UQ_SeatMap_Screen").IsUnique();
 
             entity.HasIndex(e => e.ScreenId, "UQ__SeatMap__CC19B67B52ED2058").IsUnique();
 
             entity.Property(e => e.SeatMapId).HasColumnName("seat_map_id");
             entity.Property(e => e.LayoutData).HasColumnName("layout_data");
             entity.Property(e => e.ScreenId).HasColumnName("screen_id");
+            entity.Property(e => e.TotalColumns)
+               .HasDefaultValue(15)
+               .HasColumnName("total_columns");
+            entity.Property(e => e.TotalRows)
+                .HasDefaultValue(10)
+                .HasColumnName("total_rows");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("updated_at");
@@ -868,6 +877,33 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey<SeatMap>(d => d.ScreenId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_SeatMap_Screen");
+        });
+        modelBuilder.Entity<SeatType>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__SeatType__3214EC07FFC567B5");
+
+            entity.ToTable("SeatType");
+
+            entity.HasIndex(e => e.Code, "UQ__SeatType__A25C5AA7FF7BA3B3").IsUnique();
+
+            entity.Property(e => e.Code).HasMaxLength(50);
+            entity.Property(e => e.Color)
+                .HasMaxLength(7)
+                .HasDefaultValue("#CCCCCC");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.Description).HasMaxLength(255);
+            entity.Property(e => e.Name).HasMaxLength(100);
+            entity.Property(e => e.PartnerId)
+               .HasDefaultValue(7)
+               .HasColumnName("partner_id");
+            entity.Property(e => e.Status).HasDefaultValue(true);
+            entity.Property(e => e.Surcharge).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("(getdate())");
+
+            entity.HasOne(d => d.Partner).WithMany(p => p.SeatTypes)
+               .HasForeignKey(d => d.PartnerId)
+               .OnDelete(DeleteBehavior.ClientSetNull)
+               .HasConstraintName("FK_SeatType_Partner");
         });
 
         modelBuilder.Entity<Service>(entity =>

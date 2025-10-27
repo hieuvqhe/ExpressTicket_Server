@@ -182,7 +182,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         ScreenId = screenId,
                         RowCode = seatRequest.Row,
                         SeatNumber = seatRequest.Number,
-                        SeatType = seatRequest.Type,
+                      //  SeatType = seatRequest.Type,
                         Status = seatRequest.Status
                     };
 
@@ -330,7 +330,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         ScreenId = screenId,
                         RowCode = seatRequest.Row,
                         SeatNumber = seatRequest.Number,
-                        SeatType = seatRequest.Type,
+                      //  SeatType = seatRequest.Type,
                         Status = seatRequest.Status
                     };
 
@@ -392,10 +392,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .OrderBy(s => s.SeatNumber)
                     .Select(seat => new SeatLayoutResponse
                     {
-                        Row = seat.RowCode,
-                        Number = seat.SeatNumber,
-                        Type = seat.SeatType ?? "regular",
-                        Status = seat.Status ?? "active"
+                      //  Row = seat.RowCode,
+                      //  Number = seat.SeatNumber,
+                     //   Type = seat.SeatType ?? "regular",
+                      //  Status = seat.Status ?? "active"
                     })
                     .ToList();
 
@@ -500,7 +500,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     {
                         Row = seat.RowCode,
                         Number = seat.SeatNumber,
-                        Type = seat.SeatType ?? "regular",
+                      //  Type = seat.SeatType ?? "regular",
                         Status = seat.Status ?? "active"
                     })
                     .ToList();

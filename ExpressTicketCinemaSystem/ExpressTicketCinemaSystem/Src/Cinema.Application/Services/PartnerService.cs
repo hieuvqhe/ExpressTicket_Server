@@ -34,7 +34,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _emailService = emailService;
             _managerService = managerService;
         }
-
         public async Task<PartnerRegisterResponse> RegisterPartnerAsync(PartnerRegisterRequest request)
         {
             // ==================== VALIDATION SECTION ====================

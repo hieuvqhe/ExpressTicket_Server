@@ -13,11 +13,14 @@ public partial class Seat
 
     public int SeatNumber { get; set; }
 
-    public string? SeatType { get; set; }
-
     public string Status { get; set; } = null!;
+
+    public int? SeatTypeId { get; set; }
 
     public virtual Screen Screen { get; set; } = null!;
 
+    public virtual SeatType? SeatType { get; set; }
+
     public virtual ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
 }
+
