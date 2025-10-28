@@ -153,7 +153,6 @@ builder.Services.AddScoped<MovieManagementService>();
 builder.Services.AddScoped<ScreenService>();
 builder.Services.AddScoped<ISeatTypeService, SeatTypeService>();
 builder.Services.AddScoped<ISeatLayoutService, SeatLayoutService>();
-builder.Services.AddScoped<IContractValidationService, ContractValidationService>();
 builder.Services.AddScoped<S3Service>();
 
 
