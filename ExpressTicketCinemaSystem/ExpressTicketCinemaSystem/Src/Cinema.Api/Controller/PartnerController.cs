@@ -1529,5 +1529,235 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
+        // ========================== COMBO CRUD SECTION ==========================
+
+        /// <summary>
+        /// Lấy danh sách combo của partner hiện tại
+        /// </summary>
+        [HttpGet("/api/cinema/combos")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<IEnumerable<Service>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAllCombos()
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+
+                // Lấy danh sách cinema thuộc partner này
+                var cinemaIds = await _context.Cinemas
+                    .Where(c => c.PartnerId == partnerId)
+                    .Select(c => c.CinemaId)
+                    .ToListAsync();
+
+                var combos = await _context.Services
+                    .Where(s => cinemaIds.Contains(s.CinemaId) && s.IsAvailable)
+                    .ToListAsync();
+
+                return Ok(new SuccessResponse<IEnumerable<Service>>
+                {
+                    Message = "Lấy danh sách combo thành công",
+                    Result = combos
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách combo."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy chi tiết combo theo ID
+        /// </summary>
+        [HttpGet("/api/cinema/combos/{comboId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<Service>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetComboById(int comboId)
+        {
+            try
+            {
+                if (comboId <= 0)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "ID combo phải lớn hơn 0"
+                    });
+                }
+
+                var partnerId = await GetCurrentPartnerId();
+                var cinemaIds = await _context.Cinemas
+                    .Where(c => c.PartnerId == partnerId)
+                    .Select(c => c.CinemaId)
+                    .ToListAsync();
+
+                var combo = await _context.Services
+                    .FirstOrDefaultAsync(s => s.ServiceId == comboId && cinemaIds.Contains(s.CinemaId));
+
+                if (combo == null)
+                    return NotFound(new ErrorResponse { Message = "Không tìm thấy combo." });
+
+                return Ok(new SuccessResponse<Service>
+                {
+                    Message = "Lấy thông tin combo thành công",
+                    Result = combo
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin combo."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Tạo combo mới (chỉ cho partner đã được duyệt)
+        /// </summary>
+        [HttpPost("/api/cinema/combos")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<Service>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> CreateCombo([FromBody] Service request)
+        {
+            try
+            {
+                if (request == null)
+                    return BadRequest(new ValidationErrorResponse { Message = "Dữ liệu không hợp lệ." });
+
+                var partnerId = await GetCurrentPartnerId();
+                var partner = await _context.Partners.FindAsync(partnerId);
+
+                if (partner == null || partner.Status?.ToLower() != "true")
+                    return BadRequest(new ErrorResponse { Message = "Partner chưa được duyệt, không thể tạo combo." });
+
+                // Lấy cinema đầu tiên của partner (nếu có nhiều rạp, có thể chỉnh theo yêu cầu)
+                var cinema = await _context.Cinemas.FirstOrDefaultAsync(c => c.PartnerId == partnerId);
+                if (cinema == null)
+                    return BadRequest(new ErrorResponse { Message = "Partner chưa có rạp để tạo combo." });
+
+                var combo = new Service
+                {
+                    CinemaId = cinema.CinemaId,
+                    ServiceName = request.ServiceName,
+                    Price = request.Price,
+                    IsAvailable = true
+                };
+
+                _context.Services.Add(combo);
+                await _context.SaveChangesAsync();
+
+                return Ok(new SuccessResponse<Service>
+                {
+                    Message = "Tạo combo thành công",
+                    Result = combo
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo combo."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Cập nhật combo
+        /// </summary>
+        [HttpPut("/api/cinema/combos/{comboId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<Service>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> UpdateCombo(int comboId, [FromBody] Service request)
+        {
+            try
+            {
+                if (comboId <= 0)
+                    return BadRequest(new ValidationErrorResponse { Message = "ID combo phải lớn hơn 0." });
+
+                var partnerId = await GetCurrentPartnerId();
+                var cinemaIds = await _context.Cinemas
+                    .Where(c => c.PartnerId == partnerId)
+                    .Select(c => c.CinemaId)
+                    .ToListAsync();
+
+                var combo = await _context.Services
+                    .FirstOrDefaultAsync(s => s.ServiceId == comboId && cinemaIds.Contains(s.CinemaId));
+
+                if (combo == null)
+                    return NotFound(new ErrorResponse { Message = "Không tìm thấy combo cần cập nhật." });
+
+                combo.ServiceName = request.ServiceName;
+                combo.Price = request.Price;
+                combo.IsAvailable = request.IsAvailable;
+
+                _context.Services.Update(combo);
+                await _context.SaveChangesAsync();
+
+                return Ok(new SuccessResponse<Service>
+                {
+                    Message = "Cập nhật combo thành công",
+                    Result = combo
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật combo."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Xóa mềm combo (soft delete)
+        /// </summary>
+        [HttpDelete("/api/cinema/combos/{comboId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<string>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> DeleteCombo(int comboId)
+        {
+            try
+            {
+                if (comboId <= 0)
+                    return BadRequest(new ValidationErrorResponse { Message = "ID combo phải lớn hơn 0." });
+
+                var partnerId = await GetCurrentPartnerId();
+                var cinemaIds = await _context.Cinemas
+                    .Where(c => c.PartnerId == partnerId)
+                    .Select(c => c.CinemaId)
+                    .ToListAsync();
+
+                var combo = await _context.Services
+                    .FirstOrDefaultAsync(s => s.ServiceId == comboId && cinemaIds.Contains(s.CinemaId));
+
+                if (combo == null)
+                    return NotFound(new ErrorResponse { Message = "Không tìm thấy combo cần xóa." });
+
+                combo.IsAvailable = false; // soft delete
+                _context.Services.Update(combo);
+                await _context.SaveChangesAsync();
+
+                return Ok(new SuccessResponse<string>
+                {
+                    Message = "Xóa combo thành công (soft delete)",
+                    Result = "Deleted"
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa combo."
+                });
+            }
+        }
+
     }
 }
