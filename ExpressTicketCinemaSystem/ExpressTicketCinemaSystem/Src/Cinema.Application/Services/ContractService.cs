@@ -13,6 +13,7 @@ using System;
 using System.Threading.Tasks;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests.ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -22,13 +23,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IEmailService _emailService;
         private readonly IManagerService _managerService;
         private readonly IAzureBlobService _azureBlobService;
+        private readonly ILogger<ContractService> _logger;
 
-        public ContractService(CinemaDbCoreContext context , IEmailService emailService , IManagerService managerService , IAzureBlobService azureBlobService )
+        public ContractService(CinemaDbCoreContext context , IEmailService emailService , IManagerService managerService , IAzureBlobService azureBlobService, ILogger<ContractService> logger)
         {
             _context = context;
             _emailService = emailService;
             _managerService = managerService;
             _azureBlobService = azureBlobService;
+            _logger = logger;
         }
 
         public async Task<ContractResponse> CreateContractDraftAsync(int managerId, CreateContractRequest request)
@@ -130,10 +133,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             await _context.SaveChangesAsync();
 
-            string readableSasUrl = await _azureBlobService.GeneratePdfReadUrlAsync(request.PdfUrl, expiryInDays: 7);
+            try
+            {
+                // 2. TẠO SAS URL (DÒNG NÀY ĐANG GÂY LỖI 500)
+                _logger.LogInformation("Đang tạo SAS Read URL cho: {PdfUrl}", request.PdfUrl);
 
-            await SendContractPdfEmailAsync(contract, readableSasUrl, request.Notes);
+                string readableSasUrl = await _azureBlobService.GeneratePdfReadUrlAsync(request.PdfUrl, expiryInDays: 7);
+
+                // 3. GỬI EMAIL
+                _logger.LogInformation("Đã tạo SAS thành công, chuẩn bị gửi email.");
+                await SendContractPdfEmailAsync(contract, readableSasUrl, request.Notes);
+            }
+            catch (Exception ex)
+               {
+                // 4. LỖI GỐC SẼ ĐƯỢC IN RA Ở ĐÂY
+                _logger.LogError(ex, "LỖI GỐC KHI TẠO SAS URL. PdfUrl: {PdfUrl}", request.PdfUrl);
+
+                // DÙNG TẠM CÁI NÀY NẾU BẠN CHƯA CÓ LOGGER
+                Console.WriteLine($"LỖI GỐC KHI TẠO SAS: {ex.ToString()}");
+            }
         }
+        
         private void ValidateContractForSending(Contract contract)
         {
             var errors = new Dictionary<string, ValidationError>();
@@ -162,40 +182,43 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 if (contract.Partner?.User?.Email != null)
                 {
                     var subject = "HỢP ĐỒNG HỢP TÁC - CHỜ KÝ DUYỆT";
-                    var body = $"""
-            Kính gửi Ông/Bà {contract.Partner.User.Fullname},
 
-            Hợp đồng hợp tác đã được soạn thảo và đang chờ Quý đối tác ký duyệt.
+                    // Sử dụng format giống hệt SendContractFinalizedEmailAsync
+                    var body = $@"
+Kính gửi Ông/Bà {contract.Partner.User.Fullname},
 
-            THÔNG TIN HỢP ĐỒNG:
-            - Số hợp đồng: {contract.ContractNumber}
-            - Tiêu đề: {contract.Title}
-            - Loại hợp đồng: {contract.ContractType}
-            - Ngày bắt đầu: {contract.StartDate:dd/MM/yyyy}
-            - Ngày kết thúc: {contract.EndDate:dd/MM/yyyy}
-            - Tỷ lệ hoa hồng: {contract.CommissionRate}%
+Hợp đồng hợp tác đã được soạn thảo và đang chờ Quý đối tác ký duyệt.
 
-            LINK TẢI HỢP ĐỒNG PDF:
-            {pdfUrl}
+THÔNG TIN HỢP ĐỒNG:
+- Số hợp đồng: {contract.ContractNumber}
+- Tiêu đề: {contract.Title}
+- Loại hợp đồng: {contract.ContractType}
+- Ngày bắt đầu: {contract.StartDate:dd/MM/yyyy}
+- Ngày kết thúc: {contract.EndDate:dd/MM/yyyy}
+- Tỷ lệ hoa hồng: {contract.CommissionRate}%
 
-            HƯỚNG DẪN KÝ:
-            1. Tải file PDF từ link trên
-            2. In hợp đồng ra giấy
-            3. Ký tay và đóng dấu (nếu có)
-            4. Scan hợp đồng đã ký thành file PDF
-            5. Upload file PDF đã ký lên hệ thống
+LINK TẢI HỢP ĐỒNG PDF:
+{pdfUrl}
 
-            {(string.IsNullOrEmpty(notes) ? "" : $"GHI CHÚ: {notes}")}
+HƯỚNG DẪN KÝ:
+1. Tải file PDF từ link trên
+2. In hợp đồng ra giấy
+3. Ký tay và đóng dấu (nếu có)
+4. Scan hợp đồng đã ký thành file PDF
+5. Upload file PDF đã ký lên hệ thống
 
-            Trân trọng,
-            {GetCompanyInfo().Name}
-            """;
+{(string.IsNullOrEmpty(notes) ? "" : $"GHI CHÚ: {notes}")}
+
+Trân trọng,
+{GetCompanyInfo().Name}";
 
                     await _emailService.SendEmailAsync(contract.Partner.User.Email, subject, body);
                 }
             }
             catch (Exception ex)
             {
+                // Log lỗi nhưng không throw để không ảnh hưởng đến business logic chính
+                // GIỐNG HỆT cách xử lý trong SendContractFinalizedEmailAsync
                 Console.WriteLine($"Failed to send contract PDF email: {ex.Message}");
             }
         }
@@ -599,7 +622,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 if (!contract.Partner.IsActive)
                 {
                     contract.Partner.IsActive = true;
-                    contract.Partner.Status = "Approved"; // Đảm bảo status approved
 
                     // Active user account của partner
                     if (contract.Partner.User != null)

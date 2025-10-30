@@ -1,22 +1,22 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests
 {
     public class UpdateScreenRequest
     {
-        [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
+        [Required]
+        public string ScreenName { get; set; } = string.Empty;
 
-        [JsonPropertyName("seat_layout")]
-        public List<List<SeatLayoutRequest>> SeatLayout { get; set; } = new();
+        public string? Description { get; set; }
 
-        [JsonPropertyName("capacity")]
-        public int Capacity { get; set; }
-
-        [JsonPropertyName("screen_type")]
+        [Required]
         public string ScreenType { get; set; } = string.Empty;
 
-        [JsonPropertyName("status")]
-        public string Status { get; set; } = string.Empty;
+        public string? SoundSystem { get; set; }
+
+        [Range(1, 1000)]
+        public int Capacity { get; set; }
+
+        public bool IsActive { get; set; } = true;
     }
 }

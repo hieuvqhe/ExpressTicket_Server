@@ -4,14 +4,14 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
 {
-    public class CreateScreenExampleFilter : IOperationFilter
+    public class CreateCinemaExampleFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var controllerName = context.ApiDescription.ActionDescriptor.RouteValues["controller"];
             var actionName = context.ApiDescription.ActionDescriptor.RouteValues["action"];
 
-            if (controllerName != "Partners" || actionName != "CreateScreen")
+            if (controllerName != "Partners" || actionName != "CreateCinema")
             {
                 return;
             }
@@ -19,40 +19,31 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
             // Request Body Example
             if (operation.RequestBody != null)
             {
-                operation.RequestBody.Description = "Create screen request";
+                operation.RequestBody.Description = "Create cinema request";
                 var content = operation.RequestBody.Content.FirstOrDefault(c => c.Key == "application/json").Value;
                 if (content != null)
                 {
                     content.Examples.Clear();
-                    content.Examples.Add("Create Screen", new OpenApiExample
+                    content.Examples.Add("Create Cinema", new OpenApiExample
                     {
                         Value = new OpenApiString(
                         """
                         {
-                          "screenName": "Phòng 4 - Premium",
-                          "code": "LOTTE_HL_P4",
-                          "description": "Phòng chiếu cao cấp với ghế da massage",
-                          "screenType": "premium",
-                          "soundSystem": "Dolby Atmos",
-                          "capacity": 80,
-                          "seatRows": 8,
-                          "seatColumns": 10
+                          "cinemaName": "Lotte Mỹ Đình",
+                          "address": "Tầng 4, Lotte Center Hà Nội",
+                          "phone": "024 3456 7890",
+                          "code": "LOTTE_MD",
+                          "city": "Hà Nội",
+                          "district": "Nam Từ Liêm",
+                          "latitude": 21.01667000,
+                          "longitude": 105.78333000,
+                          "email": "lotte.mydinh@lotte.vn",
+                          "logoUrl": "https://example.com/logo/lotte_md.jpg"
                         }
                         """
                         )
                     });
                 }
-            }
-
-            // Parameters examples
-            var cinemaIdParam = operation.Parameters.FirstOrDefault(p => p.Name == "cinema_id");
-            if (cinemaIdParam != null)
-            {
-                cinemaIdParam.Description = "Cinema ID";
-                cinemaIdParam.Examples = new Dictionary<string, OpenApiExample>
-                {
-                    ["Example"] = new OpenApiExample { Value = new OpenApiString("4") }
-                };
             }
 
             // Response 200 OK
@@ -68,23 +59,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Tạo phòng thành công",
+                          "message": "Tạo rạp thành công",
                           "result": {
-                            "screenId": 10,
-                            "cinemaId": 4,
-                            "cinemaName": "Lotte Hòa Lạc",
-                            "screenName": "Phòng 4 - Premium",
-                            "code": "LOTTE_HL_P4",
-                            "description": "Phòng chiếu cao cấp với ghế da massage",
-                            "screenType": "premium",
-                            "soundSystem": "Dolby Atmos",
-                            "capacity": 80,
-                            "seatRows": 8,
-                            "seatColumns": 10,
+                            "cinemaId": 7,
+                            "partnerId": 15,
+                            "cinemaName": "Lotte Mỹ Đình",
+                            "address": "Tầng 4, Lotte Center Hà Nội",
+                            "phone": "024 3456 7890",
+                            "code": "LOTTE_MD",
+                            "city": "Hà Nội",
+                            "district": "Nam Từ Liêm",
+                            "latitude": 21.01667000,
+                            "longitude": 105.78333000,
+                            "email": "lotte.mydinh@lotte.vn",
                             "isActive": true,
-                            "hasSeatLayout": false,
-                            "createdDate": "2024-01-25T14:30:00Z",
-                            "updatedDate": "2024-01-25T14:30:00Z"
+                            "logoUrl": "https://example.com/logo/lotte_md.jpg",
+                            "createdAt": "2025-10-28T14:30:00Z",
+                            "updatedAt": "2025-10-28T14:30:00Z",
+                            "totalScreens": 0,
+                            "activeScreens": 0
                           }
                         }
                         """
@@ -108,17 +101,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         {
                           "message": "Lỗi xác thực dữ liệu",
                           "errors": {
-                            "screenName": {
-                              "msg": "Tên phòng là bắt buộc",
-                              "path": "screenName"
+                            "cinemaName": {
+                              "msg": "Tên rạp là bắt buộc",
+                              "path": "cinemaName"
                             },
                             "code": {
-                              "msg": "Mã phòng chỉ được chứa chữ cái, số và dấu gạch dưới",
+                              "msg": "Mã rạp chỉ được chứa chữ cái, số và dấu gạch dưới",
                               "path": "code"
                             },
-                            "capacity": {
-                              "msg": "Sức chứa phải lớn hơn 0",
-                              "path": "capacity"
+                            "city": {
+                              "msg": "Thành phố là bắt buộc",
+                              "path": "city"
                             }
                           }
                         }
@@ -156,27 +149,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 }
             }
 
-            // Response 404 Not Found
-            if (operation.Responses.ContainsKey("404"))
-            {
-                var response = operation.Responses["404"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Not Found", new OpenApiExample
-                    {
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "message": "Không tìm thấy rạp với ID này hoặc không thuộc quyền quản lý của bạn"
-                        }
-                        """
-                        )
-                    });
-                }
-            }
-
             // Response 409 Conflict
             if (operation.Responses.ContainsKey("409"))
             {
@@ -193,7 +165,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                           "message": "Dữ liệu bị xung đột",
                           "errors": {
                             "code": {
-                              "msg": "Mã phòng đã tồn tại trong rạp này",
+                              "msg": "Mã rạp đã tồn tại trong hệ thống của bạn",
                               "path": "code"
                             }
                           }
@@ -217,7 +189,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Đã xảy ra lỗi hệ thống khi tạo phòng."
+                          "message": "Đã xảy ra lỗi hệ thống khi tạo rạp."
                         }
                         """
                         )

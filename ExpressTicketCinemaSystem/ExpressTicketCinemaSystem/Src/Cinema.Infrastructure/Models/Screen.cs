@@ -11,16 +11,26 @@ public partial class Screen
 
     public string ScreenName { get; set; } = null!;
 
-    public string? ScreenType { get; set; }
-
     public bool IsActive { get; set; }
 
-    // Thêm trường capacity
-    public int Capacity { get; set; }
+    public string? Code { get; set; }
 
-    public DateTime CreatedAt { get; set; }
+    public string? Description { get; set; }
 
-    public DateTime? UpdatedAt { get; set; }
+    public int? Capacity { get; set; }
+
+    public int? SeatRows { get; set; }
+
+    public int? SeatColumns { get; set; }
+
+    public string? ScreenType { get; set; }
+
+    public string? SoundSystem { get; set; }
+
+    public DateTime? CreatedDate { get; set; }
+
+    public DateTime? UpdatedDate { get; set; }
+
     public virtual Cinema Cinema { get; set; } = null!;
 
     public virtual SeatMap? SeatMap { get; set; }

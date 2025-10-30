@@ -4,14 +4,14 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
 {
-    public class GetScreenByIdExampleFilter : IOperationFilter
+    public class DeleteScreenExampleFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var controllerName = context.ApiDescription.ActionDescriptor.RouteValues["controller"];
             var actionName = context.ApiDescription.ActionDescriptor.RouteValues["action"];
 
-            if (controllerName != "Partners" || actionName != "GetScreenById")
+            if (controllerName != "Partners" || actionName != "DeleteScreen")
             {
                 return;
             }
@@ -42,23 +42,40 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Lấy thông tin phòng thành công",
+                          "message": "Xóa phòng thành công",
                           "result": {
                             "screenId": 1,
-                            "cinemaId": 4,
-                            "cinemaName": "Lotte Hòa Lạc",
                             "screenName": "Phòng 1 - Standard",
-                            "code": "LOTTE_HL_P1",
-                            "description": "Phòng chiếu tiêu chuẩn với âm thanh Dolby Digital",
-                            "screenType": "standard",
-                            "soundSystem": "Dolby Digital",
-                            "capacity": 120,
-                            "seatRows": 10,
-                            "seatColumns": 12,
-                            "isActive": true,
-                            "hasSeatLayout": true,
-                            "createdDate": "2024-01-15T08:00:00Z",
-                            "updatedDate": "2024-01-20T10:00:00Z"
+                            "message": "Xóa phòng thành công",
+                            "isActive": false,
+                            "updatedDate": "2024-01-25T16:00:00Z"
+                          }
+                        }
+                        """
+                        )
+                    });
+                }
+            }
+
+            // Response 400 Bad Request
+            if (operation.Responses.ContainsKey("400"))
+            {
+                var response = operation.Responses["400"];
+                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Validation Error", new OpenApiExample
+                    {
+                        Value = new OpenApiString(
+                        """
+                        {
+                          "message": "Lỗi xác thực dữ liệu",
+                          "errors": {
+                            "delete": {
+                              "msg": "Không thể xóa phòng đã có layout ghế",
+                              "path": "screenId"
+                            }
                           }
                         }
                         """
@@ -129,7 +146,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Đã xảy ra lỗi hệ thống khi lấy thông tin phòng."
+                          "message": "Đã xảy ra lỗi hệ thống khi xóa phòng."
                         }
                         """
                         )

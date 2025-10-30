@@ -105,11 +105,17 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<CreateActorExampleFilter>();
     options.OperationFilter<UpdateActorExampleFilter>();
     options.OperationFilter<DeleteActorExampleFilter>();
+    options.OperationFilter<DeleteScreenExampleFilter>();
     options.OperationFilter<CreateScreenExampleFilter>();
     options.OperationFilter<UpdateScreenExampleFilter>();
     options.OperationFilter<GetScreenByIdExampleFilter>();
-    options.OperationFilter<GetScreensExampleFilter>();
+    options.OperationFilter<GetAllScreensExampleFilter>();
     options.OperationFilter<SeatTypeExamplesFilter>();
+    options.OperationFilter<GetAllCinemasExampleFilter>();
+    options.OperationFilter<GetCinemaByIdExampleFilter>();
+    options.OperationFilter<CreateCinemaExampleFilter>();
+    options.OperationFilter<UpdateCinemaExampleFilter>();
+    options.OperationFilter<DeleteCinemaExampleFilter>();
 
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
@@ -146,13 +152,14 @@ builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IManagerService, ManagerService>();
 builder.Services.AddScoped<IAzureBlobService, AzureBlobService>();
 builder.Services.AddScoped<MovieManagementService>();
-builder.Services.AddScoped<ScreenService>();
+builder.Services.AddScoped<IScreenService, ScreenService>();
 builder.Services.AddScoped<ISeatTypeService, SeatTypeService>();
 builder.Services.AddScoped<ISeatLayoutService, SeatLayoutService>();
 builder.Services.AddScoped<IContractValidationService, ContractValidationService>();
+builder.Services.AddScoped<ICinemaService, CinemaService>();
 
 
-//  JWT AUTHENTICATION 
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -160,7 +167,6 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    // Your existing TokenValidationParameters
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = false,
@@ -172,24 +178,24 @@ builder.Services.AddAuthentication(options =>
         ),
         ClockSkew = TimeSpan.Zero
     };
-
     options.Events = new JwtBearerEvents
     {
         OnChallenge = async context =>
         {
             context.HandleResponse();
-
             context.Response.StatusCode = 401;
             context.Response.ContentType = "application/json";
 
+            string errorMessage = "Yêu cầu cần được xác thực. Vui lòng cung cấp token hợp lệ.";
+
             var responseBody = new ValidationErrorResponse
             {
-                Message = "Xác thực thất bại",
+                Message = errorMessage, 
                 Errors = new Dictionary<string, ValidationError>
                 {
                     ["auth"] = new ValidationError
                     {
-                        Msg = "Yêu cầu cần được xác thực. Vui lòng cung cấp token hợp lệ.",
+                        Msg = errorMessage, 
                         Path = "header",
                         Location = "Authorization"
                     }
@@ -203,19 +209,23 @@ builder.Services.AddAuthentication(options =>
         {
             context.Response.StatusCode = 403;
             context.Response.ContentType = "application/json";
+
+            string errorMessage = "Bạn không có quyền thực hiện hành động này.";
+
             var responseBody = new ValidationErrorResponse
             {
-                Message = "Truy cập bị cấm",
+                Message = errorMessage,
                 Errors = new Dictionary<string, ValidationError>
                 {
                     ["auth"] = new ValidationError
                     {
-                        Msg = "Bạn không có quyền thực hiện hành động này.",
+                        Msg = errorMessage,
                         Path = "role",
                         Location = "token"
                     }
                 }
             };
+
             var jsonResponse = JsonSerializer.Serialize(responseBody);
             await context.Response.WriteAsync(jsonResponse);
         }

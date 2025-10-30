@@ -226,21 +226,44 @@ public partial class CinemaDbCoreContext : DbContext
 
             entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
             entity.Property(e => e.Address)
-                .HasMaxLength(255)
-                .IsUnicode(true)
+                .HasMaxLength(500)
                 .HasColumnName("address");
             entity.Property(e => e.CinemaName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
                 .HasColumnName("cinema_name");
+            entity.Property(e => e.City)
+                .HasMaxLength(100)
+                .HasColumnName("city");
+            entity.Property(e => e.Code)
+                .HasMaxLength(100)
+                .HasColumnName("code");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("created_at");
+            entity.Property(e => e.District)
+                .HasMaxLength(100)
+                .HasColumnName("district");
+            entity.Property(e => e.Email)
+                .HasMaxLength(255)
+                .HasColumnName("email");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.Latitude)
+                .HasColumnType("decimal(10, 8)")
+                .HasColumnName("latitude");
+            entity.Property(e => e.LogoUrl)
+                .HasMaxLength(500)
+                .HasColumnName("logo_url");
+            entity.Property(e => e.Longitude)
+                .HasColumnType("decimal(11, 8)")
+                .HasColumnName("longitude");
             entity.Property(e => e.PartnerId).HasColumnName("partner_id");
             entity.Property(e => e.Phone)
                 .HasMaxLength(20)
                 .IsUnicode(false)
                 .HasColumnName("phone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
 
             entity.HasOne(d => d.Partner).WithMany(p => p.Cinemas)
                 .HasForeignKey(d => d.PartnerId)
@@ -786,9 +809,18 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasKey(e => e.ScreenId).HasName("PK__Screen__CC19B67AF5A247A8");
 
             entity.ToTable("Screen");
-
             entity.Property(e => e.ScreenId).HasColumnName("screen_id");
+            entity.Property(e => e.Capacity).HasColumnName("capacity");
             entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.Code)
+                .HasMaxLength(50)
+                .HasColumnName("code");
+            entity.Property(e => e.CreatedDate)
+                .HasDefaultValueSql("(getutcdate())")
+                .HasColumnName("created_date");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .HasColumnName("description");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
@@ -798,22 +830,15 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("screen_name");
             entity.Property(e => e.ScreenType)
                 .HasMaxLength(50)
-                .IsUnicode(false)
                 .HasColumnName("screen_type");
-
-            // Thêm cấu hình cho trường capacity
-            entity.Property(e => e.Capacity)
-                .HasColumnName("capacity")
-                .HasDefaultValue(100); // Giá trị mặc định khớp với SQL
-
-            // Thêm cấu hình cho created_at và updated_at
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(GETUTCDATE())")
-                .HasColumnName("created_at");
-
-            entity.Property(e => e.UpdatedAt)
-                .HasColumnName("updated_at")
-                .IsRequired(false);
+            entity.Property(e => e.SeatColumns).HasColumnName("seat_columns");
+            entity.Property(e => e.SeatRows).HasColumnName("seat_rows");
+            entity.Property(e => e.SoundSystem)
+                .HasMaxLength(100)
+                .HasColumnName("sound_system");
+            entity.Property(e => e.UpdatedDate)
+                .HasDefaultValueSql("(getutcdate())")
+                .HasColumnName("updated_date");
 
             entity.HasOne(d => d.Cinema).WithMany(p => p.Screens)
                 .HasForeignKey(d => d.CinemaId)
