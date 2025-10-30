@@ -17,12 +17,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models
 
         public DateTime CreatedAt { get; set; }
 
-        public DateTime? UpdatedAt { get; set; }
-
         public string? ImageUrl { get; set; }
 
-        public virtual Cinema Cinema { get; set; } = null!;
+        public DateTime? UpdatedAt { get; set; }
 
+        public int PartnerId { get; set; }
+
+        public string Type { get; set; } = "single";
+        public string? ShortDesc { get; set; }
+        public int SortOrder { get; set; }
+        public string Category { get; set; } = "food";
+        public DateTime? DeletedAt { get; set; }
+
+        // ---------------- Relation with ServiceComponent ----------------
+        public virtual Cinema Cinema { get; set; } = null!;
+        public virtual ICollection<ServiceComponent> ComboComponents { get; set; } = new List<ServiceComponent>();
+        public virtual ICollection<ServiceComponent> ItemComponents { get; set; } = new List<ServiceComponent>();
         public virtual ICollection<ServiceOrder> ServiceOrders { get; set; } = new List<ServiceOrder>();
     }
 }

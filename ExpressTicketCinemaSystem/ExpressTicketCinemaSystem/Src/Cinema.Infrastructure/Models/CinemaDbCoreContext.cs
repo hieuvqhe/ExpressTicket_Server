@@ -1166,6 +1166,28 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("voucher_code");
         });
 
+        modelBuilder.Entity<ServiceComponent>(entity =>
+        {
+            entity.HasKey(e => new { e.ComboServiceId, e.ItemServiceId, e.ComponentKind });
+
+            entity.HasOne(d => d.ComboService)
+                .WithMany(p => p.ComboComponents)
+                .HasForeignKey(d => d.ComboServiceId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.ItemService)
+                .WithMany(p => p.ItemComponents)
+                .HasForeignKey(d => d.ItemServiceId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(e => e.ComponentKind)
+                .HasMaxLength(10)
+                .HasDefaultValue("item");
+
+            entity.Property(e => e.Quantity)
+                .HasDefaultValue(1);
+        });
+
         OnModelCreatingPartial(modelBuilder);
     }
 
