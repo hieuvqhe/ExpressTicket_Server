@@ -1,21 +1,23 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Application.DTO.Partner.Requests;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.DTO.Partner.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
-using Microsoft.AspNetCore.Authorization;
-using System.Security.Claims;
-using System;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using System.Collections.Generic;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
-using System.IO;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -1537,14 +1539,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         [HttpGet("/api/cinema/combos")]
         [Authorize(Roles = "Partner")]
-        [ProducesResponseType(typeof(SuccessResponse<IEnumerable<Service>>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(SuccessResponse<GetAllComboResponse>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllCombos()
         {
             try
             {
                 var partnerId = await GetCurrentPartnerId();
 
-                // Lấy danh sách cinema thuộc partner này
                 var cinemaIds = await _context.Cinemas
                     .Where(c => c.PartnerId == partnerId)
                     .Select(c => c.CinemaId)
@@ -1552,17 +1553,28 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
                 var combos = await _context.Services
                     .Where(s => cinemaIds.Contains(s.CinemaId) && s.IsAvailable)
+                    .Select(s => new GetComboResponse
+                    {
+                        ServiceId = s.ServiceId,
+                        CinemaId = s.CinemaId,
+                        ServiceName = s.ServiceName,
+                        Price = s.Price,
+                        IsAvailable = s.IsAvailable,
+                        ImageUrl = s.ImageUrl,
+                        CreatedAt = s.CreatedAt,
+                        UpdatedAt = s.UpdatedAt
+                    })
                     .ToListAsync();
 
-                return Ok(new SuccessResponse<IEnumerable<Service>>
+                return Ok(new SuccessResponse<GetAllComboResponse>
                 {
                     Message = "Lấy danh sách combo thành công",
-                    Result = combos
+                    Result = new GetAllComboResponse
+                    {
+                        Combos = combos,
+                        TotalCount = combos.Count
+                    }
                 });
-            }
-            catch (UnauthorizedException ex)
-            {
-                return Unauthorized(new ErrorResponse { Message = ex.Message });
             }
             catch (Exception)
             {
@@ -1573,23 +1585,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
+
         /// <summary>
         /// Lấy chi tiết combo theo ID
         /// </summary>
         [HttpGet("/api/cinema/combos/{comboId}")]
         [Authorize(Roles = "Partner")]
-        [ProducesResponseType(typeof(SuccessResponse<Service>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(SuccessResponse<GetComboResponse>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetComboById(int comboId)
         {
             try
             {
                 if (comboId <= 0)
-                {
-                    return BadRequest(new ValidationErrorResponse
-                    {
-                        Message = "ID combo phải lớn hơn 0"
-                    });
-                }
+                    return BadRequest(new ValidationErrorResponse { Message = "ID combo phải lớn hơn 0." });
 
                 var partnerId = await GetCurrentPartnerId();
                 var cinemaIds = await _context.Cinemas
@@ -1598,12 +1606,24 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     .ToListAsync();
 
                 var combo = await _context.Services
-                    .FirstOrDefaultAsync(s => s.ServiceId == comboId && cinemaIds.Contains(s.CinemaId));
+                    .Where(s => s.ServiceId == comboId && cinemaIds.Contains(s.CinemaId))
+                    .Select(s => new GetComboResponse
+                    {
+                        ServiceId = s.ServiceId,
+                        CinemaId = s.CinemaId,
+                        ServiceName = s.ServiceName,
+                        Price = s.Price,
+                        IsAvailable = s.IsAvailable,
+                        ImageUrl = s.ImageUrl,
+                        CreatedAt = s.CreatedAt,
+                        UpdatedAt = s.UpdatedAt
+                    })
+                    .FirstOrDefaultAsync();
 
                 if (combo == null)
                     return NotFound(new ErrorResponse { Message = "Không tìm thấy combo." });
 
-                return Ok(new SuccessResponse<Service>
+                return Ok(new SuccessResponse<GetComboResponse>
                 {
                     Message = "Lấy thông tin combo thành công",
                     Result = combo
@@ -1618,13 +1638,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
+
         /// <summary>
         /// Tạo combo mới (chỉ cho partner đã được duyệt)
         /// </summary>
         [HttpPost("/api/cinema/combos")]
         [Authorize(Roles = "Partner")]
-        [ProducesResponseType(typeof(SuccessResponse<Service>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> CreateCombo([FromBody] Service request)
+        [ProducesResponseType(typeof(SuccessResponse<CreateComboResponse>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> CreateCombo([FromBody] CreateComboRequest request)
         {
             try
             {
@@ -1637,26 +1658,38 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 if (partner == null || partner.Status?.ToLower() != "true")
                     return BadRequest(new ErrorResponse { Message = "Partner chưa được duyệt, không thể tạo combo." });
 
-                // Lấy cinema đầu tiên của partner (nếu có nhiều rạp, có thể chỉnh theo yêu cầu)
-                var cinema = await _context.Cinemas.FirstOrDefaultAsync(c => c.PartnerId == partnerId);
+                var cinema = await _context.Cinemas.FirstOrDefaultAsync(c => c.CinemaId == request.CinemaId && c.PartnerId == partnerId);
                 if (cinema == null)
-                    return BadRequest(new ErrorResponse { Message = "Partner chưa có rạp để tạo combo." });
+                    return BadRequest(new ErrorResponse { Message = "Rạp không thuộc quyền quản lý của partner." });
 
                 var combo = new Service
                 {
-                    CinemaId = cinema.CinemaId,
+                    CinemaId = request.CinemaId,
                     ServiceName = request.ServiceName,
                     Price = request.Price,
-                    IsAvailable = true
+                    IsAvailable = request.IsAvailable,
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Services.Add(combo);
                 await _context.SaveChangesAsync();
 
-                return Ok(new SuccessResponse<Service>
+                var response = new CreateComboResponse
+                {
+                    ServiceId = combo.ServiceId,
+                    CinemaId = combo.CinemaId,
+                    ServiceName = combo.ServiceName,
+                    Price = combo.Price,
+                    IsAvailable = combo.IsAvailable,
+                    ImageUrl = combo.ImageUrl,
+                    CreatedAt = combo.CreatedAt,
+                    UpdatedAt = combo.UpdatedAt
+                };
+
+                return Ok(new SuccessResponse<CreateComboResponse>
                 {
                     Message = "Tạo combo thành công",
-                    Result = combo
+                    Result = response
                 });
             }
             catch (Exception)
@@ -1668,13 +1701,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
+
         /// <summary>
         /// Cập nhật combo
         /// </summary>
         [HttpPut("/api/cinema/combos/{comboId}")]
         [Authorize(Roles = "Partner")]
-        [ProducesResponseType(typeof(SuccessResponse<Service>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> UpdateCombo(int comboId, [FromBody] Service request)
+        [ProducesResponseType(typeof(SuccessResponse<GetComboResponse>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> UpdateCombo(int comboId, [FromBody] UpdateComboRequest request)
         {
             try
             {
@@ -1696,14 +1730,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 combo.ServiceName = request.ServiceName;
                 combo.Price = request.Price;
                 combo.IsAvailable = request.IsAvailable;
+                combo.UpdatedAt = DateTime.UtcNow;
 
                 _context.Services.Update(combo);
                 await _context.SaveChangesAsync();
 
-                return Ok(new SuccessResponse<Service>
+                var response = new GetComboResponse
+                {
+                    ServiceId = combo.ServiceId,
+                    CinemaId = combo.CinemaId,
+                    ServiceName = combo.ServiceName,
+                    Price = combo.Price,
+                    IsAvailable = combo.IsAvailable,
+                    ImageUrl = combo.ImageUrl,
+                    CreatedAt = combo.CreatedAt,
+                    UpdatedAt = combo.UpdatedAt
+                };
+
+                return Ok(new SuccessResponse<GetComboResponse>
                 {
                     Message = "Cập nhật combo thành công",
-                    Result = combo
+                    Result = response
                 });
             }
             catch (Exception)
@@ -1714,6 +1761,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
 
         /// <summary>
         /// Xóa mềm combo (soft delete)
@@ -1740,7 +1788,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 if (combo == null)
                     return NotFound(new ErrorResponse { Message = "Không tìm thấy combo cần xóa." });
 
-                combo.IsAvailable = false; // soft delete
+                combo.IsAvailable = false;
+                combo.UpdatedAt = DateTime.UtcNow;
+
                 _context.Services.Update(combo);
                 await _context.SaveChangesAsync();
 

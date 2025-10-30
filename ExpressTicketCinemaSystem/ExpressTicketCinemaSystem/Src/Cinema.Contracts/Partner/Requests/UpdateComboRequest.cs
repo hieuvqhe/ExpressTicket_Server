@@ -2,19 +2,16 @@
 {
     public class UpdateComboRequest
     {
-        /// <summary>
-        /// Tên combo mới
-        /// </summary>
-        public string ComboName { get; set; } = null!;
 
-        /// <summary>
-        /// Giá combo mới
-        /// </summary>
+        public string ServiceName { get; set; } = null!;
+
+
         public decimal Price { get; set; }
 
-        /// <summary>
-        /// Cập nhật trạng thái khả dụng
-        /// </summary>
+
+        public string? ImageUrl { get; set; }
+
+
         public bool IsAvailable { get; set; }
     }
 }
