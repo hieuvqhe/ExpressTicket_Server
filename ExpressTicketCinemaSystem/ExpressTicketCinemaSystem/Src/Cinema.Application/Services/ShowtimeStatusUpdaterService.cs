@@ -53,14 +53,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             using var scope = _serviceProvider.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<CinemaDbCoreContext>();
 
-            var currentTime = DateTime.UtcNow;
+            // Giờ Việt Nam = UTC + 7
+            var currentTime = DateTime.UtcNow.AddHours(7);
 
-            // Tìm tất cả showtime có status = "scheduled" và end_time đã qua
+            _logger.LogInformation($"Thời gian hiện tại (UTC): {DateTime.UtcNow}");
+            _logger.LogInformation($"Thời gian hiện tại (Vietnam - Manual): {currentTime}");
+
             var expiredShowtimes = await context.Showtimes
                 .Where(s => s.Status == "scheduled" &&
                            s.EndTime.HasValue &&
                            s.EndTime.Value <= currentTime)
                 .ToListAsync();
+
+            _logger.LogInformation($"Tìm thấy {expiredShowtimes.Count} showtime đã hết hạn");
 
             if (expiredShowtimes.Any())
             {
@@ -69,19 +74,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     showtime.Status = "finished";
                     showtime.UpdatedAt = DateTime.UtcNow;
                     _logger.LogInformation(
-                        "Đã cập nhật showtime {ShowtimeId} từ 'scheduled' sang 'finished'. EndTime: {EndTime}",
-                        showtime.ShowtimeId, showtime.EndTime);
+                        "Đã cập nhật showtime {ShowtimeId} từ 'scheduled' sang 'finished'",
+                        showtime.ShowtimeId);
                 }
 
                 await context.SaveChangesAsync();
-                _logger.LogInformation("Đã cập nhật {Count} showtime từ 'scheduled' sang 'finished'", expiredShowtimes.Count);
             }
-        }
-
-        public override async Task StopAsync(CancellationToken cancellationToken)
-        {
-            _logger.LogInformation("Showtime Status Updater Service đang dừng...");
-            await base.StopAsync(cancellationToken);
         }
     }
 }
