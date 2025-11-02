@@ -17,6 +17,7 @@ using System.Text.Json;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager;
 using System.Text;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement;
+using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,6 +41,11 @@ builder.Services.AddCors(options =>
 
 // CONTROLLERS & SWAGGER
 builder.Services.AddControllers()
+     .AddJsonOptions(opt =>
+     {
+         opt.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
+         opt.JsonSerializerOptions.Converters.Add(new NullableDateOnlyJsonConverter());
+     })
     .ConfigureApiBehaviorOptions(options =>
     {
         options.SuppressModelStateInvalidFilter = true; // Tắt auto 400
@@ -47,6 +53,8 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
+    options.MapType<DateOnly>(() => new OpenApiSchema { Type = "string", Format = "date" });
+    options.MapType<DateOnly?>(() => new OpenApiSchema { Type = "string", Format = "date", Nullable = true });
     // Cấu hình JWT Bearer để có nút "Authorize" trong Swagger
     var jwtSecurityScheme = new OpenApiSecurityScheme
     {
@@ -151,12 +159,13 @@ builder.Services.AddScoped<ContractService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IManagerService, ManagerService>();
 builder.Services.AddScoped<IAzureBlobService, AzureBlobService>();
-builder.Services.AddScoped<MovieManagementService>();
 builder.Services.AddScoped<IScreenService, ScreenService>();
 builder.Services.AddScoped<ISeatTypeService, SeatTypeService>();
 builder.Services.AddScoped<ISeatLayoutService, SeatLayoutService>();
 builder.Services.AddScoped<IContractValidationService, ContractValidationService>();
 builder.Services.AddScoped<ICinemaService, CinemaService>();
+builder.Services.AddScoped<PartnerMovieManagementService>();
+builder.Services.AddScoped<ManagerMovieSubmissionService>();
 
 
 
