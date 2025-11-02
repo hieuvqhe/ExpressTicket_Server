@@ -1134,6 +1134,29 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("status");
 
+            // Các trường mới được thêm
+            entity.Property(e => e.EndTime)
+                .HasColumnName("end_time")
+                .IsRequired(false);
+
+            entity.Property(e => e.AvailableSeats)
+                .HasColumnName("available_seats")
+                .IsRequired(false);
+
+            entity.Property(e => e.FormatType)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("format_type")
+                .IsRequired(false);
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("GETDATE()");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at")
+                .IsRequired(false);
+
             entity.HasOne(d => d.Cinema).WithMany(p => p.Showtimes)
                 .HasForeignKey(d => d.CinemaId)
                 .OnDelete(DeleteBehavior.ClientSetNull)

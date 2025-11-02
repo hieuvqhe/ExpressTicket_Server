@@ -124,7 +124,11 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<CreateCinemaExampleFilter>();
     options.OperationFilter<UpdateCinemaExampleFilter>();
     options.OperationFilter<DeleteCinemaExampleFilter>();
-
+    options.OperationFilter<PartnerCreateShowtimeExampleFilter>();
+    options.OperationFilter<PartnerUpdateShowtimeExampleFilter>();
+    options.OperationFilter<PartnerDeleteShowtimeExampleFilter>();
+    options.OperationFilter<PartnerGetShowtimeByIdExampleFilter>();
+    options.OperationFilter<PartnerGetAllShowtimesExampleFilter>();
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
@@ -164,6 +168,10 @@ builder.Services.AddScoped<ISeatTypeService, SeatTypeService>();
 builder.Services.AddScoped<ISeatLayoutService, SeatLayoutService>();
 builder.Services.AddScoped<IContractValidationService, ContractValidationService>();
 builder.Services.AddScoped<ICinemaService, CinemaService>();
+
+builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
+builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
+
 builder.Services.AddScoped<PartnerMovieManagementService>();
 builder.Services.AddScoped<ManagerMovieSubmissionService>();
 
