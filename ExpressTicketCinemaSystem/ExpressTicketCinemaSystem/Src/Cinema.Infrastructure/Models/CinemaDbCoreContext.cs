@@ -991,6 +991,9 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("row_code");
             entity.Property(e => e.ScreenId).HasColumnName("screen_id");
+            entity.Property(e => e.SeatName)
+                .HasMaxLength(100)
+                .HasColumnName("seat_name");
             entity.Property(e => e.SeatNumber).HasColumnName("seat_number");
             entity.Property(e => e.SeatTypeId).HasColumnName("seat_type_id");
             entity.Property(e => e.Status)
