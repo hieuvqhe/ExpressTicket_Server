@@ -55,7 +55,11 @@ public partial class Partner
 
     public virtual ICollection<GameShow> GameShows { get; set; } = new List<GameShow>();
 
-    public virtual Manager? Manager { get; set; } = null!;
+    public virtual Manager? Manager { get; set; }
+
+    public virtual ICollection<MovieSubmission> MovieSubmissions { get; set; } = new List<MovieSubmission>();
+
+    public virtual ICollection<Movie> Movies { get; set; } = new List<Movie>();
 
     public virtual ICollection<PartnerReport> PartnerReports { get; set; } = new List<PartnerReport>();
 

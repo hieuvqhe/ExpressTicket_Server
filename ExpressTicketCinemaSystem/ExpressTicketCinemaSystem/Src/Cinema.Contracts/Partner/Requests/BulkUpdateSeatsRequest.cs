@@ -33,5 +33,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests
         /// <example>Available</example>
         [Required]
         public string Status { get; set; } = "Available";
+        /// <summary>
+        /// Seat name (optional)
+        /// </summary>
+        /// <example>Ghế VIP A1</example>
+        public string? SeatName { get; set; } // THÊM DÒNG NÀY
     }
 }

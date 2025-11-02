@@ -4,14 +4,14 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
 {
-    public class GetScreenByIdExampleFilter : IOperationFilter
+    public class GetCinemaByIdExampleFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var controllerName = context.ApiDescription.ActionDescriptor.RouteValues["controller"];
             var actionName = context.ApiDescription.ActionDescriptor.RouteValues["action"];
 
-            if (controllerName != "Partners" || actionName != "GetScreenById")
+            if (controllerName != "Partners" || actionName != "GetCinemaById")
             {
                 return;
             }
@@ -19,13 +19,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
             // Parameters examples
             operation.Parameters ??= new List<OpenApiParameter>();
 
-            var screenIdParam = operation.Parameters.FirstOrDefault(p => p.Name == "screen_id");
-            if (screenIdParam != null)
+            var cinemaIdParam = operation.Parameters.FirstOrDefault(p => p.Name == "cinema_id");
+            if (cinemaIdParam != null)
             {
-                screenIdParam.Description = "Screen ID";
-                screenIdParam.Examples = new Dictionary<string, OpenApiExample>
+                cinemaIdParam.Description = "Cinema ID";
+                cinemaIdParam.Examples = new Dictionary<string, OpenApiExample>
                 {
-                    ["Example"] = new OpenApiExample { Value = new OpenApiString("1") }
+                    ["Example"] = new OpenApiExample { Value = new OpenApiString("4") }
                 };
             }
 
@@ -42,23 +42,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Lấy thông tin phòng thành công",
+                          "message": "Lấy thông tin rạp thành công",
                           "result": {
-                            "screenId": 1,
                             "cinemaId": 4,
+                            "partnerId": 15,
                             "cinemaName": "Lotte Hòa Lạc",
-                            "screenName": "Phòng 1 - Standard",
-                            "code": "LOTTE_HL_P1",
-                            "description": "Phòng chiếu tiêu chuẩn với âm thanh Dolby Digital",
-                            "screenType": "standard",
-                            "soundSystem": "Dolby Digital",
-                            "capacity": 120,
-                            "seatRows": 10,
-                            "seatColumns": 12,
+                            "address": "Khu CNC Hòa Lạc",
+                            "phone": "024 1234 5678",
+                            "code": "LOTTE_HL",
+                            "city": "Hà Nội",
+                            "district": "Thạch Thất",
+                            "latitude": 21.02013000,
+                            "longitude": 105.51616000,
+                            "email": "lotte.hoalac@lotte.vn",
                             "isActive": true,
-                            "hasSeatLayout": true,
-                            "createdDate": "2024-01-15T08:00:00Z",
-                            "updatedDate": "2024-01-20T10:00:00Z"
+                            "logoUrl": "https://example.com/logo/lotte_hl.jpg",
+                            "createdAt": "2025-10-28T11:48:05.7633333Z",
+                            "updatedAt": "2025-10-28T11:48:05.7633333Z",
+                            "totalScreens": 3,
+                            "activeScreens": 3
                           }
                         }
                         """
@@ -108,7 +110,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Không tìm thấy phòng với ID này hoặc không thuộc quyền quản lý của bạn"
+                          "message": "Không tìm thấy rạp với ID này hoặc không thuộc quyền quản lý của bạn"
                         }
                         """
                         )
@@ -129,7 +131,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Đã xảy ra lỗi hệ thống khi lấy thông tin phòng."
+                          "message": "Đã xảy ra lỗi hệ thống khi lấy thông tin rạp."
                         }
                         """
                         )

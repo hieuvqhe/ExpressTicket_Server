@@ -21,7 +21,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         public async Task<SeatLayoutResponse> GetSeatLayoutAsync(int screenId, int partnerId, int userId)
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateScreenAccessAsync(screenId, partnerId, userId);
+            var screen = await ValidateScreenAccessAsync(screenId, partnerId, userId);
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
@@ -38,6 +38,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     SeatId = s.SeatId,
                     Row = s.RowCode,
                     Column = s.SeatNumber,
+                    SeatName = s.SeatName, 
                     SeatTypeId = s.SeatTypeId ?? 1,
                     SeatTypeCode = s.SeatType.Code,
                     SeatTypeName = s.SeatType.Name,
@@ -74,8 +75,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 : new SeatMapResponse
                 {
                     ScreenId = screenId,
-                    TotalRows = 10, // Default
-                    TotalColumns = 15, // Default
+                    TotalRows = screen.SeatRows ?? 10,
+                    TotalColumns = screen.SeatColumns ?? 15,
                     HasLayout = false
                 };
 
@@ -117,8 +118,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         public async Task<SeatLayoutActionResponse> CreateOrUpdateSeatLayoutAsync(int screenId, CreateSeatLayoutRequest request, int partnerId, int userId)
         {
             // ==================== VALIDATION SECTION ====================
-            await ValidateScreenAccessAsync(screenId, partnerId, userId);
-            ValidateCreateSeatLayoutRequest(request);
+            var screen = await ValidateScreenAccessAsync(screenId, partnerId, userId);
+            await ValidateCreateSeatLayoutRequestAsync(screenId, request, partnerId, screen);
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
@@ -148,37 +149,77 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     seatMap.UpdatedAt = DateTime.UtcNow;
                 }
 
-                // B. Xóa tất cả seats cũ
-                var existingSeats = _context.Seats.Where(s => s.ScreenId == screenId);
-                _context.Seats.RemoveRange(existingSeats);
+                // B. Lấy danh sách ghế hiện tại
+                var existingSeats = await _context.Seats
+                    .Where(s => s.ScreenId == screenId)
+                    .ToDictionaryAsync(s => $"{s.RowCode.ToUpper()}_{s.SeatNumber}");
 
-                // C. Tạo seats mới
-                var newSeats = request.Seats.Select(s => new Seat
+                // C. Tạo dictionary từ request
+                var newSeatsDict = request.Seats.ToDictionary(
+                    s => $"{s.Row.ToUpper()}_{s.Column}",
+                    s => new Seat
+                    {
+                        ScreenId = screenId,
+                        RowCode = s.Row.ToUpper(),
+                        SeatNumber = s.Column,
+                        SeatName = s.SeatName,
+                        SeatTypeId = s.SeatTypeId,
+                        Status = s.Status
+                    });
+
+                // D. Xác định các thao tác cần thực hiện
+                var seatsToRemove = existingSeats.Keys.Except(newSeatsDict.Keys).ToList();
+                var seatsToAdd = newSeatsDict.Keys.Except(existingSeats.Keys).ToList();
+                var seatsToUpdate = existingSeats.Keys.Intersect(newSeatsDict.Keys).ToList();
+
+                // E. Xóa ghế không còn trong layout mới
+                if (seatsToRemove.Any())
                 {
-                    ScreenId = screenId,
-                    RowCode = s.Row.ToUpper(),
-                    SeatNumber = s.Column,
-                    SeatTypeId = s.SeatTypeId,
-                    Status = s.Status
-                }).ToList();
+                    var removeSeatIds = seatsToRemove.Select(key => existingSeats[key].SeatId).ToList();
+                    var seatsToDelete = await _context.Seats
+                        .Where(s => removeSeatIds.Contains(s.SeatId))
+                        .ToListAsync();
+                    _context.Seats.RemoveRange(seatsToDelete);
+                }
 
-                _context.Seats.AddRange(newSeats);
+                // F. Thêm ghế mới
+                if (seatsToAdd.Any())
+                {
+                    var seatsToInsert = seatsToAdd.Select(key => newSeatsDict[key]).ToList();
+                    _context.Seats.AddRange(seatsToInsert);
+                }
 
-                // D. Validate seat type belongs to partner
-                await ValidateSeatTypesBelongToPartnerAsync(newSeats, partnerId);
+                // G. Cập nhật ghế hiện có
+                if (seatsToUpdate.Any())
+                {
+                    foreach (var key in seatsToUpdate)
+                    {
+                        var existingSeat = existingSeats[key];
+                        var newSeatData = newSeatsDict[key];
+
+                        existingSeat.SeatTypeId = newSeatData.SeatTypeId;
+                        existingSeat.Status = newSeatData.Status;
+                        existingSeat.SeatName = newSeatData.SeatName;
+                    }
+                }
+
+                // H. Validate seat types thuộc về partner
+                await ValidateSeatTypesBelongToPartnerAsync(newSeatsDict.Values.ToList(), partnerId);
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                var blockedSeatsCount = newSeats.Count(s => s.Status == "Blocked");
+                var blockedSeatsCount = newSeatsDict.Values.Count(s => s.Status == "Blocked");
 
                 return new SeatLayoutActionResponse
                 {
                     ScreenId = screenId,
                     TotalRows = request.TotalRows,
                     TotalColumns = request.TotalColumns,
-                    TotalSeats = request.TotalRows * request.TotalColumns,
-                    CreatedSeats = newSeats.Count,
+                    TotalSeats = newSeatsDict.Count,
+                    CreatedSeats = seatsToAdd.Count,
+                    UpdatedSeats = seatsToUpdate.Count,
+                    //DeletedSeats = seatsToRemove.Count,
                     BlockedSeats = blockedSeatsCount,
                     Message = seatMap.SeatMapId == 0 ? "Tạo layout ghế thành công" : "Cập nhật layout ghế thành công",
                     UpdatedAt = DateTime.UtcNow
@@ -230,6 +271,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             seat.SeatTypeId = request.SeatTypeId;
             seat.Status = request.Status;
+            seat.SeatName = request.SeatName;
             seat.SeatType = seatType;
 
             await _context.SaveChangesAsync();
@@ -239,11 +281,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 SeatId = seat.SeatId,
                 Row = seat.RowCode,
                 Column = seat.SeatNumber,
+                SeatName = seat.SeatName,
                 SeatTypeId = seat.SeatTypeId ?? 1,
                 Status = seat.Status,
                 Message = "Cập nhật ghế thành công",
                 UpdatedAt = DateTime.UtcNow
-            }; ; ;
+            };
         }
 
         public async Task<BulkSeatActionResponse> BulkUpdateSeatsAsync(int screenId, BulkUpdateSeatsRequest request, int partnerId, int userId)
@@ -334,6 +377,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                         seat.SeatTypeId = seatUpdate.SeatTypeId;
                         seat.Status = seatUpdate.Status;
+                        seat.SeatName = seatUpdate.SeatName;
 
                         results.Add(new SeatActionResult
                         {
@@ -383,7 +427,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
         // ==================== VALIDATION METHODS ====================
-        private async Task ValidateScreenAccessAsync(int screenId, int partnerId, int userId)
+        private async Task<Screen> ValidateScreenAccessAsync(int screenId, int partnerId, int userId)
         {
             var errors = new Dictionary<string, ValidationError>();
 
@@ -402,7 +446,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (user == null)
             {
-                throw new UnauthorizedException( "Chỉ tài khoản Partner mới được sử dụng chức năng này");
+                throw new UnauthorizedException("Chỉ tài khoản Partner mới được sử dụng chức năng này");
             }
 
             // Validate partner approved và active
@@ -411,12 +455,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (partner == null)
             {
-                throw new UnauthorizedException( "Partner không tồn tại hoặc không thuộc quyền quản lý của bạn");
+                throw new UnauthorizedException("Partner không tồn tại hoặc không thuộc quyền quản lý của bạn");
             }
 
             if (!partner.IsActive)
             {
-                throw new UnauthorizedException( "Tài khoản partner đã bị vô hiệu hóa");
+                throw new UnauthorizedException("Tài khoản partner đã bị vô hiệu hóa");
             }
 
             // Validate screen thuộc về partner
@@ -436,11 +480,33 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     ["screen"] = new ValidationError { Msg = "Phòng chiếu đã bị vô hiệu hóa", Path = "screenId" }
                 });
             }
+
+            return screen;
         }
 
-        private void ValidateCreateSeatLayoutRequest(CreateSeatLayoutRequest request)
+        private async Task ValidateCreateSeatLayoutRequestAsync(int screenId, CreateSeatLayoutRequest request, int partnerId, Screen screen)
         {
             var errors = new Dictionary<string, ValidationError>();
+
+            // ✅ VALIDATE: Total rows không vượt quá screen configuration
+            if (request.TotalRows > (screen.SeatRows ?? 50))
+            {
+                errors["totalRows"] = new ValidationError
+                {
+                    Msg = $"Số hàng không được vượt quá {screen.SeatRows} (theo cấu hình phòng)",
+                    Path = "totalRows"
+                };
+            }
+
+            // ✅ VALIDATE: Total columns không vượt quá screen configuration
+            if (request.TotalColumns > (screen.SeatColumns ?? 30))
+            {
+                errors["totalColumns"] = new ValidationError
+                {
+                    Msg = $"Số cột không được vượt quá {screen.SeatColumns} (theo cấu hình phòng)",
+                    Path = "totalColumns"
+                };
+            }
 
             // Validate total rows
             if (request.TotalRows < 1 || request.TotalRows > 50)
@@ -469,6 +535,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     else if (!Regex.IsMatch(seat.Row, @"^[A-Z]+$", RegexOptions.IgnoreCase))
                         errors[$"seats[{i}].row"] = new ValidationError { Msg = "Hàng chỉ được chứa chữ cái", Path = $"seats[{i}].row" };
 
+                    // ✅ VALIDATE: Row number không vượt quá total rows
+                    var rowNumber = ConvertRowToNumber(seat.Row);
+                    if (rowNumber > request.TotalRows)
+                    {
+                        errors[$"seats[{i}].row"] = new ValidationError
+                        {
+                            Msg = $"Hàng {seat.Row} vượt quá số hàng tối đa ({request.TotalRows})",
+                            Path = $"seats[{i}].row"
+                        };
+                    }
+
                     // Validate column
                     if (seat.Column < 1 || seat.Column > request.TotalColumns)
                         errors[$"seats[{i}].column"] = new ValidationError { Msg = $"Số cột phải từ 1 đến {request.TotalColumns}", Path = $"seats[{i}].column" };
@@ -483,7 +560,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         errors[$"seats[{i}].status"] = new ValidationError { Msg = $"Trạng thái phải là: {string.Join(", ", validStatuses)}", Path = $"seats[{i}].status" };
                 }
 
-                // Check for duplicate positions
+                // Check for duplicate positions trong request
                 var duplicatePositions = request.Seats
                     .GroupBy(s => new { Row = s.Row.ToUpper(), s.Column })
                     .Where(g => g.Count() > 1)
@@ -492,7 +569,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                 if (duplicatePositions.Any())
                 {
-                    errors["seats"] = new ValidationError { Msg = $"Có vị trí ghế trùng lặp: {string.Join(", ", duplicatePositions)}", Path = "seats" };
+                    errors["seats"] = new ValidationError { Msg = $"Có vị trí ghế trùng lặp trong request: {string.Join(", ", duplicatePositions)}", Path = "seats" };
+                }
+
+                // ✅ VALIDATE: Tổng số ghế không vượt quá capacity của phòng
+                var totalSeats = request.Seats.Count;
+                if (totalSeats > (screen.Capacity ?? 300))
+                {
+                    errors["seats"] = new ValidationError
+                    {
+                        Msg = $"Tổng số ghế ({totalSeats}) vượt quá sức chứa tối đa của phòng ({screen.Capacity})",
+                        Path = "seats"
+                    };
                 }
             }
 
@@ -561,7 +649,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             var validSeatTypeIds = await _context.SeatTypes
               .Where(st => st.PartnerId == partnerId && st.Status)
-              .Select(st => (int?)st.Id) 
+              .Select(st => (int?)st.Id)
               .ToListAsync();
 
             var invalidSeatTypeIds = seatTypeIds.Except(validSeatTypeIds).ToList();
@@ -577,6 +665,280 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     }
                 });
             }
+        }
+
+        // ✅ THÊM METHOD: Chuyển đổi chữ cái thành số (A=1, B=2, ..., Z=26, AA=27, AB=28, ...)
+        private int ConvertRowToNumber(string row)
+        {
+            if (string.IsNullOrEmpty(row)) return 0;
+
+            row = row.ToUpper();
+            int result = 0;
+
+            foreach (char c in row)
+            {
+                result = result * 26 + (c - 'A' + 1);
+            }
+
+            return result;
+        }
+        // THÊM VÀO CUỐI CLASS SeatLayoutService
+
+        public async Task<SeatLayoutActionResponse> DeleteSeatLayoutAsync(int screenId, int partnerId, int userId)
+        {
+            // ==================== VALIDATION SECTION ====================
+            await ValidateScreenAccessAsync(screenId, partnerId, userId);
+            await ValidateCanDeleteSeatsAsync(screenId);
+
+            // ==================== BUSINESS LOGIC SECTION ====================
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // 1. Lấy thông tin trước khi xóa để response
+                var seats = await _context.Seats
+                    .Where(s => s.ScreenId == screenId)
+                    .ToListAsync();
+                var seatMap = await _context.SeatMaps
+                    .FirstOrDefaultAsync(sm => sm.ScreenId == screenId);
+
+                int totalSeats = seats.Count;
+                int totalRows = seatMap?.TotalRows ?? 0;
+                int totalColumns = seatMap?.TotalColumns ?? 0;
+
+                // 2. Xóa tất cả seats
+                if (seats.Any())
+                {
+                    _context.Seats.RemoveRange(seats);
+                }
+
+                // 3. Xóa seat map
+                if (seatMap != null)
+                {
+                    _context.SeatMaps.Remove(seatMap);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return new SeatLayoutActionResponse
+                {
+                    ScreenId = screenId,
+                    TotalRows = totalRows,
+                    TotalColumns = totalColumns,
+                    TotalSeats = totalSeats,
+                    Message = $"Xóa layout thành công: {totalSeats} ghế",
+                    UpdatedAt = DateTime.UtcNow
+                };
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<SeatActionResponse> DeleteSeatAsync(int screenId, int seatId, int partnerId, int userId)
+        {
+            // ==================== VALIDATION SECTION ====================
+            if (seatId <= 0)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["seatId"] = new ValidationError { Msg = "ID ghế phải lớn hơn 0", Path = "seatId" }
+                });
+            }
+
+            await ValidateScreenAccessAsync(screenId, partnerId, userId);
+            await ValidateCanDeleteSeatsAsync(screenId);
+
+            // ==================== BUSINESS LOGIC SECTION ====================
+
+            var seat = await _context.Seats
+                .FirstOrDefaultAsync(s => s.SeatId == seatId && s.ScreenId == screenId);
+
+            if (seat == null)
+            {
+                throw new NotFoundException("Không tìm thấy ghế với ID này trong phòng chiếu");
+            }
+
+            // Lưu thông tin để response
+            var row = seat.RowCode;
+            var column = seat.SeatNumber;
+
+            _context.Seats.Remove(seat);
+            await _context.SaveChangesAsync();
+
+            return new SeatActionResponse
+            {
+                SeatId = seatId,
+                Row = row,
+                Column = column,
+                Message = $"Xóa ghế {row}{column} thành công",
+                UpdatedAt = DateTime.UtcNow
+            };
+        }
+
+        public async Task<BulkSeatActionResponse> BulkDeleteSeatsAsync(int screenId, BulkDeleteSeatsRequest request, int partnerId, int userId)
+        {
+            // ==================== VALIDATION SECTION ====================
+            await ValidateScreenAccessAsync(screenId, partnerId, userId);
+            await ValidateCanDeleteSeatsAsync(screenId);
+            ValidateBulkDeleteSeatsRequest(request);
+
+            // ==================== BUSINESS LOGIC SECTION ====================
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var results = new List<SeatActionResult>();
+                var successCount = 0;
+                var failedCount = 0;
+
+                // Lấy tất cả seats tồn tại
+                var existingSeats = await _context.Seats
+                    .Where(s => s.ScreenId == screenId && request.SeatIds.Contains(s.SeatId))
+                    .ToDictionaryAsync(s => s.SeatId);
+
+                foreach (var seatId in request.SeatIds)
+                {
+                    try
+                    {
+                        // Validate seat ID
+                        if (seatId <= 0)
+                        {
+                            results.Add(new SeatActionResult
+                            {
+                                SeatId = seatId,
+                                Success = false,
+                                Message = "ID ghế không hợp lệ",
+                                Error = "Invalid seat ID"
+                            });
+                            failedCount++;
+                            continue;
+                        }
+
+                        // Kiểm tra seat tồn tại
+                        if (!existingSeats.ContainsKey(seatId))
+                        {
+                            results.Add(new SeatActionResult
+                            {
+                                SeatId = seatId,
+                                Success = false,
+                                Message = "Không tìm thấy ghế trong phòng này",
+                                Error = "Seat not found in screen"
+                            });
+                            failedCount++;
+                            continue;
+                        }
+
+                        var seat = existingSeats[seatId];
+                        _context.Seats.Remove(seat);
+
+                        results.Add(new SeatActionResult
+                        {
+                            SeatId = seatId,
+                            Success = true,
+                            Message = "Xóa thành công"
+                        });
+                        successCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        results.Add(new SeatActionResult
+                        {
+                            SeatId = seatId,
+                            Success = false,
+                            Message = "Lỗi khi xóa",
+                            Error = ex.Message
+                        });
+                        failedCount++;
+                    }
+                }
+
+                if (successCount > 0)
+                {
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                else
+                {
+                    await transaction.RollbackAsync();
+                }
+
+                return new BulkSeatActionResponse
+                {
+                    TotalProcessed = request.SeatIds.Count,
+                    SuccessCount = successCount,
+                    FailedCount = failedCount,
+                    Results = results,
+                    Message = $"Xóa {successCount}/{request.SeatIds.Count} ghế thành công"
+                };
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        // ==================== VALIDATION METHODS ====================
+
+        private async Task ValidateCanDeleteSeatsAsync(int screenId)
+        {
+            // ✅ CHECK: Chỉ cho phép xóa nếu CHƯA có showtime nào được tạo
+            var hasShowtimes = await _context.Showtimes
+                .AnyAsync(st => st.ScreenId == screenId);
+
+            if (hasShowtimes)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["showtimes"] = new ValidationError
+                    {
+                        Msg = "Không thể xóa ghế khi đã có lịch chiếu được tạo",
+                        Path = "screenId"
+                    }
+                });
+            }
+        }
+
+        private void ValidateBulkDeleteSeatsRequest(BulkDeleteSeatsRequest request)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            if (request.SeatIds == null || !request.SeatIds.Any())
+                errors["seatIds"] = new ValidationError { Msg = "Danh sách seatIds là bắt buộc", Path = "seatIds" };
+
+            if (request.SeatIds != null && request.SeatIds.Count > 100)
+                errors["seatIds"] = new ValidationError { Msg = "Chỉ được phép xóa tối đa 100 ghế cùng lúc", Path = "seatIds" };
+
+            // Validate individual seat IDs
+            if (request.SeatIds != null)
+            {
+                for (int i = 0; i < request.SeatIds.Count; i++)
+                {
+                    if (request.SeatIds[i] <= 0)
+                        errors[$"seatIds[{i}]"] = new ValidationError { Msg = "ID ghế phải lớn hơn 0", Path = $"seatIds[{i}]" };
+                }
+
+                // Check duplicate seat IDs
+                var duplicateSeatIds = request.SeatIds
+                    .GroupBy(id => id)
+                    .Where(g => g.Count() > 1)
+                    .Select(g => g.Key)
+                    .ToList();
+
+                if (duplicateSeatIds.Any())
+                {
+                    errors["seatIds"] = new ValidationError { Msg = $"Có seatId trùng lặp: {string.Join(", ", duplicateSeatIds)}", Path = "seatIds" };
+                }
+            }
+
+            if (errors.Any())
+                throw new ValidationException(errors);
         }
     }
 }

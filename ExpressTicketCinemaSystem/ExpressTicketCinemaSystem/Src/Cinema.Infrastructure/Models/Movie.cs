@@ -42,10 +42,16 @@ public partial class Movie
     public string? CreatedBy { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
-    public int ManagerId { get; set; }
-    public virtual Manager Manager { get; set; } = null!;
+
+    public int? PartnerId { get; set; }
+
+    public string? BannerUrl { get; set; }
 
     public virtual ICollection<MovieActor> MovieActors { get; set; } = new List<MovieActor>();
+
+    public virtual ICollection<MovieSubmission> MovieSubmissions { get; set; } = new List<MovieSubmission>();
+
+    public virtual Partner? Partner { get; set; }
 
     public virtual ICollection<RatingFilm> RatingFilms { get; set; } = new List<RatingFilm>();
 

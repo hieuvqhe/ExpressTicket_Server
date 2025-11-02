@@ -1,8 +1,6 @@
 ﻿using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
 {
@@ -18,56 +16,44 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 return;
             }
 
-            // Request Body Example
-            operation.RequestBody = new OpenApiRequestBody
+            // Parameters examples
+            operation.Parameters ??= new List<OpenApiParameter>();
+
+            var screenIdParam = operation.Parameters.FirstOrDefault(p => p.Name == "screen_id");
+            if (screenIdParam != null)
             {
-                Content = new Dictionary<string, OpenApiMediaType>
+                screenIdParam.Description = "Screen ID";
+                screenIdParam.Examples = new Dictionary<string, OpenApiExample>
                 {
-                    ["application/json"] = new OpenApiMediaType
+                    ["Example"] = new OpenApiExample { Value = new OpenApiString("1") }
+                };
+            }
+
+            // Request Body Example
+            if (operation.RequestBody != null)
+            {
+                operation.RequestBody.Description = "Update screen request";
+                var content = operation.RequestBody.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Update Screen", new OpenApiExample
                     {
-                        Example = new OpenApiString(
+                        Value = new OpenApiString(
                         """
                         {
-                          "name": "Screen 1 Updated",
-                          "seat_layout": [
-                            [
-                              {
-                                "row": "A",
-                                "number": 1,
-                                "type": "regular",
-                                "status": "active"
-                              },
-                              {
-                                "row": "A",
-                                "number": 2,
-                                "type": "regular",
-                                "status": "active"
-                              }
-                            ],
-                            [
-                              {
-                                "row": "B",
-                                "number": 1,
-                                "type": "vip",
-                                "status": "active"
-                              },
-                              {
-                                "row": "B",
-                                "number": 2,
-                                "type": "vip",
-                                "status": "active"
-                              }
-                            ]
-                          ],
-                          "capacity": 160,
-                          "screen_type": "premium",
-                          "status": "active"
+                          "screenName": "Phòng 1 - Standard (Updated)",
+                          "description": "Phòng chiếu tiêu chuẩn đã được nâng cấp âm thanh",
+                          "screenType": "standard",
+                          "soundSystem": "Dolby Digital EX",
+                          "capacity": 130,
+                          "isActive": true
                         }
                         """
                         )
-                    }
+                    });
                 }
-            };
+            }
 
             // Response 200 OK
             if (operation.Responses.ContainsKey("200"))
@@ -82,9 +68,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Update thành công",
+                          "message": "Cập nhật phòng thành công",
                           "result": {
-                            "screen_id": 1
+                            "screenId": 1,
+                            "cinemaId": 4,
+                            "cinemaName": "Lotte Hòa Lạc",
+                            "screenName": "Phòng 1 - Standard (Updated)",
+                            "code": "LOTTE_HL_P1",
+                            "description": "Phòng chiếu tiêu chuẩn đã được nâng cấp âm thanh",
+                            "screenType": "standard",
+                            "soundSystem": "Dolby Digital EX",
+                            "capacity": 130,
+                            "seatRows": 10,
+                            "seatColumns": 12,
+                            "isActive": true,
+                            "hasSeatLayout": true,
+                            "createdDate": "2024-01-15T08:00:00Z",
+                            "updatedDate": "2024-01-25T15:45:00Z"
                           }
                         }
                         """
@@ -101,72 +101,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 if (content != null)
                 {
                     content.Examples.Clear();
-
-                    content.Examples.Add("Required Fields", new OpenApiExample
+                    content.Examples.Add("Validation Error", new OpenApiExample
                     {
-                        Summary = "Thiếu trường bắt buộc",
                         Value = new OpenApiString(
                         """
                         {
                           "message": "Lỗi xác thực dữ liệu",
                           "errors": {
-                            "name": {
-                              "msg": "Tên screen là bắt buộc",
-                              "path": "name",
-                              "location": "body"
+                            "screenName": {
+                              "msg": "Tên phòng không được vượt quá 255 ký tự",
+                              "path": "screenName"
                             },
-                            "screen_type": {
-                              "msg": "Loại screen là bắt buộc",
-                              "path": "screen_type",
-                              "location": "body"
-                            }
-                          }
-                        }
-                        """
-                        )
-                    });
-
-                    content.Examples.Add("Invalid Screen Type", new OpenApiExample
-                    {
-                        Summary = "Loại screen không hợp lệ",
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "message": "Lỗi xác thực dữ liệu",
-                          "errors": {
-                            "screen_type_invalid": {
-                              "msg": "Loại screen không hợp lệ. Chỉ chấp nhận: standard, premium, imax, 3d, 4dx",
-                              "path": "screen_type",
-                              "location": "body"
-                            }
-                          }
-                        }
-                        """
-                        )
-                    });
-                }
-            }
-
-            // Response 409 Conflict
-            if (operation.Responses.ContainsKey("409"))
-            {
-                var response = operation.Responses["409"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Duplicate Screen Name", new OpenApiExample
-                    {
-                        Summary = "Tên screen đã tồn tại",
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "message": "Dữ liệu bị xung đột",
-                          "errors": {
-                            "name": {
-                              "msg": "Tên screen 'Screen 1 Updated' đã tồn tại trong cinema này",
-                              "path": "name",
-                              "location": "body"
+                            "isActive": {
+                              "msg": "Không thể vô hiệu hóa phòng đã có layout ghế",
+                              "path": "isActive"
                             }
                           }
                         }
@@ -184,18 +132,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 if (content != null)
                 {
                     content.Examples.Clear();
-                    content.Examples.Add("Not Owner", new OpenApiExample
+                    content.Examples.Add("Unauthorized", new OpenApiExample
                     {
-                        Summary = "Không phải chủ sở hữu",
                         Value = new OpenApiString(
                         """
                         {
                           "message": "Xác thực thất bại",
                           "errors": {
-                            "auth": {
-                              "msg": "Bạn không có quyền truy cập screen này.",
-                              "path": "form",
-                              "location": "body"
+                            "access": {
+                              "msg": "Tài khoản partner đã bị vô hiệu hóa",
+                              "path": "authorization",
+                              "location": "header"
                             }
                           }
                         }
@@ -213,12 +160,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 if (content != null)
                 {
                     content.Examples.Clear();
-                    content.Examples.Add("Screen Not Found", new OpenApiExample
+                    content.Examples.Add("Not Found", new OpenApiExample
                     {
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Không tìm thấy screen với ID này."
+                          "message": "Không tìm thấy phòng với ID này hoặc không thuộc quyền quản lý của bạn"
                         }
                         """
                         )
@@ -226,7 +173,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 }
             }
 
-            // Response 500
+            // Response 500 Internal Server Error
             if (operation.Responses.ContainsKey("500"))
             {
                 var response = operation.Responses["500"];
@@ -239,7 +186,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Đã xảy ra lỗi hệ thống khi tạo screen."
+                          "message": "Đã xảy ra lỗi hệ thống khi cập nhật phòng."
                         }
                         """
                         )

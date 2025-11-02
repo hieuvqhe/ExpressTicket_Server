@@ -4,47 +4,21 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
 {
-    public class CreateScreenExampleFilter : IOperationFilter
+    public class UpdateCinemaExampleFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var controllerName = context.ApiDescription.ActionDescriptor.RouteValues["controller"];
             var actionName = context.ApiDescription.ActionDescriptor.RouteValues["action"];
 
-            if (controllerName != "Partners" || actionName != "CreateScreen")
+            if (controllerName != "Partners" || actionName != "UpdateCinema")
             {
                 return;
             }
 
-            // Request Body Example
-            if (operation.RequestBody != null)
-            {
-                operation.RequestBody.Description = "Create screen request";
-                var content = operation.RequestBody.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Create Screen", new OpenApiExample
-                    {
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "screenName": "Phòng 4 - Premium",
-                          "code": "LOTTE_HL_P4",
-                          "description": "Phòng chiếu cao cấp với ghế da massage",
-                          "screenType": "premium",
-                          "soundSystem": "Dolby Atmos",
-                          "capacity": 80,
-                          "seatRows": 8,
-                          "seatColumns": 10
-                        }
-                        """
-                        )
-                    });
-                }
-            }
-
             // Parameters examples
+            operation.Parameters ??= new List<OpenApiParameter>();
+
             var cinemaIdParam = operation.Parameters.FirstOrDefault(p => p.Name == "cinema_id");
             if (cinemaIdParam != null)
             {
@@ -53,6 +27,36 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 {
                     ["Example"] = new OpenApiExample { Value = new OpenApiString("4") }
                 };
+            }
+
+            // Request Body Example
+            if (operation.RequestBody != null)
+            {
+                operation.RequestBody.Description = "Update cinema request";
+                var content = operation.RequestBody.Content.FirstOrDefault(c => c.Key == "application/json").Value;
+                if (content != null)
+                {
+                    content.Examples.Clear();
+                    content.Examples.Add("Update Cinema", new OpenApiExample
+                    {
+                        Value = new OpenApiString(
+                        """
+                        {
+                          "cinemaName": "Lotte Hòa Lạc (Updated)",
+                          "address": "Khu CNC Hòa Lạc, Km29 Đại lộ Thăng Long",
+                          "phone": "024 1234 9999",
+                          "city": "Hà Nội",
+                          "district": "Thạch Thất",
+                          "latitude": 21.02013000,
+                          "longitude": 105.51616000,
+                          "email": "info@lottehoalac.vn",
+                          "logoUrl": "https://example.com/logo/lotte_hl_updated.jpg",
+                          "isActive": true
+                        }
+                        """
+                        )
+                    });
+                }
             }
 
             // Response 200 OK
@@ -68,23 +72,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Tạo phòng thành công",
+                          "message": "Cập nhật rạp thành công",
                           "result": {
-                            "screenId": 10,
                             "cinemaId": 4,
-                            "cinemaName": "Lotte Hòa Lạc",
-                            "screenName": "Phòng 4 - Premium",
-                            "code": "LOTTE_HL_P4",
-                            "description": "Phòng chiếu cao cấp với ghế da massage",
-                            "screenType": "premium",
-                            "soundSystem": "Dolby Atmos",
-                            "capacity": 80,
-                            "seatRows": 8,
-                            "seatColumns": 10,
+                            "partnerId": 15,
+                            "cinemaName": "Lotte Hòa Lạc (Updated)",
+                            "address": "Khu CNC Hòa Lạc, Km29 Đại lộ Thăng Long",
+                            "phone": "024 1234 9999",
+                            "code": "LOTTE_HL",
+                            "city": "Hà Nội",
+                            "district": "Thạch Thất",
+                            "latitude": 21.02013000,
+                            "longitude": 105.51616000,
+                            "email": "info@lottehoalac.vn",
                             "isActive": true,
-                            "hasSeatLayout": false,
-                            "createdDate": "2024-01-25T14:30:00Z",
-                            "updatedDate": "2024-01-25T14:30:00Z"
+                            "logoUrl": "https://example.com/logo/lotte_hl_updated.jpg",
+                            "createdAt": "2025-10-28T11:48:05.7633333Z",
+                            "updatedAt": "2025-10-28T15:45:00Z",
+                            "totalScreens": 3,
+                            "activeScreens": 3
                           }
                         }
                         """
@@ -108,17 +114,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         {
                           "message": "Lỗi xác thực dữ liệu",
                           "errors": {
-                            "screenName": {
-                              "msg": "Tên phòng là bắt buộc",
-                              "path": "screenName"
+                            "cinemaName": {
+                              "msg": "Tên rạp không được vượt quá 255 ký tự",
+                              "path": "cinemaName"
                             },
-                            "code": {
-                              "msg": "Mã phòng chỉ được chứa chữ cái, số và dấu gạch dưới",
-                              "path": "code"
-                            },
-                            "capacity": {
-                              "msg": "Sức chứa phải lớn hơn 0",
-                              "path": "capacity"
+                            "isActive": {
+                              "msg": "Không thể vô hiệu hóa rạp đang có 3 phòng chiếu đang hoạt động",
+                              "path": "isActive"
                             }
                           }
                         }
@@ -143,10 +145,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         {
                           "message": "Xác thực thất bại",
                           "errors": {
-                            "contract": {
-                              "msg": "Partner chưa có hợp đồng active hoặc hợp đồng đã hết hạn",
-                              "path": "contract",
-                              "location": "authorization"
+                            "access": {
+                              "msg": "Tài khoản partner đã bị vô hiệu hóa",
+                              "path": "authorization",
+                              "location": "header"
                             }
                           }
                         }
@@ -177,33 +179,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 }
             }
 
-            // Response 409 Conflict
-            if (operation.Responses.ContainsKey("409"))
-            {
-                var response = operation.Responses["409"];
-                var content = response.Content.FirstOrDefault(c => c.Key == "application/json").Value;
-                if (content != null)
-                {
-                    content.Examples.Clear();
-                    content.Examples.Add("Conflict", new OpenApiExample
-                    {
-                        Value = new OpenApiString(
-                        """
-                        {
-                          "message": "Dữ liệu bị xung đột",
-                          "errors": {
-                            "code": {
-                              "msg": "Mã phòng đã tồn tại trong rạp này",
-                              "path": "code"
-                            }
-                          }
-                        }
-                        """
-                        )
-                    });
-                }
-            }
-
             // Response 500 Internal Server Error
             if (operation.Responses.ContainsKey("500"))
             {
@@ -217,7 +192,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Đã xảy ra lỗi hệ thống khi tạo phòng."
+                          "message": "Đã xảy ra lỗi hệ thống khi cập nhật rạp."
                         }
                         """
                         )

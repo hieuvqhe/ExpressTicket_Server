@@ -23,6 +23,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses
         public int SeatId { get; set; }
         public string Row { get; set; } = string.Empty;
         public int Column { get; set; }
+        public string? SeatName { get; set; }
         public int SeatTypeId { get; set; }
         public string SeatTypeCode { get; set; } = string.Empty;
         public string SeatTypeName { get; set; } = string.Empty;

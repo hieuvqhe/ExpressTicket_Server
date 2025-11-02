@@ -44,6 +44,9 @@ public partial class CinemaDbCoreContext : DbContext
     public virtual DbSet<Movie> Movies { get; set; }
 
     public virtual DbSet<MovieActor> MovieActors { get; set; }
+    public virtual DbSet<MovieSubmission> MovieSubmissions { get; set; }
+
+    public virtual DbSet<MovieSubmissionActor> MovieSubmissionActors { get; set; }
 
     public virtual DbSet<Partner> Partners { get; set; }
 
@@ -226,21 +229,44 @@ public partial class CinemaDbCoreContext : DbContext
 
             entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
             entity.Property(e => e.Address)
-                .HasMaxLength(255)
-                .IsUnicode(true)
+                .HasMaxLength(500)
                 .HasColumnName("address");
             entity.Property(e => e.CinemaName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
                 .HasColumnName("cinema_name");
+            entity.Property(e => e.City)
+                .HasMaxLength(100)
+                .HasColumnName("city");
+            entity.Property(e => e.Code)
+                .HasMaxLength(100)
+                .HasColumnName("code");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("created_at");
+            entity.Property(e => e.District)
+                .HasMaxLength(100)
+                .HasColumnName("district");
+            entity.Property(e => e.Email)
+                .HasMaxLength(255)
+                .HasColumnName("email");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.Latitude)
+                .HasColumnType("decimal(10, 8)")
+                .HasColumnName("latitude");
+            entity.Property(e => e.LogoUrl)
+                .HasMaxLength(500)
+                .HasColumnName("logo_url");
+            entity.Property(e => e.Longitude)
+                .HasColumnType("decimal(11, 8)")
+                .HasColumnName("longitude");
             entity.Property(e => e.PartnerId).HasColumnName("partner_id");
             entity.Property(e => e.Phone)
                 .HasMaxLength(20)
                 .IsUnicode(false)
                 .HasColumnName("phone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
 
             entity.HasOne(d => d.Partner).WithMany(p => p.Cinemas)
                 .HasForeignKey(d => d.PartnerId)
@@ -477,12 +503,14 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasKey(e => e.MovieId).HasName("PK__Movie__83CDF7494F73DF92");
 
             entity.ToTable("Movie");
-            entity.HasIndex(e => e.ManagerId, "IX_Movies_ManagerId");
 
             entity.Property(e => e.MovieId).HasColumnName("movie_id");
             entity.Property(e => e.AverageRating)
                 .HasColumnType("decimal(3, 1)")
                 .HasColumnName("average_rating");
+            entity.Property(e => e.BannerUrl)
+               .HasMaxLength(500)
+               .HasColumnName("banner_url");
             entity.Property(e => e.Country)
                 .HasMaxLength(100)
                 .IsUnicode(false)
@@ -509,9 +537,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("language");
-            entity.Property(e => e.ManagerId)
-                .HasDefaultValue(1)
-                .HasColumnName("manager_id");
+            entity.Property(e => e.PartnerId).HasColumnName("partner_id");
             entity.Property(e => e.PosterUrl).HasColumnName("poster_url");
             entity.Property(e => e.PremiereDate).HasColumnName("premiereDate");
             entity.Property(e => e.Production)
@@ -527,10 +553,9 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("trailer_url");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-            entity.HasOne(d => d.Manager).WithMany(p => p.Movies)
-                .HasForeignKey(d => d.ManagerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Movies_Manager");
+            entity.HasOne(d => d.Partner).WithMany(p => p.Movies)
+                .HasForeignKey(d => d.PartnerId)
+                .HasConstraintName("FK_Movies_Partner");
         });
 
         modelBuilder.Entity<MovieActor>(entity =>
@@ -554,6 +579,135 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.MovieId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__MovieActo__movie__236943A5");
+        });
+
+        modelBuilder.Entity<MovieSubmission>(entity =>
+        {
+            entity.HasKey(e => e.MovieSubmissionId).HasName("PK__MovieSub__59F97B714EE23744");
+
+            entity.ToTable("MovieSubmission");
+
+            entity.HasIndex(e => e.MovieId, "IX_MovieSubmissions_MovieId");
+
+            entity.HasIndex(e => e.PartnerId, "IX_MovieSubmissions_PartnerId");
+
+            entity.HasIndex(e => e.Status, "IX_MovieSubmissions_Status");
+
+            entity.HasIndex(e => new { e.Status, e.Title }, "IX_Moviesubmission_status_title");
+
+            entity.Property(e => e.MovieSubmissionId).HasColumnName("movie_submission_id");
+            entity.Property(e => e.AdditionalNotes)
+                .HasMaxLength(1000)
+                .HasColumnName("additional_notes");
+            entity.Property(e => e.BannerUrl)
+                .HasMaxLength(500)
+                .HasColumnName("banner_url");
+            entity.Property(e => e.CopyrightDocumentUrl)
+                .HasMaxLength(500)
+                .HasColumnName("copyright_document_url");
+            entity.Property(e => e.Country)
+                .HasMaxLength(50)
+                .HasColumnName("country");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getutcdate())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Description)
+                .HasMaxLength(2000)
+                .HasColumnName("description");
+            entity.Property(e => e.Director)
+                .HasMaxLength(100)
+                .HasColumnName("director");
+            entity.Property(e => e.DistributionLicenseUrl)
+                .HasMaxLength(500)
+                .HasColumnName("distribution_license_url");
+            entity.Property(e => e.DurationMinutes).HasColumnName("duration_minutes");
+            entity.Property(e => e.EndDate).HasColumnName("end_date");
+            entity.Property(e => e.Genre)
+                .HasMaxLength(100)
+                .HasColumnName("genre");
+            entity.Property(e => e.Language)
+                .HasMaxLength(50)
+                .HasColumnName("language");
+            entity.Property(e => e.MovieId).HasColumnName("movie_id");
+            entity.Property(e => e.PartnerId).HasColumnName("partner_id");
+            entity.Property(e => e.PosterUrl)
+                .HasMaxLength(500)
+                .HasColumnName("poster_url");
+            entity.Property(e => e.PremiereDate).HasColumnName("premiere_date");
+            entity.Property(e => e.Production)
+                .HasMaxLength(200)
+                .HasColumnName("production");
+            entity.Property(e => e.RejectionReason)
+                .HasMaxLength(1000)
+                .HasColumnName("rejection_reason");
+            entity.Property(e => e.ResubmitCount).HasColumnName("resubmit_count");
+            entity.Property(e => e.ResubmittedAt)
+                .HasColumnType("datetime")
+                .HasColumnName("resubmitted_at");
+            entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
+            entity.Property(e => e.ReviewerId).HasColumnName("reviewer_id");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Draft")
+                .HasColumnName("status");
+            entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
+            entity.Property(e => e.Title)
+                .HasMaxLength(200)
+                .HasColumnName("title");
+            entity.Property(e => e.TrailerUrl)
+                .HasMaxLength(500)
+                .HasColumnName("trailer_url");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+
+            entity.HasOne(d => d.Movie).WithMany(p => p.MovieSubmissions)
+                .HasForeignKey(d => d.MovieId)
+                .HasConstraintName("FK_MovieSubmission_Movie");
+
+            entity.HasOne(d => d.Partner).WithMany(p => p.MovieSubmissions)
+                .HasForeignKey(d => d.PartnerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_MovieSubmission_Partners");
+
+            entity.HasOne(d => d.Reviewer).WithMany(p => p.MovieSubmissions)
+                .HasForeignKey(d => d.ReviewerId)
+                .HasConstraintName("FK_MovieSubmission_Reviewer");
+        });
+        modelBuilder.Entity<MovieSubmissionActor>(entity =>
+        {
+            entity.HasKey(e => e.MovieSubmissionActorId)
+                  .HasName("PK__MovieSub__7A6D1DE67875FD24");
+            entity.Property(e => e.MovieSubmissionActorId)
+                  .HasColumnName("movie_submission_actor_id");
+
+            entity.Property(e => e.MovieSubmissionId)
+                  .HasColumnName("movie_submission_id");
+            entity.Property(e => e.ActorId)
+                  .HasColumnName("actor_id")
+                  .IsRequired(false);
+            entity.Property(e => e.ActorName)
+                  .HasMaxLength(100)
+                  .IsRequired()                      
+                  .HasColumnName("actor_name");
+            entity.Property(e => e.ActorAvatarUrl)
+                  .HasMaxLength(512)                  
+                  .HasColumnName("actor_avatar_url");
+            entity.Property(e => e.Role)
+                  .HasMaxLength(100)
+                  .IsRequired()
+                  .HasDefaultValueSql("N'Diễn viên'")
+                  .HasColumnName("role");
+            entity.HasOne(d => d.Actor)
+                  .WithMany(p => p.MovieSubmissionActors)
+                  .HasForeignKey(d => d.ActorId)
+                  .OnDelete(DeleteBehavior.SetNull)       
+                  .IsRequired(false)
+                  .HasConstraintName("FK_MovieSubmissionActors_Actor");
+            entity.HasOne(d => d.MovieSubmission)
+                  .WithMany(p => p.MovieSubmissionActors)
+                  .HasForeignKey(d => d.MovieSubmissionId)
+                  .OnDelete(DeleteBehavior.ClientSetNull)
+                  .IsRequired()
+                  .HasConstraintName("FK_MovieSubmissionActors_Submission");
         });
 
         modelBuilder.Entity<Partner>(entity =>
@@ -786,9 +940,18 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasKey(e => e.ScreenId).HasName("PK__Screen__CC19B67AF5A247A8");
 
             entity.ToTable("Screen");
-
             entity.Property(e => e.ScreenId).HasColumnName("screen_id");
+            entity.Property(e => e.Capacity).HasColumnName("capacity");
             entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.Code)
+                .HasMaxLength(50)
+                .HasColumnName("code");
+            entity.Property(e => e.CreatedDate)
+                .HasDefaultValueSql("(getutcdate())")
+                .HasColumnName("created_date");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .HasColumnName("description");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
@@ -798,22 +961,15 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("screen_name");
             entity.Property(e => e.ScreenType)
                 .HasMaxLength(50)
-                .IsUnicode(false)
                 .HasColumnName("screen_type");
-
-            // Thêm cấu hình cho trường capacity
-            entity.Property(e => e.Capacity)
-                .HasColumnName("capacity")
-                .HasDefaultValue(100); // Giá trị mặc định khớp với SQL
-
-            // Thêm cấu hình cho created_at và updated_at
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(GETUTCDATE())")
-                .HasColumnName("created_at");
-
-            entity.Property(e => e.UpdatedAt)
-                .HasColumnName("updated_at")
-                .IsRequired(false);
+            entity.Property(e => e.SeatColumns).HasColumnName("seat_columns");
+            entity.Property(e => e.SeatRows).HasColumnName("seat_rows");
+            entity.Property(e => e.SoundSystem)
+                .HasMaxLength(100)
+                .HasColumnName("sound_system");
+            entity.Property(e => e.UpdatedDate)
+                .HasDefaultValueSql("(getutcdate())")
+                .HasColumnName("updated_date");
 
             entity.HasOne(d => d.Cinema).WithMany(p => p.Screens)
                 .HasForeignKey(d => d.CinemaId)
@@ -835,6 +991,9 @@ public partial class CinemaDbCoreContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("row_code");
             entity.Property(e => e.ScreenId).HasColumnName("screen_id");
+            entity.Property(e => e.SeatName)
+                .HasMaxLength(100)
+                .HasColumnName("seat_name");
             entity.Property(e => e.SeatNumber).HasColumnName("seat_number");
             entity.Property(e => e.SeatTypeId).HasColumnName("seat_type_id");
             entity.Property(e => e.Status)

@@ -22,17 +22,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
         private readonly IManagerService _managerService;
+        private readonly IContractValidationService _contractValidationService;
 
         public PartnerService(
             CinemaDbCoreContext context,
             IPasswordHasher<User> passwordHasher,
             IEmailService emailService,
-            IManagerService managerService  )
+            IManagerService managerService ,
+            IContractValidationService contractValidationService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _emailService = emailService;
             _managerService = managerService;
+            _contractValidationService = contractValidationService;
         }
         public async Task<PartnerRegisterResponse> RegisterPartnerAsync(PartnerRegisterRequest request)
         {
