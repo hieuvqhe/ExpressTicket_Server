@@ -18,6 +18,8 @@
         public int SeatId { get; set; }
         public string Row { get; set; } = string.Empty;
         public int Column { get; set; }
+
+        public string? SeatName { get; set; }
         public int SeatTypeId { get; set; }
         public string Status { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;

@@ -12,4 +12,6 @@ public partial class Actor
     public string? AvatarUrl { get; set; }
 
     public virtual ICollection<MovieActor> MovieActors { get; set; } = new List<MovieActor>();
+
+    public virtual ICollection<MovieSubmissionActor> MovieSubmissionActors { get; set; } = new List<MovieSubmissionActor>();
 }

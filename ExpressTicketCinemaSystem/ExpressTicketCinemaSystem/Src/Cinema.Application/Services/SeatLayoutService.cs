@@ -38,6 +38,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     SeatId = s.SeatId,
                     Row = s.RowCode,
                     Column = s.SeatNumber,
+                    SeatName = s.SeatName, 
                     SeatTypeId = s.SeatTypeId ?? 1,
                     SeatTypeCode = s.SeatType.Code,
                     SeatTypeName = s.SeatType.Name,
@@ -161,6 +162,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         ScreenId = screenId,
                         RowCode = s.Row.ToUpper(),
                         SeatNumber = s.Column,
+                        SeatName = s.SeatName,
                         SeatTypeId = s.SeatTypeId,
                         Status = s.Status
                     });
@@ -197,6 +199,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                         existingSeat.SeatTypeId = newSeatData.SeatTypeId;
                         existingSeat.Status = newSeatData.Status;
+                        existingSeat.SeatName = newSeatData.SeatName;
                     }
                 }
 
@@ -268,6 +271,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             seat.SeatTypeId = request.SeatTypeId;
             seat.Status = request.Status;
+            seat.SeatName = request.SeatName;
             seat.SeatType = seatType;
 
             await _context.SaveChangesAsync();
@@ -277,6 +281,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 SeatId = seat.SeatId,
                 Row = seat.RowCode,
                 Column = seat.SeatNumber,
+                SeatName = seat.SeatName,
                 SeatTypeId = seat.SeatTypeId ?? 1,
                 Status = seat.Status,
                 Message = "Cập nhật ghế thành công",
@@ -372,6 +377,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                         seat.SeatTypeId = seatUpdate.SeatTypeId;
                         seat.Status = seatUpdate.Status;
+                        seat.SeatName = seatUpdate.SeatName;
 
                         results.Add(new SeatActionResult
                         {

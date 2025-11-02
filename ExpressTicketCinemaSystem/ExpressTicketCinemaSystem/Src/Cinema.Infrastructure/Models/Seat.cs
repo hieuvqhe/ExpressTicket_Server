@@ -17,6 +17,8 @@ public partial class Seat
 
     public int? SeatTypeId { get; set; }
 
+    public string? SeatName { get; set; }
+
     public virtual Screen Screen { get; set; } = null!;
 
     public virtual SeatType? SeatType { get; set; }

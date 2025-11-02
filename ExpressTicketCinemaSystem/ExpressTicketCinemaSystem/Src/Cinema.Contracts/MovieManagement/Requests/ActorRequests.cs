@@ -2,21 +2,17 @@
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Requests
 {
-    public class CreateActorRequest
+    public class AddActorToSubmissionRequest
     {
-        [Required(ErrorMessage = "Tên diễn viên là bắt buộc")]
-        [StringLength(100, ErrorMessage = "Tên diễn viên không được vượt quá 100 ký tự")]
-        public string Name { get; set; } = string.Empty;
-
-        public string? AvatarUrl { get; set; }
+        public int? ActorId { get; set; }         
+        public string? ActorName { get; set; }     
+        public string? ActorAvatarUrl { get; set; }
+        public string Role { get; set; } = "Diễn viên";
     }
-
-    public class UpdateActorRequest
+    public class UpdateSubmissionActorRequest
     {
-        [Required(ErrorMessage = "Tên diễn viên là bắt buộc")]
-        [StringLength(100, ErrorMessage = "Tên diễn viên không được vượt quá 100 ký tự")]
-        public string Name { get; set; } = string.Empty;
-
-        public string? AvatarUrl { get; set; }
+        public string Role { get; set; }
+        public string? ActorName { get; set; } // Chỉ cập nhật nếu là actor mới
+        public string? ActorAvatarUrl { get; set; }
     }
 }
