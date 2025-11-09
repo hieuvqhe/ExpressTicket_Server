@@ -18,6 +18,8 @@ using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager;
 using System.Text;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Serialization;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Booking;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Catalog;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -135,6 +137,16 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<PartnerGetServicesExampleFilter>();
     options.OperationFilter<PartnerUpdateServiceExampleFilter>();
     options.OperationFilter<PartnerDeleteServiceExampleFilter>();
+    options.OperationFilter<Booking_CreateSession_ExampleFilter>();
+    options.OperationFilter<Booking_GetSession_ExampleFilter>();
+    options.OperationFilter<Booking_DeleteSession_ExampleFilter>();
+    options.OperationFilter<Booking_TouchSession_ExampleFilter>();
+    options.OperationFilter<Booking_LockSeats_ExampleFilter>();
+    options.OperationFilter<Booking_ReleaseSeats_ExampleFilter>();
+    options.OperationFilter<Booking_ReplaceSeats_ExampleFilter>();
+    options.OperationFilter<Catalog_GetMovieShowtimesOverview_ExampleFilter>();
+    options.OperationFilter<Catalog_GetShowtimeSeats_ExampleFilter>();
+    options.OperationFilter<Catalog_GetShowtimeSeatsStream_ExampleFilter>();
 
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";

@@ -153,5 +153,43 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+        /// <summary>
+        /// Hủy session và giải phóng toàn bộ ghế đang giữ ngay lập tức.
+        /// Trạng thái chuyển thành CANCELED và gửi SSE seat_released.
+        /// </summary>
+        [HttpDelete("{id:guid}")]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(SuccessResponse<CancelBookingSessionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
+        {
+            try
+            {
+                var result = await _service.CancelAsync(id, ct);
+                return Ok(new SuccessResponse<CancelBookingSessionResponse>
+                {
+                    Message = "Hủy session thành công",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var msg = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse { Message = msg, Errors = ex.Errors });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi hủy session."
+                });
+            }
+        }
     }
 }

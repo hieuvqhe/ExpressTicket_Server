@@ -11,6 +11,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Booking.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Booking.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+using InfraRT = ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -28,18 +29,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         Task<BookingSessionResponse> TouchAsync(
             Guid bookingSessionId,
             CancellationToken ct = default);
+
+        Task<CancelBookingSessionResponse> CancelAsync(Guid bookingSessionId, CancellationToken ct = default);
     }
 
     public class BookingSessionService : IBookingSessionService
     {
         private readonly CinemaDbCoreContext _db;
+        private readonly InfraRT.IShowtimeSeatEventStream _eventStream;
 
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan SeatLockTtl = TimeSpan.FromMinutes(3);
 
-        public BookingSessionService(CinemaDbCoreContext db)
+        public BookingSessionService(CinemaDbCoreContext db, InfraRT.IShowtimeSeatEventStream eventStream)
         {
             _db = db;
+            _eventStream = eventStream;
         }
 
         private static int? GetUserId(ClaimsPrincipal? user)
@@ -200,6 +205,65 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ExpiresAt = entity.ExpiresAt,
                 Version = entity.Version
             };
+        }
+        public async Task<CancelBookingSessionResponse> CancelAsync(Guid bookingSessionId, CancellationToken ct = default)
+        {
+            var now = DateTime.UtcNow;
+
+            var session = await _db.BookingSessions
+                .FirstOrDefaultAsync(x => x.Id == bookingSessionId, ct);
+
+            if (session == null)
+                throw new NotFoundException("Không tìm thấy session");
+
+            if (session.State != "DRAFT")
+                throw new ValidationException("session", "Chỉ hủy được session ở trạng thái DRAFT");
+
+            using var tx = await _db.Database.BeginTransactionAsync(ct);
+            try
+            {
+                var locks = await _db.SeatLocks
+                    .Where(l => l.LockedBySession == bookingSessionId)
+                    .Select(l => new { l.SeatId, l.ShowtimeId })
+                    .ToListAsync(ct);
+
+                if (locks.Count > 0)
+                {
+                    var lockEntities = await _db.SeatLocks
+                        .Where(l => l.LockedBySession == bookingSessionId)
+                        .ToListAsync(ct);
+                    _db.SeatLocks.RemoveRange(lockEntities);
+                }
+
+                session.State = "CANCELED";
+                session.UpdatedAt = now;
+
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+
+                foreach (var lk in locks)
+                {
+                    await _eventStream.PublishAsync(new InfraRT.SeatEvent
+                    {
+                        ShowtimeId = lk.ShowtimeId,
+                        SeatId = lk.SeatId,
+                        Type = InfraRT.SeatEventType.Released
+                    }, ct);
+                }
+
+                return new CancelBookingSessionResponse
+                {
+                    BookingSessionId = session.Id,
+                    ShowtimeId = session.ShowtimeId,
+                    ReleasedSeatIds = locks.Select(x => x.SeatId).ToList(),
+                    State = session.State
+                };
+            }
+            catch
+            {
+                await tx.RollbackAsync(ct);
+                throw;
+            }
         }
     }
 }

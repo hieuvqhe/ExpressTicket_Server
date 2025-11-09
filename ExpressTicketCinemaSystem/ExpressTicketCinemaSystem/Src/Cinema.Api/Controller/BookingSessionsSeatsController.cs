@@ -111,5 +111,53 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+        /// <summary>
+        /// Thay thế toàn bộ danh sách ghế của session (all-or-nothing).
+        /// Lock các ghế mới, release ghế cũ và gửi SSE tương ứng.
+        /// </summary>
+        [HttpPut]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(SuccessResponse<ReplaceSeatsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> Replace(Guid id, [FromBody] ReplaceSeatsRequest request, CancellationToken ct)
+        {
+            try
+            {
+                var result = await _service.ReplaceAsync(id, request, ct);
+                return Ok(new SuccessResponse<ReplaceSeatsResponse>
+                {
+                    Message = "Cập nhật ghế thành công",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var msg = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse { Message = msg, Errors = ex.Errors });
+            }
+            catch (ConflictException ex)
+            {
+                var msg = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xung đột dữ liệu";
+                return StatusCode(StatusCodes.Status409Conflict, new ValidationErrorResponse
+                {
+                    Message = msg,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật ghế."
+                });
+            }
+        }
     }
 }
