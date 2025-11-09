@@ -11,6 +11,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
     public class MovieService : IMovieService
     {
+        const int PRESALE_DAYS = 14;
         private readonly CinemaDbCoreContext _context;
 
         public MovieService(CinemaDbCoreContext context)
@@ -44,12 +45,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 query = status.ToLower() switch
                 {
                     "now_showing" => query.Where(m =>
-                        m.PremiereDate <= today &&
-                        m.EndDate >= today), 
+    m.EndDate >= today &&
+    m.PremiereDate <= today.AddDays(PRESALE_DAYS)),
 
                     "coming_soon" => query.Where(m =>
-                        m.PremiereDate > today &&
-                        m.PremiereDate <= today.AddDays(7)), 
+    m.PremiereDate > today.AddDays(PRESALE_DAYS)),
 
                     "ended" => query.Where(m => m.EndDate < today),
 
@@ -311,8 +311,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(ma => ma.Actor)
                 .Where(m =>
                     m.IsActive &&
-                    m.PremiereDate <= today &&
-                    m.EndDate >= today
+                    m.EndDate >= today &&
+    m.PremiereDate <= today.AddDays(PRESALE_DAYS)
                 );
 
             if (!string.IsNullOrEmpty(genre))
@@ -421,57 +421,41 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     string sortBy = "premiere_date",
     string sortOrder = "asc")
         {
+            const int PRESALE_DAYS = 14; // cửa sổ “được coi như đang chiếu” trước ngày công chiếu
             var today = DateOnly.FromDateTime(DateTime.Today);
-            var sevenDaysFromNow = today.AddDays(7);
+            var cutoff = today.AddDays(PRESALE_DAYS);
 
+            // Coming soon: chỉ những phim công chiếu SAU cutoff (tức > 14 ngày nữa)
             var query = _context.Movies
-                .Include(m => m.MovieActors)
-                    .ThenInclude(ma => ma.Actor)
-                .Where(m =>
-                    m.IsActive &&
-                    m.PremiereDate > today &&
-                    m.PremiereDate <= sevenDaysFromNow
-                );
+                .Include(m => m.MovieActors).ThenInclude(ma => ma.Actor)
+                .Where(m => m.IsActive && m.PremiereDate > cutoff)
+                .AsQueryable();
 
             if (!string.IsNullOrEmpty(genre))
             {
-                query = query.Where(m =>
-                    m.Genre != null &&
-                    m.Genre.ToLower().Contains(genre.ToLower()));
+                var g = genre.ToLowerInvariant();
+                query = query.Where(m => m.Genre != null && m.Genre.ToLower().Contains(g));
             }
 
             if (!string.IsNullOrEmpty(language))
             {
-                query = query.Where(m =>
-                    m.Language != null &&
-                    m.Language.ToLower().Contains(language.ToLower()));
+                var lang = language.ToLowerInvariant();
+                query = query.Where(m => m.Language != null && m.Language.ToLower().Contains(lang));
             }
 
             if (ratingMin.HasValue)
             {
-                decimal ratingMinDecimal = (decimal)ratingMin.Value;
-                query = query.Where(m => m.AverageRating >= ratingMinDecimal);
+                decimal minDec = (decimal)ratingMin.Value;
+                query = query.Where(m => m.AverageRating >= minDec);
             }
 
-            if (durationMin.HasValue)
-            {
-                query = query.Where(m => m.DurationMinutes >= durationMin.Value);
-            }
-            if (durationMax.HasValue)
-            {
-                query = query.Where(m => m.DurationMinutes <= durationMax.Value);
-            }
+            if (durationMin.HasValue) query = query.Where(m => m.DurationMinutes >= durationMin.Value);
+            if (durationMax.HasValue) query = query.Where(m => m.DurationMinutes <= durationMax.Value);
 
-            if (premiereDateFrom.HasValue)
-            {
-                query = query.Where(m => m.PremiereDate >= premiereDateFrom.Value);
-            }
-            if (premiereDateTo.HasValue)
-            {
-                query = query.Where(m => m.PremiereDate <= premiereDateTo.Value);
-            }
+            if (premiereDateFrom.HasValue) query = query.Where(m => m.PremiereDate >= premiereDateFrom.Value);
+            if (premiereDateTo.HasValue) query = query.Where(m => m.PremiereDate <= premiereDateTo.Value);
 
-            query = (sortBy.ToLower(), sortOrder.ToLower()) switch
+            query = (sortBy.ToLowerInvariant(), sortOrder.ToLowerInvariant()) switch
             {
                 ("premiere_date", "desc") => query.OrderByDescending(m => m.PremiereDate),
                 ("premiere_date", "asc") => query.OrderBy(m => m.PremiereDate),
@@ -483,7 +467,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ("duration_minutes", "asc") => query.OrderBy(m => m.DurationMinutes),
                 ("ratings_count", "desc") => query.OrderByDescending(m => m.RatingsCount),
                 ("ratings_count", "asc") => query.OrderBy(m => m.RatingsCount),
-                _ => query.OrderBy(m => m.PremiereDate) 
+                _ => query.OrderBy(m => m.PremiereDate)
             };
 
             var total = await query.CountAsync();
@@ -501,8 +485,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Description = m.Description,
                 DurationMinutes = m.DurationMinutes,
                 Genre = string.Join(", ",
-                   m.Genre?.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                  .Select(g => g.Trim()) ?? Enumerable.Empty<string>()),
+                    m.Genre?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(g => g.Trim()) ?? Enumerable.Empty<string>()),
                 Language = m.Language,
                 PremiereDate = m.PremiereDate,
                 EndDate = m.EndDate,
@@ -512,7 +496,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Country = m.Country,
                 Production = m.Production,
                 IsActive = m.IsActive,
-                Status = "coming_soon",
+                Status = GetMovieStatus(m.PremiereDate, m.EndDate), // KHÔNG hardcode
                 AverageRating = (double?)m.AverageRating,
                 RatingsCount = m.RatingsCount,
                 CreatedAt = m.CreatedAt,
@@ -836,19 +820,29 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
         private string GetMovieStatus(DateOnly premiereDate, DateOnly endDate)
         {
-            var today = DateOnly.FromDateTime(DateTime.Today);
-            var daysUntilPremiere = (premiereDate.DayNumber - today.DayNumber);
+            const int PRESALE_DAYS = 14;
 
-            if (daysUntilPremiere >= 1 && daysUntilPremiere <= 7)
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var daysUntilPremiere = premiereDate.DayNumber - today.DayNumber;
+
+            // > 14 ngày nữa mới chiếu -> sắp chiếu (không cho tạo rạp)
+            if (daysUntilPremiere > PRESALE_DAYS)
                 return "coming_soon";
 
+            // 1..14 ngày trước ngày chiếu -> cho phép coi như đang chiếu (mở bán/chuẩn bị)
+            if (daysUntilPremiere >= 1 && daysUntilPremiere <= PRESALE_DAYS)
+                return "now_showing";
+
+            // Đúng/qua ngày chiếu và chưa hết hạn -> đang chiếu
             if (premiereDate <= today && endDate >= today)
                 return "now_showing";
 
+            // Hết hạn
             if (endDate < today)
                 return "end";
 
-            return "upcoming"; 
+            // Phòng hờ (hiếm khi rơi vào)
+            return "upcoming";
         }
     }
 

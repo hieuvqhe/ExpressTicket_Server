@@ -124,6 +124,17 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<CreateCinemaExampleFilter>();
     options.OperationFilter<UpdateCinemaExampleFilter>();
     options.OperationFilter<DeleteCinemaExampleFilter>();
+    options.OperationFilter<PartnerCreateShowtimeExampleFilter>();
+    options.OperationFilter<PartnerUpdateShowtimeExampleFilter>();
+    options.OperationFilter<PartnerDeleteShowtimeExampleFilter>();
+    options.OperationFilter<PartnerGetShowtimeByIdExampleFilter>();
+    options.OperationFilter<PartnerGetAllShowtimesExampleFilter>();
+    options.OperationFilter<PartnerMovieSubmissionsExampleFilter>();
+    options.OperationFilter<PartnerCreateServiceExampleFilter>();
+    options.OperationFilter<PartnerGetServiceByIdExampleFilter>();
+    options.OperationFilter<PartnerGetServicesExampleFilter>();
+    options.OperationFilter<PartnerUpdateServiceExampleFilter>();
+    options.OperationFilter<PartnerDeleteServiceExampleFilter>();
 
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
@@ -166,8 +177,15 @@ builder.Services.AddScoped<IContractValidationService, ContractValidationService
 builder.Services.AddScoped<ICinemaService, CinemaService>();
 builder.Services.AddScoped<PartnerMovieManagementService>();
 builder.Services.AddScoped<ManagerMovieSubmissionService>();
-
-
+builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
+builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
+builder.Services.AddScoped<IComboService, ComboService>();
+builder.Services.AddScoped<IBookingSessionService, BookingSessionService>();
+builder.Services.AddScoped<ISeatLockAppService, SeatLockAppService>();
+builder.Services.AddScoped<ICatalogQueryService, CatalogQueryService>();
+builder.Services.AddSingleton<
+    ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.IShowtimeSeatEventStream,
+    ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.InMemoryShowtimeSeatEventStream>();
 
 builder.Services.AddAuthentication(options =>
 {

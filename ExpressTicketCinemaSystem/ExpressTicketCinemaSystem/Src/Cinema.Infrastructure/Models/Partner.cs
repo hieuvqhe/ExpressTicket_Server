@@ -65,5 +65,7 @@ public partial class Partner
 
     public virtual ICollection<SeatType> SeatTypes { get; set; } = new List<SeatType>();
 
+    public virtual ICollection<Service> Services { get; set; } = new List<Service>();
+
     public virtual User User { get; set; } = null!;
 }

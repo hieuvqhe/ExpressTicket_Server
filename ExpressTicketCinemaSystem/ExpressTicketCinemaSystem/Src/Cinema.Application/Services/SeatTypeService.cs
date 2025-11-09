@@ -6,6 +6,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using System.Text.RegularExpressions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+using Microsoft.Data.SqlClient;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -250,7 +251,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // ==================== VALIDATION SECTION ====================
             ValidateCreateSeatTypeRequest(request);
             await ValidatePartnerAccessAsync(partnerId, userId);
-            await ValidateSeatTypeCodeUniqueAsync(request.Code, partnerId);
+            await ValidateSeatTypeCodeUniqueAsync(request.Code);
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
@@ -267,8 +268,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 UpdatedAt = DateTime.UtcNow
             };
 
-            _context.SeatTypes.Add(seatType);
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.SeatTypes.Add(seatType);
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException dbEx) when (IsUniqueConstraintViolation(dbEx))
+            {
+                // Trường hợp race condition: 2 request song song vượt qua validate
+                throw new ConflictException("code", "Mã loại ghế đã tồn tại trong hệ thống");
+            }
 
             return new SeatTypeActionResponse
             {
@@ -463,15 +472,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new ValidationException(errors);
         }
 
-        private async Task ValidateSeatTypeCodeUniqueAsync(string code, int partnerId)
+        private async Task ValidateSeatTypeCodeUniqueAsync(string code)
         {
-            var existingSeatType = await _context.SeatTypes
-                .FirstOrDefaultAsync(st => st.PartnerId == partnerId && st.Code.ToUpper() == code.Trim().ToUpper());
+            var normalized = code.Trim().ToUpperInvariant();
 
-            if (existingSeatType != null)
-            {
-                throw new ConflictException("code", "Mã loại ghế đã tồn tại trong hệ thống của bạn");
-            }
+            var exists = await _context.SeatTypes
+                .AnyAsync(st => st.Code.ToUpper() == normalized);
+
+            if (exists)
+                throw new ConflictException("code", "Mã loại ghế đã tồn tại trong hệ thống");
+        }
+        private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+        {
+            if (ex.InnerException is SqlException sqlEx)
+                return sqlEx.Number == 2627 || sqlEx.Number == 2601; // 2627: PK/Unique, 2601: Unique index
+            return false;
         }
     }
 }

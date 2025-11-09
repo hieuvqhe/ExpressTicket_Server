@@ -21,6 +21,24 @@ public partial class Booking
 
     public string Status { get; set; } = null!;
 
+    public string? OrderCode { get; set; }
+
+    public Guid? SessionId { get; set; }
+
+    public string? PricingSnapshot { get; set; }
+
+    public string State { get; set; } = null!;
+
+    public string? PaymentProvider { get; set; }
+
+    public string? PaymentTxId { get; set; }
+
+    public string? PaymentStatus { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+
     public virtual Customer Customer { get; set; } = null!;
 
     public virtual Payment? Payment { get; set; }

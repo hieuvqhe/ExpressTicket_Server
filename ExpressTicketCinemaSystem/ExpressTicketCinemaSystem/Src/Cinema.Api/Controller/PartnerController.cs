@@ -33,8 +33,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly ISeatLayoutService _seatLayoutService;
         private readonly IContractValidationService _contractValidationService;
         private readonly ICinemaService _cinemaService;
+        private readonly IShowtimeService _showtimeService;
+        private readonly IComboService _comboService;
 
-        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, IScreenService screenService, ISeatTypeService seatTypeService , ISeatLayoutService seatLayoutService , CinemaDbCoreContext context, IContractValidationService contractValidationService,  ICinemaService cinemaService)
+        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, IScreenService screenService, ISeatTypeService seatTypeService , ISeatLayoutService seatLayoutService , CinemaDbCoreContext context, IContractValidationService contractValidationService,  ICinemaService cinemaService, IShowtimeService showtimeService , IComboService comboService)
         {
             _partnerService = partnerService;
             _contractService = contractService;
@@ -45,6 +47,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             _context = context;
             _contractValidationService = contractValidationService;
             _cinemaService = cinemaService;
+            _showtimeService = showtimeService;
+            _comboService = comboService;
+
         }
         private int GetCurrentUserId()
         {
@@ -1874,5 +1879,507 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
+
+        /// <summary>
+        /// Create a new showtime for partners
+        /// </summary>
+        [HttpPost("/partners/showtimes")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeCreateResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CreateShowtime([FromBody] PartnerShowtimeCreateRequest request)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _showtimeService.CreatePartnerShowtimeAsync(partnerId, request);
+
+                var response = new SuccessResponse<PartnerShowtimeCreateResponse>
+                {
+                    Message = "Tạo showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xung đột dữ liệu";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo suất chiếu."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update showtime for partner
+        /// </summary>
+        [HttpPut("/partners/showtimes/{showtimeId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeCreateResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateShowtime(int showtimeId, [FromBody] PartnerShowtimeCreateRequest request)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _showtimeService.UpdatePartnerShowtimeAsync(partnerId, showtimeId, request);
+
+                var response = new SuccessResponse<PartnerShowtimeCreateResponse>
+                {
+                    Message = "Cập nhật showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xung đột dữ liệu";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật suất chiếu."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Soft delete showtime for partners
+        /// </summary>
+        [HttpDelete("/partners/showtimes/{showtimeId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeCreateResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteShowtime(int showtimeId)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _showtimeService.DeletePartnerShowtimeAsync(partnerId, showtimeId);
+
+                var response = new SuccessResponse<PartnerShowtimeCreateResponse>
+                {
+                    Message = "Xóa showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xung đột dữ liệu";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa suất chiếu."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get showtime by ID
+        /// </summary>
+        [HttpGet("/partners/showtimes/{showtimeId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeDetailResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetShowtimeById(int showtimeId)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _showtimeService.GetPartnerShowtimeByIdAsync(partnerId, showtimeId);
+
+                var response = new SuccessResponse<PartnerShowtimeDetailResponse>
+                {
+                    Message = "Lấy thông tin showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin suất chiếu."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get all showtimes for partners with pagination and filtering.
+        /// </summary>
+        [HttpGet("/partners/showtimes")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeListResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetAllShowtimes(
+            [FromQuery] int page = 1,
+            [FromQuery] int limit = 10,
+            [FromQuery] string? movie_id = null,
+            [FromQuery] string? cinema_id = null,
+            [FromQuery] string? screen_id = null,
+            [FromQuery] string? date = null,
+            [FromQuery] string? status = null,
+            [FromQuery] string sort_by = "start_time",
+            [FromQuery] string sort_order = "asc")
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                var request = new PartnerShowtimeQueryRequest
+                {
+                    Page = page,
+                    Limit = limit,
+                    MovieId = movie_id,
+                    CinemaId = cinema_id,
+                    ScreenId = screen_id,
+                    Date = date,
+                    Status = status,
+                    SortBy = sort_by,
+                    SortOrder = sort_order
+                };
+
+                var result = await _showtimeService.GetPartnerShowtimesAsync(partnerId, request);
+
+                var response = new SuccessResponse<PartnerShowtimeListResponse>
+                {
+                    Message = "Lấy danh sách showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách suất chiếu."
+                });
+            }
+        }
+        /// <summary>Create a new combo</summary>
+        [HttpPost("/partners/services")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<ServiceResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CreateService([FromBody] CreateServiceRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _comboService.CreateAsync(partnerId, userId, request);
+
+                return Ok(new SuccessResponse<ServiceResponse>
+                {
+                    Message = "Tạo combo thành công",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var first = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse { Message = first, Errors = ex.Errors });
+            }
+            catch (ConflictException ex)
+            {
+                var first = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xung đột dữ liệu";
+                return Conflict(new ValidationErrorResponse { Message = first, Errors = ex.Errors });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse { Message = ex.Message, Errors = ex.Errors });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Đã xảy ra lỗi hệ thống khi tạo combo." });
+            }
+        }
+
+        /// <summary>Get combo by id</summary>
+        [HttpGet("/partners/services/{serviceId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<ServiceResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetServiceById(int serviceId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _comboService.GetByIdAsync(partnerId, userId, serviceId);
+
+                return Ok(new SuccessResponse<ServiceResponse>
+                {
+                    Message = "Lấy thông tin combo thành công",
+                    Result = result
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse { Message = ex.Message, Errors = ex.Errors });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin combo." });
+            }
+        }
+
+        /// <summary>Get combos (paging/filter/sort)</summary>
+        [HttpGet("/partners/services")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PaginatedServicesResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetServices(
+            [FromQuery] int page = 1,
+            [FromQuery] int limit = 10,
+            [FromQuery] string? search = null,
+            [FromQuery] bool? is_available = null,
+            [FromQuery] string sort_by = "created_at",
+            [FromQuery] string sort_order = "desc")
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                var query = new GetServicesQuery
+                {
+                    Page = page,
+                    Limit = limit,
+                    Search = search,
+                    IsAvailable = is_available,
+                    SortBy = sort_by,
+                    SortOrder = sort_order
+                };
+
+                var result = await _comboService.GetListAsync(partnerId, userId, query);
+
+                return Ok(new SuccessResponse<PaginatedServicesResponse>
+                {
+                    Message = "Lấy danh sách combo thành công",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var first = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse { Message = first, Errors = ex.Errors });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse { Message = ex.Message, Errors = ex.Errors });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách combo." });
+            }
+        }
+
+        /// <summary>Update combo</summary>
+        [HttpPut("/partners/services/{serviceId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<ServiceResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateService(int serviceId, [FromBody] UpdateServiceRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _comboService.UpdateAsync(partnerId, userId, serviceId, request);
+
+                return Ok(new SuccessResponse<ServiceResponse>
+                {
+                    Message = "Cập nhật combo thành công",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var first = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse { Message = first, Errors = ex.Errors });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse { Message = ex.Message, Errors = ex.Errors });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Đã xảy ra lỗi hệ thống khi cập nhật combo." });
+            }
+        }
+
+        /// <summary>Delete combo (soft: set is_available = false)</summary>
+        [HttpDelete("/partners/services/{serviceId}")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<ServiceActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteService(int serviceId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _comboService.DeleteAsync(partnerId, userId, serviceId);
+
+                return Ok(new SuccessResponse<ServiceActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse { Message = ex.Message, Errors = ex.Errors });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Đã xảy ra lỗi hệ thống khi xóa combo." });
+            }
+        }
     }
 }

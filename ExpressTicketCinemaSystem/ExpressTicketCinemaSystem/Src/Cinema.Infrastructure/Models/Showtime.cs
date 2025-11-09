@@ -19,6 +19,18 @@ public partial class Showtime
 
     public string Status { get; set; } = null!;
 
+    public DateTime? EndTime { get; set; }
+
+    public int? AvailableSeats { get; set; }
+
+    public string? FormatType { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
+
+    public virtual ICollection<BookingSession> BookingSessions { get; set; } = new List<BookingSession>();
+
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
     public virtual Cinema Cinema { get; set; } = null!;
