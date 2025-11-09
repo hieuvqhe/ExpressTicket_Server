@@ -88,6 +88,8 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<Voucher> Vouchers { get; set; }
 
+    public virtual DbSet<VoucherEmailHistory> VoucherEmailHistories { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     { }
 
@@ -1284,6 +1286,29 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("status");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
 
+            // Các trường mới được thêm
+            entity.Property(e => e.EndTime)
+                .HasColumnName("end_time")
+                .IsRequired(false);
+
+            entity.Property(e => e.AvailableSeats)
+                .HasColumnName("available_seats")
+                .IsRequired(false);
+
+            entity.Property(e => e.FormatType)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("format_type")
+                .IsRequired(false);
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("GETDATE()");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at")
+                .IsRequired(false);
+
             entity.HasOne(d => d.Cinema).WithMany(p => p.Showtimes)
                 .HasForeignKey(d => d.CinemaId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -1473,6 +1498,89 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("voucher_code");
+
+            // Các trường mới
+            entity.Property(e => e.ManagerId)
+                .HasColumnName("manager_id")
+                .HasDefaultValue(1);
+
+            entity.Property(e => e.DiscountType)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("discount_type")
+                .HasDefaultValue("fixed");
+
+            entity.Property(e => e.UsageLimit)
+                .HasColumnName("usage_limit")
+                .IsRequired(false);
+
+            entity.Property(e => e.UsedCount)
+                .HasColumnName("used_count")
+                .HasDefaultValue(0);
+
+            entity.Property(e => e.Description)
+                .HasMaxLength(255)
+                .HasColumnName("description")
+                .IsRequired(false);
+
+            entity.Property(e => e.IsActive)
+                .HasColumnName("is_active")
+                .HasDefaultValue(true);
+
+            entity.Property(e => e.IsDeleted)
+                .HasColumnName("is_deleted")
+                .HasDefaultValue(false);
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at")
+                .IsRequired(false);
+
+            entity.Property(e => e.DeletedAt)
+                .HasColumnName("deleted_at")
+                .IsRequired(false);
+
+            // Foreign key constraint
+            entity.HasOne(d => d.Manager)
+                .WithMany(p => p.Vouchers)
+                .HasForeignKey(d => d.ManagerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Voucher_Manager");
+        });
+
+        modelBuilder.Entity<VoucherEmailHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_VoucherEmailHistory");
+
+            entity.ToTable("VoucherEmailHistory");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.SentAt)
+                .HasColumnName("sent_at")
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("status")
+                .HasDefaultValue("success");
+
+            // Foreign key constraints
+            entity.HasOne(d => d.Voucher)
+                .WithMany(p => p.VoucherEmailHistories)
+                .HasForeignKey(d => d.VoucherId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VoucherEmailHistory_Voucher");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.VoucherEmailHistories)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VoucherEmailHistory_User");
         });
 
         OnModelCreatingPartial(modelBuilder);

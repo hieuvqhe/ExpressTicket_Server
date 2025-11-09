@@ -54,4 +54,6 @@ public partial class User
     public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 
     public virtual SystemAdmin? SystemAdmin { get; set; }
+
+    public virtual ICollection<VoucherEmailHistory> VoucherEmailHistories { get; set; } = new List<VoucherEmailHistory>();
 }

@@ -36,14 +36,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly IShowtimeService _showtimeService;
         private readonly IComboService _comboService;
 
-        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, IScreenService screenService, ISeatTypeService seatTypeService , ISeatLayoutService seatLayoutService , CinemaDbCoreContext context, IContractValidationService contractValidationService,  ICinemaService cinemaService, IShowtimeService showtimeService , IComboService comboService)
+        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, IScreenService screenService, ISeatTypeService seatTypeService, ISeatLayoutService seatLayoutService, CinemaDbCoreContext context, IContractValidationService contractValidationService, ICinemaService cinemaService, IShowtimeService showtimeService, IComboService comboService)
         {
             _partnerService = partnerService;
             _contractService = contractService;
             _azureBlobService = azureBlobService;
             _screenService = screenService;
             _seatTypeService = seatTypeService;
-            _seatLayoutService = seatLayoutService; 
+            _seatLayoutService = seatLayoutService;
             _context = context;
             _contractValidationService = contractValidationService;
             _cinemaService = cinemaService;
@@ -1686,7 +1686,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = errorMessage, 
+                    Message = errorMessage,
                     Errors = ex.Errors
                 });
             }

@@ -255,9 +255,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (errors.Any())
                 throw new ValidationException(errors);
         }
-
- 
-
         private async Task ValidateNoOverlappingShowtimeAsync(int screenId, DateTime startTime, DateTime endTime, int excludeShowtimeId = 0)
         {
             var query = _context.Showtimes

@@ -147,6 +147,14 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<Catalog_GetMovieShowtimesOverview_ExampleFilter>();
     options.OperationFilter<Catalog_GetShowtimeSeats_ExampleFilter>();
     options.OperationFilter<Catalog_GetShowtimeSeatsStream_ExampleFilter>();
+    options.OperationFilter<ManagerCreateVoucherExampleFilter>();
+    options.OperationFilter<ManagerGetAllVouchersExampleFilter>();
+    options.OperationFilter<ManagerUpdateVoucherExampleFilter>();
+    options.OperationFilter<ManagerGetVoucherIdExampleFilter>();
+    options.OperationFilter<ManagerDeleteVoucherExampleFilter>();
+    options.OperationFilter<ManagerSendVoucherToAllExampleFilter>();
+    options.OperationFilter<ManagerSendVoucherToSpecificExampleFilter>();
+    options.OperationFilter<UserGetVouchersExampleFilter>();
 
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
@@ -198,6 +206,9 @@ builder.Services.AddScoped<ICatalogQueryService, CatalogQueryService>();
 builder.Services.AddSingleton<
     ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.IShowtimeSeatEventStream,
     ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.InMemoryShowtimeSeatEventStream>();
+builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
+builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
+builder.Services.AddScoped<IVoucherService, VoucherService>();
 
 builder.Services.AddAuthentication(options =>
 {
