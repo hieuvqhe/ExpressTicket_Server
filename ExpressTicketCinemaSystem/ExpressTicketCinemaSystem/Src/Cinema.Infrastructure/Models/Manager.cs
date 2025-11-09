@@ -17,4 +17,6 @@ public partial class Manager
     public virtual ICollection<Movie> Movies { get; set; } = new List<Movie>();
 
     public virtual User User { get; set; } = null!;
+
+    public virtual ICollection<Voucher> Vouchers { get; set; } = new List<Voucher>();
 }

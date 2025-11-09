@@ -119,5 +119,79 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             await SendEmailAsync(email, subject, htmlContent);
         }
+
+        // Gửi email voucher - THÊM MỚI
+        public async Task SendVoucherEmailAsync(string email, string userName, string voucherCode, string discountType, decimal discountValue, DateOnly validFrom, DateOnly validTo, string subject, string customMessage)
+        {
+            var discountText = discountType == "percent"
+                ? $"{discountValue}%"
+                : $"{discountValue:N0} VNĐ";
+
+            var htmlContent = $@"
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;'>
+                <h1 style='margin: 0; font-size: 28px;'>🎬 TicketExpress</h1>
+                <p style='margin: 10px 0 0 0; font-size: 16px;'>Hệ thống đặt vé rạp chiếu phim</p>
+            </div>
+            
+            <div style='padding: 30px; background: #f9f9f9;'>
+                <h2 style='color: #333; margin-bottom: 20px;'>🎉 Ưu Đãi Đặc Biệt</h2>
+                
+                <div style='background: white; padding: 25px; border-radius: 8px; border-left: 4px solid #667eea;'>
+                    <p style='margin-bottom: 15px;'>Xin chào <strong>{userName}</strong>,</p>
+                    <p style='margin-bottom: 20px;'>{customMessage}</p>
+                    
+                    <div style='background: #f8f9fa; border: 2px dashed #667eea; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;'>
+                        <h3 style='color: #667eea; margin: 0 0 10px 0; font-size: 18px;'>MÃ VOUCHER CỦA BẠN</h3>
+                        <div style='font-size: 28px; font-weight: bold; color: #667eea; letter-spacing: 2px;'>{voucherCode}</div>
+                    </div>
+                    
+                    <div style='background: #e7f3ff; padding: 20px; border-radius: 5px; margin: 20px 0;'>
+                        <h4 style='color: #0c5460; margin: 0 0 15px 0;'>📊 Thông tin giảm giá</h4>
+                        <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 10px;'>
+                            <div>
+                                <strong>Giá trị:</strong><br>
+                                <span style='font-size: 18px; color: #28a745;'>{discountText}</span>
+                            </div>
+                            <div>
+                                <strong>Thời hạn:</strong><br>
+                                {validFrom:dd/MM/yyyy} - {validTo:dd/MM/yyyy}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style='background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;'>
+                        <h4 style='color: #856404; margin: 0 0 10px 0;'>📝 Hướng dẫn sử dụng</h4>
+                        <ol style='color: #856404; line-height: 1.6; margin: 0; padding-left: 20px;'>
+                            <li>Chọn vé xem phim và dịch vụ mong muốn</li>
+                            <li>Nhập mã <strong>{voucherCode}</strong> tại bước thanh toán</li>
+                            <li>Hệ thống sẽ tự động áp dụng giảm giá</li>
+                        </ol>
+                    </div>
+                    
+                    <p style='text-align: center; margin: 20px 0 0 0;'>
+                        <strong>Hãy nhanh tay sử dụng voucher trước khi hết hạn!</strong>
+                    </p>
+                </div>
+                
+                <div style='margin-top: 25px; padding: 15px; background: #e7f3ff; border-radius: 5px;'>
+                    <p style='margin: 0; color: #0c5460;'>
+                        <strong>📞 Liên hệ hỗ trợ:</strong><br>
+                        Email: support@ticketexpress.com<br>
+                        Hotline: 1800-1234 (Miễn phí)
+                    </p>
+                </div>
+            </div>
+            
+            <div style='padding: 20px; text-align: center; background: #333; color: white;'>
+                <p style='margin: 0; font-size: 14px;'>
+                    © 2024 TicketExpress. All rights reserved.<br>
+                    Đây là email tự động, vui lòng không trả lời.
+                </p>
+            </div>
+        </div>";
+
+            await SendEmailAsync(email, subject, htmlContent);
+        }
     }
 }

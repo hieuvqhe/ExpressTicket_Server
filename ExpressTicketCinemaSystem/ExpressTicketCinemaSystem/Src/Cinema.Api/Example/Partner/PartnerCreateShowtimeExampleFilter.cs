@@ -30,14 +30,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "movie_id": 1,
-                          "screen_id": 1,
-                          "cinema_id": 1,
-                          "start_time": "2025-10-30T10:00:00.000Z",
-                          "end_time": "2025-10-30T12:30:00.000Z",
-                          "base_price": 150.00,
-                          "available_seats": 100,
-                          "format_type": "2D",
+                          "movieid": 1,
+                          "screenid": 1,
+                          "cinemaid": 1,
+                          "starttime": "2025-10-30T10:00:00.000Z",
+                          "endtime": "2025-10-30T12:30:00.000Z",
+                          "baseprice": 150.00,
+                          "availableseats": 100,
+                          "formattype": "2D",
                           "status": "scheduled"
                         }
                         """

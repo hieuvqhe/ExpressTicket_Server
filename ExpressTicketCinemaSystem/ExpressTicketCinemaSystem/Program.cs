@@ -121,6 +121,15 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<PartnerDeleteShowtimeExampleFilter>();
     options.OperationFilter<PartnerGetShowtimeByIdExampleFilter>();
     options.OperationFilter<PartnerGetAllShowtimesExampleFilter>();
+    options.OperationFilter<ManagerCreateVoucherExampleFilter>();
+    options.OperationFilter<ManagerGetAllVouchersExampleFilter>();
+    options.OperationFilter<ManagerUpdateVoucherExampleFilter>();
+    options.OperationFilter<ManagerGetVoucherIdExampleFilter>();
+    options.OperationFilter<ManagerDeleteVoucherExampleFilter>();
+    options.OperationFilter<ManagerSendVoucherToAllExampleFilter>();
+    options.OperationFilter<ManagerSendVoucherToSpecificExampleFilter>();
+    options.OperationFilter<UserGetVouchersExampleFilter>();
+
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
@@ -163,6 +172,7 @@ builder.Services.AddScoped<IContractValidationService, ContractValidationService
 builder.Services.AddScoped<ICinemaService, CinemaService>();
 builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
+builder.Services.AddScoped<IVoucherService, VoucherService>();
 
 builder.Services.AddAuthentication(options =>
 {
