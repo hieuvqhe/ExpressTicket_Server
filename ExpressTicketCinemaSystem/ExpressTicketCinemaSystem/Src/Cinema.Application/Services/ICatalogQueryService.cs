@@ -12,5 +12,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         Task<ShowtimeSeatMapResponse> GetShowtimeSeatMapAsync(
             int showtimeId, CancellationToken ct = default);
+        Task<CinemaShowtimesResponse> GetCinemaShowtimesAsync(
+            GetCinemaShowtimesQuery query, CancellationToken ct = default);
     }
 }

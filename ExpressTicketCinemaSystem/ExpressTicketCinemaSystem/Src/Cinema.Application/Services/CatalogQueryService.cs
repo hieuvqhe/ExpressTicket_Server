@@ -259,5 +259,198 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             return resp;
         }
+        public async Task<CinemaShowtimesResponse> GetCinemaShowtimesAsync(
+    GetCinemaShowtimesQuery query, CancellationToken ct = default)
+        {
+            // 1) Validate date
+            if (string.IsNullOrWhiteSpace(query.Date))
+                throw new ValidationException("date", "Thiếu tham số ngày (yyyy-MM-dd)");
+
+            if (!DateOnly.TryParseExact(query.Date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var dateOnly))
+                throw new ValidationException("date", "Định dạng ngày không hợp lệ (yyyy-MM-dd)");
+
+            var start = dateOnly.ToDateTime(TimeOnly.MinValue);
+            var end = dateOnly.ToDateTime(TimeOnly.MaxValue);
+
+            // 2) Base query
+            var q = _db.Showtimes
+                .AsNoTracking()
+                .Where(s => s.ShowDatetime >= start && s.ShowDatetime <= end && s.Movie.IsActive);
+
+            // 3) Apply filters
+            if (query.MovieId.HasValue)
+                q = q.Where(s => s.MovieId == query.MovieId.Value);
+
+            if (!string.IsNullOrWhiteSpace(query.City))
+                q = q.Where(s => s.Cinema.City == query.City);
+
+            if (!string.IsNullOrWhiteSpace(query.District))
+                q = q.Where(s => s.Cinema.District == query.District);
+
+            if (!string.IsNullOrWhiteSpace(query.Brand))
+                q = q.Where(s => s.Cinema.Code.StartsWith(query.Brand));
+
+            if (!string.IsNullOrWhiteSpace(query.ScreenType))
+                q = q.Where(s => s.Screen.ScreenType == query.ScreenType);
+
+            if (!string.IsNullOrWhiteSpace(query.FormatType))
+                q = q.Where(s => s.FormatType == query.FormatType);
+
+            if (!string.IsNullOrWhiteSpace(query.TimeFrom) && TimeOnly.TryParseExact(query.TimeFrom, "HH:mm",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var from))
+                q = q.Where(s => TimeOnly.FromDateTime(s.ShowDatetime) >= from);
+
+            if (!string.IsNullOrWhiteSpace(query.TimeTo) && TimeOnly.TryParseExact(query.TimeTo, "HH:mm",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var to))
+                q = q.Where(s => TimeOnly.FromDateTime(s.ShowDatetime) <= to);
+
+            // 4) Sort
+            q = (query.SortBy?.ToLowerInvariant(), query.SortOrder?.ToLowerInvariant()) switch
+            {
+                ("cinema", "desc") => q.OrderByDescending(s => s.Cinema.CinemaName).ThenBy(s => s.ShowDatetime),
+                ("cinema", _) => q.OrderBy(s => s.Cinema.CinemaName).ThenBy(s => s.ShowDatetime),
+
+                ("movie", "desc") => q.OrderByDescending(s => s.Movie.Title).ThenBy(s => s.ShowDatetime),
+                ("movie", _) => q.OrderBy(s => s.Movie.Title).ThenBy(s => s.ShowDatetime),
+
+                ("time", "desc") => q.OrderByDescending(s => s.ShowDatetime),
+                _ => q.OrderBy(s => s.ShowDatetime)
+            };
+
+            // 5) Get data
+            var raw = await q.Select(s => new
+            {
+                s.ShowtimeId,
+                s.ShowDatetime,
+                s.EndTime,
+                s.BasePrice,
+                s.FormatType,
+                s.AvailableSeats,
+                Cinema = new
+                {
+                    s.Cinema.CinemaId,
+                    s.Cinema.CinemaName,
+                    s.Cinema.Address,
+                    s.Cinema.City,
+                    s.Cinema.District,
+                    s.Cinema.Code,
+                    s.Cinema.LogoUrl
+                },
+                Screen = new
+                {
+                    s.Screen.ScreenId,
+                    s.Screen.ScreenName,
+                    s.Screen.ScreenType,
+                    s.Screen.SoundSystem
+                },
+                Movie = new
+                {
+                    s.Movie.MovieId,
+                    s.Movie.Title,
+                    s.Movie.PosterUrl,
+                    s.Movie.DurationMinutes,
+                }
+            }).ToListAsync(ct);
+
+            // 6) Get available brands
+            var brands = raw.Select(x => x.Cinema.Code?.Split('_').FirstOrDefault() ?? "")
+                            .Where(b => !string.IsNullOrEmpty(b))
+                            .Distinct()
+                            .OrderBy(b => b)
+                            .Select(b => new BrandItem { Code = b, Name = b, LogoUrl = null })
+                            .ToList();
+
+            // 7) Group by Cinema → Movie → Screen
+            var cinemaGroups = raw.GroupBy(x => x.Cinema).ToList();
+
+            // 8) Pagination
+            int page = query.Page < 1 ? 1 : query.Page;
+            int limit = (query.Limit < 1 || query.Limit > 100) ? 10 : query.Limit;
+            int total = cinemaGroups.Count();
+            int totalPages = (int)Math.Ceiling(total / (double)limit);
+            var pageCinemas = cinemaGroups.Skip((page - 1) * limit).Take(limit);
+
+            var cinemaItems = new List<CinemaShowtimeGroup>();
+
+            foreach (var cinemaGroup in pageCinemas)
+            {
+                var cinemaItem = new CinemaShowtimeGroup
+                {
+                    CinemaId = cinemaGroup.Key.CinemaId,
+                    CinemaName = cinemaGroup.Key.CinemaName,
+                    Address = cinemaGroup.Key.Address ?? "",
+                    City = cinemaGroup.Key.City ?? "",
+                    District = cinemaGroup.Key.District ?? "",
+                    BrandCode = cinemaGroup.Key.Code?.Split('_').FirstOrDefault() ?? "",
+                    LogoUrl = cinemaGroup.Key.LogoUrl
+                };
+
+                // Group by Movie within this cinema
+                var movieGroups = cinemaGroup.GroupBy(x => x.Movie);
+
+                foreach (var movieGroup in movieGroups)
+                {
+                    var movieItem = new MovieShowtimeGroup
+                    {
+                        MovieId = movieGroup.Key.MovieId,
+                        Title = movieGroup.Key.Title,
+                        PosterUrl = movieGroup.Key.PosterUrl ?? "",
+                        Duration = movieGroup.Key.DurationMinutes.ToString()
+                    };
+
+                    // Group by Screen within this movie
+                    var screenGroups = movieGroup.GroupBy(x => x.Screen);
+
+                    foreach (var screenGroup in screenGroups)
+                    {
+                        var screenItem = new CinemaScreenShowtimeGroup
+                        {
+                            ScreenId = screenGroup.Key.ScreenId,
+                            ScreenName = screenGroup.Key.ScreenName,
+                            ScreenType = screenGroup.Key.ScreenType ?? "",
+                            SoundSystem = screenGroup.Key.SoundSystem ?? ""
+                        };
+
+                        screenItem.Showtimes = screenGroup.Select(x => new ShowtimeBriefItem
+                        {
+                            ShowtimeId = x.ShowtimeId,
+                            StartTime = x.ShowDatetime,
+                            EndTime = x.EndTime,
+                            FormatType = x.FormatType ?? "",
+                            BasePrice = x.BasePrice,
+                            AvailableSeats = x.AvailableSeats ?? 0,
+                            IsSoldOut = (x.AvailableSeats ?? 0) <= 0,
+                            Label = string.IsNullOrEmpty(x.FormatType) ? "2D" : x.FormatType
+                        }).ToList();
+
+                        movieItem.Screens.Add(screenItem);
+                    }
+
+                    cinemaItem.Movies.Add(movieItem);
+                }
+
+                cinemaItems.Add(cinemaItem);
+            }
+
+            var response = new CinemaShowtimesResponse
+            {
+                Date = dateOnly,
+                Brands = brands,
+                Cinemas = new PaginatedCinemaShowtimes
+                {
+                    Items = cinemaItems,
+                    Pagination = new PaginationMeta
+                    {
+                        CurrentPage = page,
+                        PageSize = limit,
+                        TotalCount = total,
+                        TotalPages = totalPages
+                    }
+                }
+            };
+
+            return response;
+        }
     }
 }

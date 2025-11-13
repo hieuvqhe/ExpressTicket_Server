@@ -20,6 +20,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Serialization;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Booking;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Catalog;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -208,6 +209,7 @@ builder.Services.AddSingleton<
     ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.InMemoryShowtimeSeatEventStream>();
 builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
+builder.Services.AddHostedService<BookingSessionCleanupService>(); // ✅ FIX: Cleanup expired sessions
 builder.Services.AddScoped<IVoucherService, VoucherService>();
 
 builder.Services.AddAuthentication(options =>

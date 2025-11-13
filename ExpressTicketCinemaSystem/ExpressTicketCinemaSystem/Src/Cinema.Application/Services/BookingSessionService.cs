@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Booking.Requests;
@@ -37,14 +38,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     {
         private readonly CinemaDbCoreContext _db;
         private readonly InfraRT.IShowtimeSeatEventStream _eventStream;
+        private readonly ILogger<BookingSessionService> _logger;
 
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan SeatLockTtl = TimeSpan.FromMinutes(3);
+        private const int MaxSseRetryAttempts = 3;
+        private static readonly TimeSpan SseRetryDelay = TimeSpan.FromMilliseconds(100);
 
-        public BookingSessionService(CinemaDbCoreContext db, InfraRT.IShowtimeSeatEventStream eventStream)
+        public BookingSessionService(
+            CinemaDbCoreContext db,
+            InfraRT.IShowtimeSeatEventStream eventStream,
+            ILogger<BookingSessionService> logger)
         {
             _db = db;
             _eventStream = eventStream;
+            _logger = logger;
         }
 
         private static int? GetUserId(ClaimsPrincipal? user)
@@ -167,43 +175,71 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         {
             var now = DateTime.UtcNow;
 
-            var entity = await _db.BookingSessions
-                .FirstOrDefaultAsync(x => x.Id == bookingSessionId, ct);
-
-            if (entity == null)
-                throw new NotFoundException("Không tìm thấy session");
-
-            if (entity.State != "DRAFT")
-                throw new ValidationException("session", "Session không còn trạng thái DRAFT");
-
-            if (entity.ExpiresAt <= now)
-                throw new ValidationException("session", "Session đã hết hạn");
-
-            // 1) Gia hạn session TTL
-            entity.ExpiresAt = now.Add(SessionTtl);
-            entity.UpdatedAt = now;
-
-            // 2) Gia hạn seat locks thuộc session (nếu còn hiệu lực)
-            var locks = await _db.SeatLocks
-                .Where(l => l.LockedBySession == bookingSessionId && l.LockedUntil > now)
-                .ToListAsync(ct);
-
-            foreach (var l in locks)
+            // ✅ FIX: Sử dụng transaction với optimistic locking
+            using var tx = await _db.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.RepeatableRead, ct);
+            try
             {
-                l.LockedUntil = now.Add(SeatLockTtl);
+                var entity = await _db.BookingSessions
+                    .FirstOrDefaultAsync(x => x.Id == bookingSessionId, ct);
+
+                if (entity == null)
+                    throw new NotFoundException("Không tìm thấy session");
+
+                if (entity.State != "DRAFT")
+                    throw new ValidationException("session", "Session không còn trạng thái DRAFT");
+
+                if (entity.ExpiresAt <= now)
+                    throw new ValidationException("session", "Session đã hết hạn");
+
+                // 1) Gia hạn session TTL + Version (optimistic locking)
+                entity.ExpiresAt = now.Add(SessionTtl);
+                entity.UpdatedAt = now;
+                entity.Version++; // Tăng version để detect concurrent updates
+
+                // 2) Gia hạn seat locks thuộc session (nếu còn hiệu lực)
+                var locks = await _db.SeatLocks
+                    .Where(l => l.LockedBySession == bookingSessionId && l.LockedUntil > now)
+                    .ToListAsync(ct);
+
+                foreach (var l in locks)
+                {
+                    l.LockedUntil = now.Add(SeatLockTtl);
+                }
+
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                await tx.RollbackAsync(ct);
+                _logger.LogWarning(ex, "Optimistic locking conflict for session {SessionId}", bookingSessionId);
+                throw new ConflictException("session", "Session đã bị cập nhật bởi request khác. Vui lòng refresh và thử lại.");
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync(ct);
+                _logger.LogError(ex, "Error touching session {SessionId}", bookingSessionId);
+                throw;
             }
 
-            await _db.SaveChangesAsync(ct);
+            // Reload để lấy entity mới nhất
+            var updatedEntity = await _db.BookingSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == bookingSessionId, ct);
+
+            if (updatedEntity == null)
+                throw new NotFoundException("Không tìm thấy session sau khi cập nhật");
 
             return new BookingSessionResponse
             {
-                BookingSessionId = entity.Id,
-                State = entity.State,
-                ShowtimeId = entity.ShowtimeId,
-                Items = JsonSerializer.Deserialize<object>(entity.ItemsJson ?? @"{""seats"":[],""combos"":[]}")!,
-                Pricing = JsonSerializer.Deserialize<object>(entity.PricingJson ?? @"{""subtotal"":0,""discount"":0,""fees"":0,""total"":0,""currency"":""VND""}")!,
-                ExpiresAt = entity.ExpiresAt,
-                Version = entity.Version
+                BookingSessionId = updatedEntity.Id,
+                State = updatedEntity.State,
+                ShowtimeId = updatedEntity.ShowtimeId,
+                Items = JsonSerializer.Deserialize<object>(updatedEntity.ItemsJson ?? @"{""seats"":[],""combos"":[]}")!,
+                Pricing = JsonSerializer.Deserialize<object>(updatedEntity.PricingJson ?? @"{""subtotal"":0,""discount"":0,""fees"":0,""total"":0,""currency"":""VND""}")!,
+                ExpiresAt = updatedEntity.ExpiresAt,
+                Version = updatedEntity.Version
             };
         }
         public async Task<CancelBookingSessionResponse> CancelAsync(Guid bookingSessionId, CancellationToken ct = default)
@@ -219,9 +255,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (session.State != "DRAFT")
                 throw new ValidationException("session", "Chỉ hủy được session ở trạng thái DRAFT");
 
-            using var tx = await _db.Database.BeginTransactionAsync(ct);
+            using var tx = await _db.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable, ct);
             try
             {
+                await _db.Entry(session).ReloadAsync(ct);
+                if (session.State != "DRAFT")
+                    throw new ValidationException("session", "Chỉ hủy được session ở trạng thái DRAFT");
+
                 var locks = await _db.SeatLocks
                     .Where(l => l.LockedBySession == bookingSessionId)
                     .Select(l => new { l.SeatId, l.ShowtimeId })
@@ -237,19 +278,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                 session.State = "CANCELED";
                 session.UpdatedAt = now;
+                session.Version++; // Tăng version để detect concurrent updates
 
                 await _db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
-
-                foreach (var lk in locks)
+                await PublishSeatEventsWithRetryAsync(locks.Select(lk => new InfraRT.SeatEvent
                 {
-                    await _eventStream.PublishAsync(new InfraRT.SeatEvent
-                    {
-                        ShowtimeId = lk.ShowtimeId,
-                        SeatId = lk.SeatId,
-                        Type = InfraRT.SeatEventType.Released
-                    }, ct);
-                }
+                    ShowtimeId = lk.ShowtimeId,
+                    SeatId = lk.SeatId,
+                    Type = InfraRT.SeatEventType.Released
+                }).ToList(), ct);
 
                 return new CancelBookingSessionResponse
                 {
@@ -259,10 +297,52 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     State = session.State
                 };
             }
-            catch
+            catch (DbUpdateConcurrencyException ex)
             {
                 await tx.RollbackAsync(ct);
+                _logger.LogWarning(ex, "Optimistic locking conflict for session {SessionId}", bookingSessionId);
+                throw new ConflictException("session", "Session đã bị cập nhật bởi request khác. Vui lòng refresh và thử lại.");
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync(ct);
+                _logger.LogError(ex, "Error canceling session {SessionId}", bookingSessionId);
                 throw;
+            }
+        }
+        private async Task PublishSeatEventsWithRetryAsync(
+            System.Collections.Generic.List<InfraRT.SeatEvent> events,
+            CancellationToken ct = default)
+        {
+            if (events == null || events.Count == 0) return;
+
+            foreach (var evt in events)
+            {
+                int attempt = 0;
+                bool success = false;
+
+                while (attempt < MaxSseRetryAttempts && !success)
+                {
+                    try
+                    {
+                        await _eventStream.PublishAsync(evt, ct);
+                        success = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        attempt++;
+                        if (attempt >= MaxSseRetryAttempts)
+                        {
+                            _logger.LogWarning(ex,
+                                "Failed to publish SSE event after {Attempts} attempts. ShowtimeId: {ShowtimeId}, SeatId: {SeatId}",
+                                MaxSseRetryAttempts, evt.ShowtimeId, evt.SeatId);
+                        }
+                        else
+                        {
+                            await Task.Delay(SseRetryDelay, ct);
+                        }
+                    }
+                }
             }
         }
     }

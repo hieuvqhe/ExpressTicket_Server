@@ -223,61 +223,99 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new UnauthorizedException("Bạn không có quyền cập nhật voucher này");
             }
 
-            // Validate voucher code uniqueness if changed
-            if (!string.IsNullOrEmpty(request.VoucherCode) && request.VoucherCode != voucher.VoucherCode)
+            // ✅ THÊM VALIDATE: Kiểm tra voucher đã được gửi chưa
+            bool hasBeenSent = await HasVoucherBeenSentAsync(voucherId);
+            if (hasBeenSent)
             {
-                if (await ValidateVoucherCodeAsync(request.VoucherCode, voucherId))
+                // Nếu voucher đã gửi, chỉ cho phép cập nhật một số field
+                var allowedUpdates = new List<string>();
+
+                if (!string.IsNullOrEmpty(request.VoucherCode) && request.VoucherCode != voucher.VoucherCode)
                 {
-                    throw new ValidationException("VoucherCode", "Mã voucher đã tồn tại");
+                    throw new ValidationException("VoucherCode", "Không thể thay đổi mã voucher sau khi đã gửi cho users");
                 }
-                voucher.VoucherCode = request.VoucherCode.ToUpper();
-            }
 
-            // NEW: Validate ValidFrom không được ở quá khứ nếu có thay đổi
-            if (request.ValidFrom.HasValue && request.ValidFrom.Value < DateOnly.FromDateTime(DateTime.UtcNow))
+                if (!string.IsNullOrEmpty(request.DiscountType) && request.DiscountType != voucher.DiscountType)
+                {
+                    throw new ValidationException("DiscountType", "Không thể thay đổi loại giảm giá sau khi đã gửi cho users");
+                }
+
+                if (request.DiscountVal.HasValue && request.DiscountVal.Value != voucher.DiscountVal)
+                {
+                    throw new ValidationException("DiscountVal", "Không thể thay đổi giá trị giảm giá sau khi đã gửi cho users");
+                }
+
+                if (request.ValidFrom.HasValue && request.ValidFrom.Value != voucher.ValidFrom)
+                {
+                    throw new ValidationException("ValidFrom", "Không thể thay đổi ngày bắt đầu sau khi đã gửi cho users");
+                }
+
+                // Cho phép cập nhật các field sau ngay cả khi đã gửi
+                if (request.ValidTo.HasValue)
+                    voucher.ValidTo = request.ValidTo.Value;
+
+                if (request.UsageLimit.HasValue)
+                    voucher.UsageLimit = request.UsageLimit.Value;
+
+                if (request.Description != null)
+                    voucher.Description = request.Description;
+
+                if (request.IsActive.HasValue)
+                    voucher.IsActive = request.IsActive.Value;
+            }
+            else
             {
-                throw new ValidationException("ValidFrom", "Ngày bắt đầu không được ở quá khứ");
+                // ❌ Voucher chưa gửi - cho phép cập nhật tất cả (logic cũ)
+                if (!string.IsNullOrEmpty(request.VoucherCode) && request.VoucherCode != voucher.VoucherCode)
+                {
+                    if (await ValidateVoucherCodeAsync(request.VoucherCode, voucherId))
+                    {
+                        throw new ValidationException("VoucherCode", "Mã voucher đã tồn tại");
+                    }
+                    voucher.VoucherCode = request.VoucherCode.ToUpper();
+                }
+
+                if (!string.IsNullOrEmpty(request.DiscountType))
+                    voucher.DiscountType = request.DiscountType;
+
+                if (request.DiscountVal.HasValue)
+                {
+                    if ((request.DiscountType ?? voucher.DiscountType) == "percent" && request.DiscountVal > 100)
+                    {
+                        throw new ValidationException("DiscountVal", "Giá trị giảm giá phần trăm không được vượt quá 100");
+                    }
+                    voucher.DiscountVal = request.DiscountVal.Value;
+                }
+
+                if (request.ValidFrom.HasValue)
+                {
+                    if (request.ValidFrom.Value < DateOnly.FromDateTime(DateTime.UtcNow))
+                    {
+                        throw new ValidationException("ValidFrom", "Ngày bắt đầu không được ở quá khứ");
+                    }
+                    voucher.ValidFrom = request.ValidFrom.Value;
+                }
+
+                if (request.ValidTo.HasValue)
+                    voucher.ValidTo = request.ValidTo.Value;
+
+                if (request.UsageLimit.HasValue)
+                    voucher.UsageLimit = request.UsageLimit.Value;
+
+                if (request.Description != null)
+                    voucher.Description = request.Description;
+
+                if (request.IsActive.HasValue)
+                    voucher.IsActive = request.IsActive.Value;
             }
 
-            // Validate dates nếu có thay đổi
-            var validFrom = request.ValidFrom ?? voucher.ValidFrom;
-            var validTo = request.ValidTo ?? voucher.ValidTo;
-            if (validTo <= validFrom)
+            // Validate dates sau khi update
+            if (voucher.ValidTo <= voucher.ValidFrom)
             {
                 throw new ValidationException("ValidTo", "Ngày kết thúc phải sau ngày bắt đầu");
             }
 
-            // Update fields if provided
-            if (!string.IsNullOrEmpty(request.DiscountType))
-                voucher.DiscountType = request.DiscountType;
-
-            if (request.DiscountVal.HasValue)
-            {
-                // Validate discount value for percent type
-                if ((request.DiscountType ?? voucher.DiscountType) == "percent" && request.DiscountVal > 100)
-                {
-                    throw new ValidationException("DiscountVal", "Giá trị giảm giá phần trăm không được vượt quá 100");
-                }
-                voucher.DiscountVal = request.DiscountVal.Value;
-            }
-
-            if (request.ValidFrom.HasValue)
-                voucher.ValidFrom = request.ValidFrom.Value;
-
-            if (request.ValidTo.HasValue)
-                voucher.ValidTo = request.ValidTo.Value;
-
-            if (request.UsageLimit.HasValue)
-                voucher.UsageLimit = request.UsageLimit.Value;
-
-            if (request.Description != null)
-                voucher.Description = request.Description;
-
-            if (request.IsActive.HasValue)
-                voucher.IsActive = request.IsActive.Value;
-
             voucher.UpdatedAt = DateTime.UtcNow;
-
             await _context.SaveChangesAsync();
 
             return await MapToVoucherResponseAsync(voucher);
@@ -296,6 +334,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (voucher.ManagerId != managerId)
             {
                 throw new UnauthorizedException("Bạn không có quyền xóa voucher này");
+            }
+
+            if (await HasVoucherBeenSentAsync(voucherId))
+            {
+                throw new ValidationException("Voucher", "Không thể xóa voucher đã được gửi cho users");
             }
 
             voucher.IsDeleted = true;
@@ -318,6 +361,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (voucher.ManagerId != managerId)
             {
                 throw new UnauthorizedException("Bạn không có quyền thay đổi trạng thái voucher này");
+            }
+
+            if (!voucher.IsActive && await HasVoucherBeenSentAsync(voucherId))
+            {
+                throw new ValidationException("Voucher", "Không thể vô hiệu hóa voucher đã được gửi cho users");
             }
 
             voucher.IsActive = !voucher.IsActive;
@@ -452,7 +500,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var sentCount = 0;
             var failedCount = 0;
 
-            foreach (var user in users)
+            // ✅ THÊM: Lấy danh sách user đã nhận voucher này
+            var existingSentUserIds = await _context.VoucherEmailHistories
+                .Where(h => h.VoucherId == voucher.VoucherId && h.Status == "success")
+                .Select(h => h.UserId)
+                .ToListAsync();
+
+            // ✅ Lọc ra chỉ những user CHƯA nhận voucher này
+            var usersToSend = users.Where(u => !existingSentUserIds.Contains(u.UserId)).ToList();
+
+            if (!usersToSend.Any())
+            {
+                throw new ValidationException("Users", "Tất cả users đã nhận voucher này trước đó");
+            }
+
+            foreach (var user in usersToSend)
             {
                 try
                 {
@@ -766,6 +828,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .FirstOrDefaultAsync();
 
             return voucher;
+        }
+        private async Task<bool> HasVoucherBeenSentAsync(int voucherId)
+        {
+            return await _context.VoucherEmailHistories
+                .AnyAsync(h => h.VoucherId == voucherId && h.Status == "success");
+        }
+
+        private async Task<bool> HasUserReceivedVoucherAsync(int voucherId, int userId)
+        {
+            return await _context.VoucherEmailHistories
+                .AnyAsync(h => h.VoucherId == voucherId && h.UserId == userId && h.Status == "success");
         }
     }
 }

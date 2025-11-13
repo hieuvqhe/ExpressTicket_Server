@@ -285,7 +285,8 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.UserId).HasColumnName("user_id");
             entity.Property(e => e.Version)
                 .HasDefaultValue(1)
-                .HasColumnName("version");
+                .HasColumnName("version")
+                .IsConcurrencyToken(); // Optimistic locking: đảm bảo không bị lost update khi có concurrent requests
 
             entity.HasOne(d => d.Showtime).WithMany(p => p.BookingSessions)
                 .HasForeignKey(d => d.ShowtimeId)

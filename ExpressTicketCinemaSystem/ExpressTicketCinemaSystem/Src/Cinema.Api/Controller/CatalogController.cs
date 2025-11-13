@@ -153,34 +153,96 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 }
             }, hbCts.Token);
 
-            // 3) Stream delta từ broker
-            await foreach (var ev in _eventStream.SubscribeAsync(showtimeId, ct))
+            // 3) Stream delta từ broker với error handling
+            try
             {
-                switch (ev.Type)
+                await foreach (var ev in _eventStream.SubscribeAsync(showtimeId, ct))
                 {
-                    case InfraRT.SeatEventType.Locked:
-                        await WriteSseAsync("seat_locked", new RT.SeatDeltaPayload
+                    try
+                    {
+                        switch (ev.Type)
                         {
-                            SeatId = ev.SeatId,
-                            LockedUntil = ev.LockedUntil
-                        }, ct);
-                        break;
+                            case InfraRT.SeatEventType.Locked:
+                                await WriteSseAsync("seat_locked", new RT.SeatDeltaPayload
+                                {
+                                    SeatId = ev.SeatId,
+                                    LockedUntil = ev.LockedUntil
+                                }, ct);
+                                break;
 
-                    case InfraRT.SeatEventType.Released:
-                        await WriteSseAsync("seat_released", new RT.SeatDeltaPayload
+                            case InfraRT.SeatEventType.Released:
+                                await WriteSseAsync("seat_released", new RT.SeatDeltaPayload
+                                {
+                                    SeatId = ev.SeatId,
+                                    LockedUntil = null
+                                }, ct);
+                                break;
+
+                            case InfraRT.SeatEventType.Sold:
+                                await WriteSseAsync("seat_sold", new { seatId = ev.SeatId }, ct);
+                                break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // ✅ Log lỗi nhưng tiếp tục stream - không break connection
+                        // Có thể gửi error event cho client nếu cần
+                        try
                         {
-                            SeatId = ev.SeatId,
-                            LockedUntil = null
-                        }, ct);
-                        break;
-
-                    case InfraRT.SeatEventType.Sold:
-                        await WriteSseAsync("seat_sold", new { seatId = ev.SeatId }, ct);
-                        break;
+                            await WriteSseAsync("error", new { message = "Lỗi xử lý sự kiện", seatId = ev.SeatId }, ct);
+                        }
+                        catch { /* ignore - connection có thể đã đóng */ }
+                    }
                 }
             }
-
-            hbCts.Cancel();
+            catch (OperationCanceledException)
+            {
+                // ✅ Client disconnect - normal case, không cần log
+            }
+            catch (Exception)
+            {
+                // ✅ Lỗi stream - gửi error event cho client
+                try
+                {
+                    await WriteSseAsync("error", new { message = "Lỗi kết nối stream" }, ct);
+                }
+                catch { /* ignore */ }
+            }
+            finally
+            {
+                hbCts.Cancel();
+            }
+        }
+        /// <summary>
+        /// Lấy danh sách suất chiếu theo rạp (cho màn home)
+        /// </summary>
+        [HttpGet("showtimes/by-cinema")]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(SuccessResponse<CinemaShowtimesResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetCinemaShowtimes(
+            [FromQuery] GetCinemaShowtimesQuery query,
+            CancellationToken ct)
+        {
+            try
+            {
+                var result = await _service.GetCinemaShowtimesAsync(query, ct);
+                return Ok(new SuccessResponse<CinemaShowtimesResponse>
+                {
+                    Message = "Lấy danh sách suất chiếu theo rạp thành công",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var msg = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse { Message = msg, Errors = ex.Errors });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách suất chiếu." });
+            }
         }
 
         // ===== Helpers =====

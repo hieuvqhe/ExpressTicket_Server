@@ -56,6 +56,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         [HttpPost]
         [ProducesResponseType(typeof(SuccessResponse<VoucherResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> CreateVoucher([FromBody] CreateVoucherRequest request)
@@ -74,9 +75,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (ValidationException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
                 return BadRequest(new ValidationErrorResponse
                 {
-                    Message = "Lỗi xác thực dữ liệu",
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
@@ -105,6 +116,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <returns>Paginated list of contracts</returns>
         [HttpGet]
         [ProducesResponseType(typeof(SuccessResponse<PaginatedVouchersResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetAllVouchers(
             [FromQuery] int page = 1,
@@ -126,6 +139,28 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
             catch (Exception ex)
             {
                 return StatusCode(500, new ErrorResponse
@@ -141,8 +176,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="id">Voucher ID</param>
         [HttpGet("{id}")]
         [ProducesResponseType(typeof(SuccessResponse<VoucherResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetVoucherById(int id)
         {
@@ -158,17 +194,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
-            catch (NotFoundException ex)
+            catch (ValidationException ex)
             {
-                return NotFound(new ErrorResponse { Message = ex.Message });
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -186,8 +232,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         [HttpPut("{id}")]
         [ProducesResponseType(typeof(SuccessResponse<VoucherResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> UpdateVoucher(int id, [FromBody] UpdateVoucherRequest request)
         {
@@ -205,23 +251,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (ValidationException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
                 return BadRequest(new ValidationErrorResponse
                 {
-                    Message = "Lỗi xác thực dữ liệu",
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (NotFoundException ex)
             {
                 return NotFound(new ErrorResponse { Message = ex.Message });
-            }
-            catch (UnauthorizedException ex)
-            {
-                return Unauthorized(new ValidationErrorResponse
-                {
-                    Message = "Xác thực thất bại",
-                    Errors = ex.Errors
-                });
             }
             catch (Exception ex)
             {
@@ -238,8 +286,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="id">Voucher ID</param>
         [HttpDelete("{id}")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> DeleteVoucher(int id)
         {
@@ -254,17 +303,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
-            catch (NotFoundException ex)
+            catch (ValidationException ex)
             {
-                return NotFound(new ErrorResponse { Message = ex.Message });
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -281,8 +340,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="id">Voucher ID</param>
         [HttpPatch("{id}/toggle-status")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> ToggleVoucherStatus(int id)
         {
@@ -297,17 +357,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
-            catch (NotFoundException ex)
+            catch (ValidationException ex)
             {
-                return NotFound(new ErrorResponse { Message = ex.Message });
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -324,8 +394,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="id">Voucher ID</param>
         [HttpGet("{id}/email-history")]
         [ProducesResponseType(typeof(SuccessResponse<List<VoucherEmailHistoryResponse>>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> GetVoucherEmailHistory(int id)
         {
@@ -341,17 +412,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 };
                 return Ok(response);
             }
-            catch (NotFoundException ex)
+            catch (ValidationException ex)
             {
-                return NotFound(new ErrorResponse { Message = ex.Message });
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
             }
             catch (UnauthorizedException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
                 return Unauthorized(new ValidationErrorResponse
                 {
-                    Message = "Xác thực thất bại",
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -369,8 +450,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         [HttpPost("{id}/send-to-all-users")]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> SendVoucherToAllUsers(int id, [FromBody] SendVoucherToAllRequest request)
         {
@@ -388,23 +469,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (ValidationException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
                 return BadRequest(new ValidationErrorResponse
                 {
-                    Message = "Lỗi xác thực dữ liệu",
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (NotFoundException ex)
             {
                 return NotFound(new ErrorResponse { Message = ex.Message });
-            }
-            catch (UnauthorizedException ex)
-            {
-                return Unauthorized(new ValidationErrorResponse
-                {
-                    Message = "Xác thực thất bại",
-                    Errors = ex.Errors
-                });
             }
             catch (Exception ex)
             {
@@ -422,8 +505,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         [HttpPost("{id}/send-to-specific-users")]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> SendVoucherToSpecificUsers(int id, [FromBody] SendVoucherEmailRequest request)
         {
@@ -434,30 +517,32 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
                 var response = new SuccessResponse<SendVoucherEmailResponse>
                 {
-                    Message = $"Đã gửi voucher thành công đến {result.TotalSent} users, thất bại: {result.TotalFailed}",
+                    Message = $"Đã gửi voucher thành công đến {result.TotalSent} users mới, thất bại: {result.TotalFailed}",
                     Result = result
                 };
                 return Ok(response);
             }
             catch (ValidationException ex)
             {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
                 return BadRequest(new ValidationErrorResponse
                 {
-                    Message = "Lỗi xác thực dữ liệu",
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
                     Errors = ex.Errors
                 });
             }
             catch (NotFoundException ex)
             {
                 return NotFound(new ErrorResponse { Message = ex.Message });
-            }
-            catch (UnauthorizedException ex)
-            {
-                return Unauthorized(new ValidationErrorResponse
-                {
-                    Message = "Xác thực thất bại",
-                    Errors = ex.Errors
-                });
             }
             catch (Exception ex)
             {
