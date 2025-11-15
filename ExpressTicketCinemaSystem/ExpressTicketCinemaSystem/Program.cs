@@ -202,6 +202,11 @@ builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
 builder.Services.AddScoped<IComboService, ComboService>();
 builder.Services.AddScoped<IBookingSessionService, BookingSessionService>();
+builder.Services.AddScoped<IBookingSessionComboService, BookingSessionComboService>();
+builder.Services.AddScoped<IBookingPricingService, BookingPricingService>();
+builder.Services.AddScoped<IBookingCheckoutService, BookingCheckoutService>();
+builder.Services.AddScoped<IBookingExtrasService, BookingExtrasService>();
+builder.Services.AddScoped<IBookingComboQueryService, BookingComboQueryService>();
 builder.Services.AddScoped<ISeatLockAppService, SeatLockAppService>();
 builder.Services.AddScoped<ICatalogQueryService, CatalogQueryService>();
 builder.Services.AddSingleton<
@@ -209,8 +214,12 @@ builder.Services.AddSingleton<
     ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.InMemoryShowtimeSeatEventStream>();
 builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
-builder.Services.AddHostedService<BookingSessionCleanupService>(); // ✅ FIX: Cleanup expired sessions
+builder.Services.AddHostedService<BookingSessionCleanupService>(); 
 builder.Services.AddScoped<IVoucherService, VoucherService>();
+builder.Services.AddHttpClient(); // For PayOS HTTP calls
+builder.Services.AddScoped<IPayOSService, PayOSService>();
+builder.Services.AddHostedService<PaymentPollingService>(); 
+builder.Services.AddHostedService<OrderExpirationService>();
 
 builder.Services.AddAuthentication(options =>
 {

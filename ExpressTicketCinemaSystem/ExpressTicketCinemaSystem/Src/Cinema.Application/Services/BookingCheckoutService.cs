@@ -1,6 +1,7 @@
 ﻿// Application/Services/BookingCheckoutService.cs
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Booking.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Booking.Responses;
@@ -11,12 +12,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class BookingCheckoutService : IBookingCheckoutService
     {
         private readonly CinemaDbCoreContext _db;
+        private readonly ILogger<BookingCheckoutService> _logger;
 
-        private static readonly TimeSpan PaymentHoldTtl = TimeSpan.FromMinutes(10); // giữ ghế tới khi thanh toán
+        private static readonly TimeSpan PaymentHoldTtl = TimeSpan.FromMinutes(15); // giữ ghế tới khi thanh toán (phải >= payment expires time)
 
-        public BookingCheckoutService(CinemaDbCoreContext db)
+        public BookingCheckoutService(CinemaDbCoreContext db, ILogger<BookingCheckoutService> logger)
         {
             _db = db;
+            _logger = logger;
         }
 
         private static PricingBreakdown ReadPricing(string? pricingJson)
@@ -54,8 +57,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             // Đọc pricing hiện tại
             var pricing = ReadPricing(sess.PricingJson);
+            _logger.LogInformation("Checkout - Pricing: Total={Total}, Currency={Currency}, SeatsSubtotal={SeatsSubtotal}, CombosSubtotal={CombosSubtotal}",
+                pricing.Total, pricing.Currency, pricing.SeatsSubtotal, pricing.CombosSubtotal);
+            
             if (pricing.Total <= 0)
+            {
+                _logger.LogWarning("Checkout failed - Invalid pricing: Total={Total}", pricing.Total);
                 throw new ValidationException("pricing", "Giá trị thanh toán không hợp lệ");
+            }
 
             // Gia hạn locks đến thời hạn payment
             var lockUntil = now.Add(PaymentHoldTtl);
@@ -64,24 +73,90 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .ToListAsync(ct);
             foreach (var l in locks) l.LockedUntil = lockUntil;
 
-            // Tạo Order (đơn giản – bạn có thể thay bằng entity Order thực tế)
+            // Tạo Order
+            var orderId = Guid.NewGuid().ToString("N");
+            var currency = string.IsNullOrWhiteSpace(pricing.Currency) ? "VND" : pricing.Currency;
+            
+            _logger.LogInformation("Checkout - Creating Order: OrderId={OrderId}, SessionId={SessionId}, UserId={UserId}, ShowtimeId={ShowtimeId}, Amount={Amount}, Currency={Currency}",
+                orderId, sess.Id, sess.UserId, sess.ShowtimeId, pricing.Total, currency);
+            
             var order = new Order
             {
-                OrderId = Guid.NewGuid().ToString("N"),
+                OrderId = orderId,
                 BookingSessionId = sess.Id,
+                UserId = sess.UserId, // Có thể null (anonymous)
                 ShowtimeId = sess.ShowtimeId,
                 Amount = pricing.Total,
-                Currency = pricing.Currency,
+                Currency = currency,
                 Provider = (req.Provider ?? "payos").ToLower(),
                 Status = "PENDING",
                 CreatedAt = now
             };
 
-            // Chuyển trạng thái session
-            sess.State = "PENDING_PAYMENT";
-            sess.UpdatedAt = now;
+            // Sử dụng transaction để đảm bảo atomicity
+            _logger.LogInformation("Checkout - Starting transaction");
+            using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            try
+            {
+                // Add Order vào DbContext
+                _logger.LogInformation("Checkout - Adding Order to DbContext");
+                _db.Orders.Add(order);
 
-            await _db.SaveChangesAsync(ct);
+                // Chuyển trạng thái session
+                _logger.LogInformation("Checkout - Updating session state to PENDING_PAYMENT");
+                sess.State = "PENDING_PAYMENT";
+                sess.UpdatedAt = now;
+
+                _logger.LogInformation("Checkout - Saving changes to database");
+                await _db.SaveChangesAsync(ct);
+                
+                _logger.LogInformation("Checkout - Committing transaction");
+                await transaction.CommitAsync(ct);
+
+                _logger.LogInformation("Checkout successful - OrderId: {OrderId}, SessionId: {SessionId}, Amount: {Amount}",
+                    order.OrderId, sess.Id, order.Amount);
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "Database error during checkout - OrderId: {OrderId}, SessionId: {SessionId}, Error: {Error}",
+                    order.OrderId, sess.Id, ex.Message);
+                
+                // Log inner exception nếu có
+                if (ex.InnerException != null)
+                {
+                    _logger.LogError("Inner exception: {InnerException}, StackTrace: {StackTrace}", 
+                        ex.InnerException.Message, ex.InnerException.StackTrace);
+                }
+                
+                try
+                {
+                    await transaction.RollbackAsync(ct);
+                    _logger.LogInformation("Checkout - Transaction rolled back");
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(rollbackEx, "Error rolling back transaction");
+                }
+                
+                throw new Exception($"Lỗi khi lưu Order vào database: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error during checkout - OrderId: {OrderId}, SessionId: {SessionId}, Error: {Error}, StackTrace: {StackTrace}",
+                    order.OrderId, sess.Id, ex.Message, ex.StackTrace);
+                
+                try
+                {
+                    await transaction.RollbackAsync(ct);
+                    _logger.LogInformation("Checkout - Transaction rolled back");
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(rollbackEx, "Error rolling back transaction");
+                }
+                
+                throw;
+            }
 
             // TODO: tạo payment với PayOS thực → nhận paymentUrl
             string? paymentUrl = null;

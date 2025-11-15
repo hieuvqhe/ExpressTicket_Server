@@ -437,6 +437,50 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
+                // Kiểm tra request null để tránh NullReferenceException
+                if (request == null)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Request body không hợp lệ hoặc thiếu dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["request"] = new ValidationError
+                            {
+                                Msg = "Request body không được để trống",
+                                Path = "body",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Kiểm tra ModelState để phát hiện lỗi model binding
+                if (!ModelState.IsValid)
+                {
+                    var errors = new Dictionary<string, ValidationError>();
+                    foreach (var error in ModelState)
+                    {
+                        var key = error.Key;
+                        var errorMessages = error.Value.Errors.Select(e => e.ErrorMessage).ToList();
+                        if (errorMessages.Any())
+                        {
+                            errors[key] = new ValidationError
+                            {
+                                Msg = string.Join("; ", errorMessages),
+                                Path = key,
+                                Location = "body"
+                            };
+                        }
+                    }
+
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Dữ liệu request không hợp lệ. Vui lòng kiểm tra lại định dạng dữ liệu.",
+                        Errors = errors
+                    });
+                }
+
                 await ValidatePartnerContractAsync();
                 var partnerId = await GetCurrentPartnerId();
 

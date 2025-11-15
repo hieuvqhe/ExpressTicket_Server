@@ -462,6 +462,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         public async Task<MovieSubmissionResponse> CreateMovieSubmissionAsync(int partnerId, CreateMovieSubmissionRequest request)
         {
+            // Kiểm tra request null để tránh NullReferenceException
+            if (request == null)
+            {
+                _logger.LogError("[CreateSubmission] Request is null");
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["request"] = new ValidationError
+                    {
+                        Msg = "Request không được để trống",
+                        Path = "body",
+                        Location = "body"
+                    }
+                });
+            }
+
             var sw = Stopwatch.StartNew();
             using var scope = _logger.BeginScope(new Dictionary<string, object?>
             {
@@ -469,7 +484,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ["traceId"] = Guid.NewGuid().ToString("N")
             });
 
-            LogStage("START", new { partnerId, title = request.Title });
+            LogStage("START", new { partnerId, title = request?.Title ?? "null" });
 
             // Mọi thao tác bọc trong transaction để không “nửa vời”
             await using var tx = await _context.Database.BeginTransactionAsync();

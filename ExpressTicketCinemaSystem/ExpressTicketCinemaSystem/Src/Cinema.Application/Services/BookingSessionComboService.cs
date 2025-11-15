@@ -134,14 +134,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         {
             var now = DateTime.UtcNow;
 
-            var session = await _db.BookingSessions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == sessionId, ct);
+            var session = await _db.BookingSessions.FirstOrDefaultAsync(x => x.Id == sessionId, ct);
             if (session == null) throw new NotFoundException("Không tìm thấy session");
             if (session.State != "DRAFT") throw new ValidationException("session", "Session không còn trạng thái DRAFT");
             if (session.ExpiresAt <= now) throw new ValidationException("session", "Session đã hết hạn");
 
             var show = await _db.Showtimes.Include(s => s.Screen)
                                           .Include(s => s.Cinema)
-                                          .AsNoTracking()
                                           .FirstOrDefaultAsync(s => s.ShowtimeId == session.ShowtimeId, ct);
             if (show == null) throw new NotFoundException("Không tìm thấy suất chiếu");
 
@@ -198,6 +197,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 discount = validation.DiscountAmount;
             }
 
+            var total = Math.Max(0, subtotal - discount);
+
+            // ===== Lưu PricingJson vào database để checkout có thể dùng
+            var pricing = new PricingBreakdown
+            {
+                SeatsSubtotal = seatsSubtotal,
+                CombosSubtotal = combosSubtotal,
+                SurchargeSubtotal = 0, // Không có surcharge riêng
+                Fees = 0, // Không có phí riêng
+                Discount = discount,
+                Total = total,
+                Currency = "VND"
+            };
+
+            session.PricingJson = JsonSerializer.Serialize(pricing);
+            session.CouponCode = appliedCode; // Lưu voucher code nếu có
+            session.UpdatedAt = now;
+            await _db.SaveChangesAsync(ct);
+
             return new PricingPreviewResponse
             {
                 BookingSessionId = session.Id,
@@ -208,7 +226,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 CombosSubtotal = combosSubtotal,
                 AppliedVoucherCode = appliedCode,
                 DiscountAmount = discount,
-                Total = Math.Max(0, subtotal - discount),
+                Total = total,
                 Currency = "VND"
             };
         }

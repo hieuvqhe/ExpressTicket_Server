@@ -48,6 +48,8 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<MovieSubmissionActor> MovieSubmissionActors { get; set; }
 
+    public virtual DbSet<Order> Orders { get; set; }
+
     public virtual DbSet<Partner> Partners { get; set; }
 
     public virtual DbSet<PartnerReport> PartnerReports { get; set; }
@@ -1582,6 +1584,107 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_VoucherEmailHistory_User");
+        });
+
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.HasKey(e => e.OrderId).HasName("PK__Order__46596229");
+
+            entity.ToTable("Order");
+
+            entity.HasIndex(e => e.BookingSessionId, "IX_order_booking_session");
+
+            entity.HasIndex(e => e.UserId, "IX_order_user")
+                .HasFilter("([user_id] IS NOT NULL)");
+
+            entity.HasIndex(e => e.Status, "IX_order_status");
+
+            entity.HasIndex(e => e.ShowtimeId, "IX_order_showtime");
+
+            entity.HasIndex(e => e.PaymentExpiresAt, "IX_order_expires")
+                .HasFilter("([payment_expires_at] IS NOT NULL)");
+
+            entity.HasIndex(e => e.PayOsOrderCode, "UX_order_payos_code")
+                .IsUnique()
+                .HasFilter("([payos_order_code] IS NOT NULL)");
+
+            entity.HasIndex(e => e.BookingId, "IX_order_booking")
+                .HasFilter("([booking_id] IS NOT NULL)");
+
+            entity.Property(e => e.OrderId)
+                .HasMaxLength(32)
+                .HasColumnName("order_id");
+            entity.Property(e => e.BookingSessionId).HasColumnName("booking_session_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.ShowtimeId).HasColumnName("showtime_id");
+            entity.Property(e => e.Amount)
+                .HasColumnType("decimal(10, 2)")
+                .HasColumnName("amount");
+            entity.Property(e => e.Currency)
+                .HasMaxLength(3)
+                .IsUnicode(false)
+                .HasDefaultValue("VND")
+                .HasColumnName("currency");
+            entity.Property(e => e.Provider)
+                .HasMaxLength(32)
+                .IsUnicode(false)
+                .HasDefaultValue("payos")
+                .HasColumnName("provider");
+            entity.Property(e => e.Status)
+                .HasMaxLength(24)
+                .IsUnicode(false)
+                .HasDefaultValue("PENDING")
+                .HasColumnName("status");
+            entity.Property(e => e.PayOsOrderCode)
+                .HasMaxLength(128)
+                .HasColumnName("payos_order_code");
+            entity.Property(e => e.PayOsPaymentLink)
+                .HasMaxLength(512)
+                .HasColumnName("payos_payment_link");
+            entity.Property(e => e.PayOsQrCode)
+                .HasMaxLength(512)
+                .HasColumnName("payos_qr_code");
+            entity.Property(e => e.PaymentExpiresAt)
+                .HasPrecision(3)
+                .HasColumnName("payment_expires_at");
+            entity.Property(e => e.CustomerName)
+                .HasMaxLength(100)
+                .HasColumnName("customer_name");
+            entity.Property(e => e.CustomerPhone)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("customer_phone");
+            entity.Property(e => e.CustomerEmail)
+                .HasMaxLength(100)
+                .HasColumnName("customer_email");
+            entity.Property(e => e.BookingId).HasColumnName("booking_id");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.BookingSession).WithMany()
+                .HasForeignKey(d => d.BookingSessionId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Order_BookingSession");
+
+            entity.HasOne(d => d.User).WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Order_User");
+
+            entity.HasOne(d => d.Showtime).WithMany()
+                .HasForeignKey(d => d.ShowtimeId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Order_Showtime");
+
+            entity.HasOne(d => d.Booking).WithMany()
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Order_Booking");
         });
 
         OnModelCreatingPartial(modelBuilder);
