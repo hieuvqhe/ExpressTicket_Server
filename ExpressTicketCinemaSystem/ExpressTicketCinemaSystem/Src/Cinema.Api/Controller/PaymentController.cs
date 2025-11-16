@@ -28,22 +28,28 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly CinemaDbCoreContext _db;
         private readonly IConfiguration _configuration;
         private readonly ILogger<PaymentController> _logger;
+        private readonly IEmailService _emailService;
 
         public PaymentController(
             IPayOSService payOSService,
             CinemaDbCoreContext db,
             IConfiguration configuration,
-            ILogger<PaymentController> logger)
+            ILogger<PaymentController> logger,
+            IEmailService emailService)
         {
             _payOSService = payOSService;
             _db = db;
             _configuration = configuration;
             _logger = logger;
+            _emailService = emailService;
         }
 
         // ============================================================
         // 1. CREATE PAYMENT
         // ============================================================
+        /// <summary>
+        /// API tạo yêu cầu thanh toán PayOS cho một Order: sinh ra link thanh toán và mã QR để hiển thị cho người dùng.
+        /// </summary>
         [HttpPost("create")]
         public async Task<IActionResult> CreatePayment(
             [FromBody] CreatePayOSPaymentRequest request,
@@ -93,8 +99,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         // 3. HANDLE PAYOS RETURN URL
         // ============================================================
         /// <summary>
-        /// Endpoint để xử lý returnUrl từ PayOS sau khi thanh toán
-        /// PayOS redirect về: /payment/return?code=00&id=xxx&status=PAID&orderCode=xxx
+        /// API dùng làm returnUrl cho PayOS: nhận kết quả thanh toán, cố gắng xử lý Order, sau đó redirect về trang FE tương ứng (success/return).
         /// </summary>
         [HttpGet("return")]
         [AllowAnonymous]
@@ -185,6 +190,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         // ============================================================
         // 4. GET PAYMENT STATUS
         // ============================================================
+        /// <summary>
+        /// API  lấy trạng thái thanh toán hiện tại của Order (PENDING/PAID/FAILED/EXPIRED) và thông tin link/QR còn hạn.
+        /// </summary>
         [HttpGet("status/{order_id}")]
         public async Task<IActionResult> GetPaymentStatus(
             [FromRoute] string order_id,
@@ -275,12 +283,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             int? customerId = null;
             if (order.UserId.HasValue)
             {
+                // Load User để lấy thông tin hiển thị (fullname/email/phone)
+                var user = await _db.Users
+                    .FirstOrDefaultAsync(u => u.UserId == order.UserId.Value, ct);
+
+                if (user == null)
+                {
+                    _logger.LogWarning("User {UserId} not found when processing payment for Order {OrderId}", 
+                        order.UserId.Value, order.OrderId);
+                }
+
+                // Tìm hoặc tạo Customer tương ứng với User
                 var customer = await _db.Customers
                     .FirstOrDefaultAsync(c => c.UserId == order.UserId.Value, ct);
 
                 if (customer == null)
                 {
-                    // Tạo Customer mới
                     customer = new Customer
                     {
                         UserId = order.UserId.Value,
@@ -288,8 +306,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     };
                     _db.Customers.Add(customer);
                     await _db.SaveChangesAsync(ct);
-                    _logger.LogInformation("Created new Customer {CustomerId} for User {UserId}", 
+                    _logger.LogInformation("Created new Customer {CustomerId} for User {UserId}",
                         customer.CustomerId, order.UserId.Value);
+                }
+
+                // Cập nhật thông tin khách hàng vào Order (denormalization để tiện truy vấn)
+                if (user != null)
+                {
+                    order.CustomerName = user.Fullname ?? user.Username;
+                    order.CustomerEmail = user.Email;
+                    order.CustomerPhone = user.Phone;
                 }
 
                 customerId = customer.CustomerId;
@@ -346,7 +372,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             // 6. Tạo Tickets cho mỗi seat
             var showtime = await _db.Showtimes
                 .Include(s => s.Screen)
+                .ThenInclude(sc => sc.Cinema)
+                .Include(s => s.Movie)
                 .FirstOrDefaultAsync(s => s.ShowtimeId == order.ShowtimeId, ct);
+
+            // Chuẩn bị dữ liệu ghế (seat codes) để gửi email
+            var seatCodesForEmail = new List<string>();
 
             if (showtime != null && seats.Count > 0)
             {
@@ -358,6 +389,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
                 foreach (var seat in seatList)
                 {
+                    // Mã ghế hiển thị: ưu tiên SeatName, fallback RowCode + SeatNumber
+                    var seatCode = !string.IsNullOrWhiteSpace(seat.SeatName)
+                        ? seat.SeatName
+                        : $"{seat.RowCode}{seat.SeatNumber}";
+                    seatCodesForEmail.Add(seatCode);
+
                     // Tính giá ticket: base price + seat type surcharge
                     var surcharge = seat.SeatType?.Surcharge ?? 0m;
                     var ticketPrice = showtime.BasePrice + surcharge;
@@ -368,7 +405,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                         ShowtimeId = order.ShowtimeId,
                         SeatId = seat.SeatId,
                         Price = ticketPrice,
-                        Status = "ACTIVE"
+                        // Trạng thái ban đầu của vé: VALID (được xem là SOLD trong sơ đồ ghế)
+                        Status = "VALID"
                     };
                     _db.Tickets.Add(ticket);
                 }
@@ -376,6 +414,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
             // 7. Tạo ServiceOrders cho mỗi combo
             var comboGroups = combos.GroupBy(c => c).ToList();
+            var comboSummaryParts = new List<string>();
             foreach (var group in comboGroups)
             {
                 var serviceId = group.Key;
@@ -392,6 +431,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                         UnitPrice = service.Price
                     };
                     _db.ServiceOrders.Add(serviceOrder);
+
+                    comboSummaryParts.Add($"{service.ServiceName} x{quantity}");
                 }
             }
 
@@ -430,6 +471,55 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             _logger.LogInformation(
                 "Payment processed successfully - OrderId: {OrderId}, BookingId: {BookingId}, Tickets: {TicketCount}, ServiceOrders: {ServiceOrderCount}",
                 order.OrderId, booking.BookingId, seats.Count, comboGroups.Count);
+
+            // 13. Gửi email vé cho khách hàng
+            try
+            {
+                if (customerId.HasValue && customerId.Value > 0)
+                {
+                    var customer = await _db.Customers
+                        .Include(c => c.User)
+                        .FirstOrDefaultAsync(c => c.CustomerId == customerId.Value, ct);
+
+                    if (customer?.User != null && !string.IsNullOrWhiteSpace(customer.User.Email))
+                    {
+                        var email = customer.User.Email;
+                        var userName = customer.User.Fullname ?? customer.User.Username;
+                        var movieName = showtime?.Movie?.Title ?? "";
+                        var cinemaName = showtime?.Cinema?.CinemaName ?? "";
+                        var roomName = showtime?.Screen?.ScreenName ?? "";
+                        var cinemaAddress = showtime?.Cinema?.Address ?? "";
+                        var showDatetime = showtime?.ShowDatetime ?? DateTime.UtcNow;
+                        var seatCodes = string.Join(", ", seatCodesForEmail);
+                        var comboSummary = string.Join(", ", comboSummaryParts);
+                        var totalAmount = order.Amount;
+                        var orderCode = booking.BookingCode ?? order.OrderId;
+
+                        await _emailService.SendBookingTicketEmailAsync(
+                            email,
+                            userName,
+                            movieName,
+                            cinemaName,
+                            roomName,
+                            cinemaAddress,
+                            showDatetime,
+                            seatCodes,
+                            comboSummary,
+                            totalAmount,
+                            orderCode);
+
+                        _logger.LogInformation("Ticket email sent successfully for Order {OrderId} to {Email}", order.OrderId, email);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Cannot send ticket email for Order {OrderId}: customer or email not found", order.OrderId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending ticket email for Order {OrderId}", order.OrderId);
+            }
         }
 
         private static (List<int> seats, List<int> combos) ReadItems(string? itemsJson)
@@ -486,8 +576,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         // 4. CHECK PAYMENT STATUS (Trigger check ngay - dùng khi không có webhook)
         // ============================================================
         /// <summary>
-        /// Endpoint để frontend trigger check payment status ngay sau khi return từ PayOS
-        /// Thay thế webhook cho tài khoản PayOS cá nhân không có webhook
+        /// API để kiểm tra và cập nhật trạng thái thanh toán cho một Order ngay sau khi người dùng thanh toán xong trên PayOS.
         /// </summary>
         [HttpPost("check/{order_id}")]
         public async Task<IActionResult> CheckPaymentStatus(

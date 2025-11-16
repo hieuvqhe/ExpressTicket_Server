@@ -24,10 +24,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Request
         [Required, StringLength(50)]
         public string Country { get; set; } = string.Empty;
 
-        [Url, RegularExpression(@"\.(jpg|jpeg|png|webp)$", ErrorMessage = "Poster phải là ảnh (jpg, jpeg, png, webp)")]
+        // URL sẽ được validate chi tiết bằng logic trong service (IsValidImageUrl)
         public string? PosterUrl { get; set; }
 
-        [Url, RegularExpression(@"\.(jpg|jpeg|png|webp)$", ErrorMessage = "Banner phải là ảnh (jpg, jpeg, png, webp)")]
+        // URL sẽ được validate chi tiết bằng logic trong service (IsValidImageUrl)
         public string? BannerUrl { get; set; }
 
         [StringLength(100)]
@@ -45,13 +45,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Request
         [Required, DateAfter(nameof(PremiereDate), ErrorMessage = "Ngày kết thúc phải sau ngày công chiếu")]
         public DateOnly EndDate { get; set; }
 
-        [Url, RegularExpression(@"youtu\.?be", ErrorMessage = "Trailer phải là URL YouTube")]
+        // TrailerUrl được validate bằng IsValidYoutubeUrl trong service (chấp nhận cả youtube.com và youtu.be)
         public string? TrailerUrl { get; set; }
 
-        [Required, Url, RegularExpression(@"\.(jpg|jpeg|png|webp|pdf)$", ErrorMessage = "Tài liệu bản quyền phải là ảnh (jpg, jpeg, png, webp) hoặc PDF")]
+        // Các tài liệu được validate chi tiết bằng IsValidDocumentUrl trong service
+        [Required]
         public string? CopyrightDocumentUrl { get; set; }
 
-        [Required, Url, RegularExpression(@"\.(jpg|jpeg|png|webp|pdf)$", ErrorMessage = "Giấy phép phân phối phải là ảnh (jpg, jpeg, png, webp) hoặc PDF")]
+        // Các tài liệu được validate chi tiết bằng IsValidDocumentUrl trong service
+        [Required]
         public string? DistributionLicenseUrl { get; set; }
 
         [StringLength(1000)]
@@ -72,8 +74,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Request
         [StringLength(50)] public string? Language { get; set; }
         [StringLength(50)] public string? Country { get; set; }
 
-        [Url, RegularExpression(@"\.(jpg|jpeg|png|webp)$")] public string? PosterUrl { get; set; }
-        [Url, RegularExpression(@"\.(jpg|jpeg|png|webp)$")] public string? BannerUrl { get; set; }
+        // URL update cũng được validate bằng logic trong service, không phụ thuộc vào [Url]
+        public string? PosterUrl { get; set; }
+        public string? BannerUrl { get; set; }
 
         [StringLength(100)] public string? Production { get; set; }
         [StringLength(2000)] public string? Description { get; set; }
@@ -86,9 +89,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Request
         [DateAfter(nameof(PremiereDate), ErrorMessage = "Ngày kết thúc phải sau ngày công chiếu")]
         public DateOnly? EndDate { get; set; }
 
-        [Url, RegularExpression(@"youtu\.?be")] public string? TrailerUrl { get; set; }
-        [Url, RegularExpression(@"\.(jpg|jpeg|png|webp|pdf)$")] public string? CopyrightDocumentUrl { get; set; }
-        [Url, RegularExpression(@"\.(jpg|jpeg|png|webp|pdf)$")] public string? DistributionLicenseUrl { get; set; }
+        // Trailer & document URL được validate bằng logic trong service
+        public string? TrailerUrl { get; set; }
+        public string? CopyrightDocumentUrl { get; set; }
+        public string? DistributionLicenseUrl { get; set; }
         [StringLength(1000)] public string? AdditionalNotes { get; set; }
     }
     public class NewActorRequest
@@ -97,8 +101,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Request
         [StringLength(100, ErrorMessage = "Tên diễn viên không được vượt quá 100 ký tự")]
         public string Name { get; set; } = string.Empty;
 
-        [Url(ErrorMessage = "URL avatar không hợp lệ")]
-        [RegularExpression(@"\.(jpg|jpeg|png|webp)$", ErrorMessage = "Avatar phải là ảnh (jpg, jpeg, png, webp)")]
+        // AvatarUrl sẽ được validate bằng IsValidImageUrl trong service
         public string? AvatarUrl { get; set; }
 
         [Required(ErrorMessage = "Vai diễn là bắt buộc")]

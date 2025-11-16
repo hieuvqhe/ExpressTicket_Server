@@ -32,6 +32,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         // ============================================================
         // EXPIRE ORDER
         // ============================================================
+        /// <summary>
+        /// API đánh dấu một Order đang PENDING là đã hết hạn thanh toán: cập nhật trạng thái EXPIRED và giải phóng toàn bộ ghế đã lock.
+        /// </summary>
         [HttpPost("{order_id}/expire")]
         public async Task<IActionResult> ExpireOrder(
             [FromRoute] string order_id,

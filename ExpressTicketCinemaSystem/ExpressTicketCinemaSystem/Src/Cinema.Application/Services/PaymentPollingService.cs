@@ -60,6 +60,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<CinemaDbCoreContext>();
             var payOSService = scope.ServiceProvider.GetRequiredService<IPayOSService>();
+            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
 
             // Lấy tất cả Order đang PENDING và có PayOsOrderCode
             var pendingOrders = await db.Orders
@@ -104,7 +105,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         };
 
                         // Gọi logic xử lý payment (giống như webhook)
-                        await ProcessSuccessfulPaymentAsync(order, webhookRequest, db, ct);
+                        await ProcessSuccessfulPaymentAsync(order, webhookRequest, db, emailService, ct);
                     }
                     else if (payOSStatus.Status == "CANCELLED" || payOSStatus.Status == "EXPIRED")
                     {
@@ -137,6 +138,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             Order order,
             PayOSWebhookRequest request,
             CinemaDbCoreContext db,
+            IEmailService emailService,
             CancellationToken ct)
         {
             // Logic này giống hệt trong PaymentController.ProcessSuccessfulPaymentAsync
@@ -151,6 +153,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             int? customerId = null;
             if (order.UserId.HasValue)
             {
+                // Load User để lấy thông tin hiển thị (fullname/email/phone)
+                var user = await db.Users
+                    .FirstOrDefaultAsync(u => u.UserId == order.UserId.Value, ct);
+
+                if (user == null)
+                {
+                    _logger.LogWarning("User {UserId} not found when processing payment for Order {OrderId} in polling service", 
+                        order.UserId.Value, order.OrderId);
+                }
+
+                // Tìm hoặc tạo Customer tương ứng với User
                 var customer = await db.Customers
                     .FirstOrDefaultAsync(c => c.UserId == order.UserId.Value, ct);
 
@@ -163,8 +176,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     };
                     db.Customers.Add(customer);
                     await db.SaveChangesAsync(ct);
-                    _logger.LogInformation("Created new Customer {CustomerId} for User {UserId}", 
+                    _logger.LogInformation("Created new Customer {CustomerId} for User {UserId} (polling)", 
                         customer.CustomerId, order.UserId.Value);
+                }
+
+                // Cập nhật thông tin khách hàng vào Order (denormalization để tiện truy vấn)
+                if (user != null)
+                {
+                    order.CustomerName = user.Fullname ?? user.Username;
+                    order.CustomerEmail = user.Email;
+                    order.CustomerPhone = user.Phone;
                 }
 
                 customerId = customer.CustomerId;
@@ -220,7 +241,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // 6. Tạo Tickets cho mỗi seat
             var showtime = await db.Showtimes
                 .Include(s => s.Screen)
+                .ThenInclude(sc => sc.Cinema)
+                .Include(s => s.Movie)
                 .FirstOrDefaultAsync(s => s.ShowtimeId == order.ShowtimeId, ct);
+
+            // Chuẩn bị dữ liệu ghế (seat codes) để gửi email
+            var seatCodesForEmail = new List<string>();
 
             if (showtime != null && seats.Count > 0)
             {
@@ -231,6 +257,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                 foreach (var seat in seatList)
                 {
+                    // Mã ghế hiển thị: ưu tiên SeatName, fallback RowCode + SeatNumber
+                    var seatCode = !string.IsNullOrWhiteSpace(seat.SeatName)
+                        ? seat.SeatName
+                        : $"{seat.RowCode}{seat.SeatNumber}";
+                    seatCodesForEmail.Add(seatCode);
+
                     var surcharge = seat.SeatType?.Surcharge ?? 0m;
                     var ticketPrice = showtime.BasePrice + surcharge;
 
@@ -240,7 +272,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         ShowtimeId = order.ShowtimeId,
                         SeatId = seat.SeatId,
                         Price = ticketPrice,
-                        Status = "ACTIVE"
+                        Status = "VALID" // SOLD trong sơ đồ ghế
                     };
                     db.Tickets.Add(ticket);
                 }
@@ -248,6 +280,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             // 7. Tạo ServiceOrders cho mỗi combo
             var comboGroups = combos.GroupBy(c => c).ToList();
+            var comboSummaryParts = new List<string>();
             foreach (var group in comboGroups)
             {
                 var serviceId = group.Key;
@@ -264,6 +297,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         UnitPrice = service.Price
                     };
                     db.ServiceOrders.Add(serviceOrder);
+
+                    comboSummaryParts.Add($"{service.ServiceName} x{quantity}");
                 }
             }
 
@@ -302,6 +337,55 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _logger.LogInformation(
                 "Payment processed successfully - OrderId: {OrderId}, BookingId: {BookingId}, Tickets: {TicketCount}, ServiceOrders: {ServiceOrderCount}",
                 order.OrderId, booking.BookingId, seats.Count, comboGroups.Count);
+
+            // 13. Gửi email vé cho khách hàng
+            try
+            {
+                if (customerId.HasValue && customerId.Value > 0)
+                {
+                    var customer = await db.Customers
+                        .Include(c => c.User)
+                        .FirstOrDefaultAsync(c => c.CustomerId == customerId.Value, ct);
+
+                    if (customer?.User != null && !string.IsNullOrWhiteSpace(customer.User.Email))
+                    {
+                        var email = customer.User.Email;
+                        var userName = customer.User.Fullname ?? customer.User.Username;
+                        var movieName = showtime?.Movie?.Title ?? "";
+                        var cinemaName = showtime?.Cinema?.CinemaName ?? "";
+                        var roomName = showtime?.Screen?.ScreenName ?? "";
+                        var cinemaAddress = showtime?.Cinema?.Address ?? "";
+                        var showDatetime = showtime?.ShowDatetime ?? DateTime.UtcNow;
+                        var seatCodes = string.Join(", ", seatCodesForEmail);
+                        var comboSummary = string.Join(", ", comboSummaryParts);
+                        var totalAmount = order.Amount;
+                        var orderCode = booking.BookingCode ?? order.OrderId;
+
+                        await emailService.SendBookingTicketEmailAsync(
+                            email,
+                            userName,
+                            movieName,
+                            cinemaName,
+                            roomName,
+                            cinemaAddress,
+                            showDatetime,
+                            seatCodes,
+                            comboSummary,
+                            totalAmount,
+                            orderCode);
+
+                        _logger.LogInformation("Ticket email sent successfully (polling) for Order {OrderId} to {Email}", order.OrderId, email);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Cannot send ticket email (polling) for Order {OrderId}: customer or email not found", order.OrderId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending ticket email (polling) for Order {OrderId}", order.OrderId);
+            }
         }
 
         private static (System.Collections.Generic.List<int> seats, System.Collections.Generic.List<int> combos) ReadItems(string? itemsJson)

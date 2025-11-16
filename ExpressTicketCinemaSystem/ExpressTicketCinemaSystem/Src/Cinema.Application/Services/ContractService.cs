@@ -782,14 +782,14 @@ Trân trọng,
                 errors["signatureImageUrl"] = new ValidationError { Msg = "URL ảnh không hợp lệ", Path = "signatureImageUrl" };
             }
 
-            // Validate file type (chỉ cho phép ảnh)
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+            // Validate file type (cho phép ảnh hoặc PDF)
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf" };
             if (!string.IsNullOrWhiteSpace(request.SignatureImageUrl))
             {
                 var extension = Path.GetExtension(request.SignatureImageUrl.Split('?')[0]).ToLower();
                 if (!allowedExtensions.Contains(extension))
                 {
-                    errors["signatureImageUrl"] = new ValidationError { Msg = "Chỉ chấp nhận file ảnh (jpg, jpeg, png, gif, webp)", Path = "signatureImageUrl" };
+                    errors["signatureImageUrl"] = new ValidationError { Msg = "Chỉ chấp nhận file ảnh hoặc PDF (jpg, jpeg, png, gif, webp, pdf)", Path = "signatureImageUrl" };
                 }
             }
 
