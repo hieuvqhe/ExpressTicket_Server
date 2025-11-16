@@ -41,9 +41,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     ExpiresOn = DateTimeOffset.UtcNow.AddMinutes(_sasTokenExpiryMinutes)
                 };
 
+                // Cho phép vừa upload (write/create/add) vừa đọc lại file (read)
+                // để FE có thể dùng cùng một SasUrl cho cả upload và download PDF.
                 sasBuilder.SetPermissions(BlobSasPermissions.Write |
                                           BlobSasPermissions.Create |
-                                          BlobSasPermissions.Add);
+                                          BlobSasPermissions.Add |
+                                          BlobSasPermissions.Read);
 
                 var sasUri = blobClient.GenerateSasUri(sasBuilder);
                 var blobUrl = blobClient.Uri.ToString(); 

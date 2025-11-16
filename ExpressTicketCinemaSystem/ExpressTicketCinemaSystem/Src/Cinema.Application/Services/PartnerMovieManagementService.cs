@@ -869,47 +869,82 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         public async Task<SubmitMovieSubmissionResponse> SubmitMovieSubmissionAsync(int submissionId, int partnerId)
         {
-            var submission = await ValidateSubmissionAccessAsync(submissionId, partnerId, allowRejected: true);
-
-            // Không cho submit nếu đã bị reject do trùng phim
-            if (submission.Status == "Rejected" &&
-                string.Equals(submission.RejectionReason, "Đã có phim trùng", StringComparison.OrdinalIgnoreCase))
+            _logger.LogInformation("[SubmitSubmission] START | submissionId={SubmissionId}, partnerId={PartnerId}",
+                submissionId, partnerId);
+            try
             {
-                throw new ValidationException("status", "Phim này đã tồn tại trong hệ thống. Không thể nộp lại.");
+                var submission = await ValidateSubmissionAccessAsync(submissionId, partnerId, allowRejected: true);
+
+                // Không cho submit nếu đã bị reject do trùng phim
+                if (submission.Status == "Rejected" &&
+                    string.Equals(submission.RejectionReason, "Đã có phim trùng", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("[SubmitSubmission] Submission {Id} bị reject vì trùng phim, không cho nộp lại",
+                        submissionId);
+                    throw new ValidationException("status", "Phim này đã tồn tại trong hệ thống. Không thể nộp lại.");
+                }
+
+                // Chuẩn hoá tiêu đề khi cần so khớp Movie có sẵn
+                string key = NormalizeTitle(submission.Title);
+                _logger.LogInformation("[SubmitSubmission] Normalized title key={Key}", key);
+
+                // Nếu Movie đã tồn tại thì báo conflict
+                // Lưu ý: NormalizeTitle là hàm .NET nên EF không translate được xuống SQL.
+                // Vì vậy ta load danh sách title lên memory rồi so sánh.
+                var existingMovieTitles = await _context.Movies
+                    .Select(m => m.Title)
+                    .ToListAsync();
+
+                var existed = existingMovieTitles.Any(t => NormalizeTitle(t) == key);
+                if (existed)
+                {
+                    _logger.LogWarning("[SubmitSubmission] Movie with normalized title {Key} đã tồn tại trong bảng Movies",
+                        key);
+                    throw new ConflictException("title", "Tiêu đề này đã tồn tại trong hệ thống.");
+                }
+
+                submission.Status = "Pending";
+                submission.SubmittedAt = DateTime.UtcNow;
+
+                if (submission.RejectionReason != null)
+                {
+                    submission.ResubmitCount += 1;
+                    submission.ResubmittedAt = DateTime.UtcNow;
+                    submission.RejectionReason = null;
+                }
+
+                // Gán reviewer theo partner
+                var partner = await _context.Partners.Include(p => p.Manager)
+                                     .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
+                if (partner?.ManagerId == null)
+                {
+                    _logger.LogWarning("[SubmitSubmission] Partner {PartnerId} không có managerId", partnerId);
+                    throw new ValidationException("system", "Không tìm thấy manager cho partner này.");
+                }
+
+                submission.ReviewerId = partner.ManagerId;
+                submission.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("[SubmitSubmission] SUCCESS | submissionId={SubmissionId}", submissionId);
+
+                // Trả về thông tin cơ bản sau khi nộp thành công
+                return new SubmitMovieSubmissionResponse
+                {
+                    MovieSubmissionId = submission.MovieSubmissionId,
+                    Title = submission.Title,
+                    Status = submission.Status,
+                    SubmittedAt = submission.SubmittedAt ?? DateTime.UtcNow,
+                    Message = "Nộp phim thành công. Vui lòng chờ quản trị viên xét duyệt."
+                };
             }
-
-            // Chuẩn hoá tiêu đề khi cần so khớp Movie có sẵn
-            string key = NormalizeTitle(submission.Title);
-
-            // (Tuỳ chọn) Nếu muốn chặn ngay khi submit khi Movie đã tồn tại:
-            var existed = await _context.Movies.AnyAsync(m => NormalizeTitle(m.Title) == key);
-            if (existed)
+            catch (Exception ex)
             {
-                // Bạn chọn: báo 400/409 hay chuyển Rejected ngay. Ở đây mình trả Validation 409.
-                throw new ConflictException("title", "Tiêu đề này đã tồn tại trong hệ thống.");
+                _logger.LogError(ex,
+                    "[SubmitSubmission][ERR] submissionId={SubmissionId}, partnerId={PartnerId}",
+                    submissionId, partnerId);
+                throw;
             }
-
-            submission.Status = "Pending";
-            submission.SubmittedAt = DateTime.UtcNow;
-
-            if (submission.RejectionReason != null)
-            {
-                submission.ResubmitCount += 1;
-                submission.ResubmittedAt = DateTime.UtcNow;
-                submission.RejectionReason = null;
-            }
-
-            // Gán reviewer theo partner như bạn đã làm:
-            var partner = await _context.Partners.Include(p => p.Manager)
-                                 .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
-            if (partner?.ManagerId == null)
-                throw new ValidationException("system", "Không tìm thấy manager cho partner này.");
-            submission.ReviewerId = partner.ManagerId;
-
-            submission.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
-
-            return new SubmitMovieSubmissionResponse { /* fill như cũ */ };
         }
 
         public async Task DeleteMovieSubmissionAsync(int submissionId, int partnerId)

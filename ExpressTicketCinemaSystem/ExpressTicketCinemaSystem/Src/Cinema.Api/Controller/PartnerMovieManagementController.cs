@@ -9,6 +9,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -20,13 +21,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
     {
         private readonly PartnerMovieManagementService _submissionService;
         private readonly IContractValidationService _contractValidationService;
+        private readonly ILogger<PartnerMovieManagementController> _logger;
 
         public PartnerMovieManagementController(
             PartnerMovieManagementService submissionService,
-            IContractValidationService contractValidationService)
+            IContractValidationService contractValidationService,
+            ILogger<PartnerMovieManagementController> logger)
         {
             _submissionService = submissionService;
             _contractValidationService = contractValidationService;
+            _logger = logger;
         }
 
         private int GetCurrentUserId()
@@ -756,8 +760,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 return StatusCode(StatusCodes.Status409Conflict,
                     new ValidationErrorResponse { Message = first, Errors = ex.Errors });
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "[SubmitMovie] Lỗi không mong đợi khi nộp submissionId={SubmissionId}", id);
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi nộp phim."

@@ -429,68 +429,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// (Partner) Tạo SAS URL để upload file chữ ký từ form-data (đính kèm file)
-        /// </summary>
-        /// <param name="file">File chữ ký (PDF hoặc ảnh) gửi dạng multipart/form-data</param>
-        /// <returns>SAS URL (for uploading) and Blob URL (for saving)</returns>
-        [HttpPost("/partners/contracts/generate-signature-upload-sas")]
-        [Authorize(Roles = "Partner")]
-        [ProducesResponseType(typeof(SuccessResponse<GeneratePdfUploadUrlResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
-        [Consumes("multipart/form-data")]
-        public async Task<IActionResult> GenerateSignatureUploadUrlFromForm([FromForm] IFormFile file)
-        {
-            // === VALIDATION ===
-            if (file == null || file.Length == 0)
-            {
-                return BadRequest(new ValidationErrorResponse
-                {
-                    Message = "File là bắt buộc",
-                    Errors = new Dictionary<string, ValidationError>
-                    {
-                        ["file"] = new ValidationError { Msg = "Vui lòng chọn file để upload" }
-                    }
-                });
-            }
 
-            var fileName = file.FileName;
-            var allowedExtensions = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
-            var extension = Path.GetExtension(fileName).ToLower();
-            if (!allowedExtensions.Contains(extension))
-            {
-                return BadRequest(new ValidationErrorResponse
-                {
-                    Message = "Định dạng file không hợp lệ",
-                    Errors = new Dictionary<string, ValidationError>
-                    {
-                        ["file"] = new ValidationError { Msg = "Chỉ chấp nhận file PDF hoặc ảnh (.png, .jpg, .jpeg)" }
-                    }
-                });
-            }
-
-            // === BUSINESS LOGIC ===
-            try
-            {
-                var result = await _azureBlobService.GeneratePdfUploadUrlAsync(fileName);
-
-                var response = new SuccessResponse<GeneratePdfUploadUrlResponse>
-                {
-                    Message = "Tạo SAS URL cho chữ ký thành công",
-                    Result = result
-                };
-
-                return Ok(response);
-            }
-            catch (Exception)
-            {
-                return StatusCode(500, new ErrorResponse
-                {
-                    Message = "Đã xảy ra lỗi hệ thống khi tạo URL upload chữ ký."
-                });
-            }
-        }
         /// <summary>
         /// Create a new cinema
         /// </summary>
