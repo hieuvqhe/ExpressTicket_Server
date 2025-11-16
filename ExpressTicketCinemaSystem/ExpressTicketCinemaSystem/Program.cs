@@ -156,6 +156,12 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<ManagerSendVoucherToAllExampleFilter>();
     options.OperationFilter<ManagerSendVoucherToSpecificExampleFilter>();
     options.OperationFilter<UserGetVouchersExampleFilter>();
+    options.OperationFilter<CreateMovieReviewExampleFilter>();
+    options.OperationFilter<UpdateMovieReviewExampleFilter>();
+    options.OperationFilter<DeleteMovieReviewExampleFilter>();
+    options.OperationFilter<GetMovieReviewsExampleFilter>();
+    options.OperationFilter<GetMovieRatingSummaryExampleFilter>();
+    options.OperationFilter<GetMyReviewExampleFilter>();
 
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";

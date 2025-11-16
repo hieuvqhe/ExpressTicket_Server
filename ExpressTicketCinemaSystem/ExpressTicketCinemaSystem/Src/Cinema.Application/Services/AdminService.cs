@@ -86,8 +86,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             var customerId = customer.CustomerId;
             stats.BookingsCount = await _context.Bookings.CountAsync(b => b.CustomerId == customerId);
-            stats.RatingsCount = await _context.RatingFilms.CountAsync(r => r.UserId == customerId);
-            stats.CommentsCount = await _context.RatingFilms.CountAsync(r => r.UserId == customerId && r.Comment != null);
+
+            // Thống kê rating theo user_id và chỉ lấy những rating chưa bị xóa
+            stats.RatingsCount = await _context.RatingFilms
+                .CountAsync(r => r.UserId == userId && !r.IsDeleted);
+            stats.CommentsCount = await _context.RatingFilms
+                .CountAsync(r => r.UserId == userId && !r.IsDeleted && r.Comment != null);
 
             return stats;
         }
