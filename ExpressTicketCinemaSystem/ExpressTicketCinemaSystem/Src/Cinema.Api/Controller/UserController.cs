@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Requests;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Responses;
 using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -347,6 +348,154 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new ErrorResponse { Message = "Lỗi khi hoàn tất đổi email." });
+            }
+        }
+
+        /// <summary>
+        /// Get list of user's booking orders with filtering and pagination
+        /// </summary>
+        /// <param name="status">Filter by status (CONFIRMED)</param>
+        /// <param name="fromDate">Filter orders from this date (ISO format)</param>
+        /// <param name="toDate">Filter orders to this date (ISO format)</param>
+        /// <param name="page">Page number (default 1)</param>
+        /// <param name="pageSize">Number of items per page (default 10)</param>
+        [HttpGet("orders")]
+        [ProducesResponseType(typeof(SuccessResponse<UserOrdersResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetOrders(
+            [FromQuery] string? status,
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var request = new GetUserOrdersRequest
+                {
+                    Status = status,
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    Page = page,
+                    PageSize = pageSize
+                };
+
+                var result = await _userService.GetUserOrdersAsync(userId, request);
+
+                return Ok(new SuccessResponse<UserOrdersResponse>
+                {
+                    Message = "Lấy danh sách đơn hàng thành công.",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse { Message = "Lỗi xác thực dữ liệu", Errors = ex.Errors });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse { Message = "Xác thực thất bại", Errors = ex.Errors });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Lỗi khi lấy danh sách đơn hàng: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get detailed information of a specific booking order
+        /// </summary>
+        /// <param name="bookingId">The booking ID to retrieve details for</param>
+        [HttpGet("orders/{bookingId}")]
+        [ProducesResponseType(typeof(SuccessResponse<UserOrderDetailResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetOrderDetail([FromRoute] int bookingId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var result = await _userService.GetUserOrderDetailAsync(userId, bookingId);
+
+                return Ok(new SuccessResponse<UserOrderDetailResponse>
+                {
+                    Message = "Lấy chi tiết đơn hàng thành công.",
+                    Result = result
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse { Message = "Xác thực thất bại", Errors = ex.Errors });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Lỗi khi lấy chi tiết đơn hàng: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get list of user's tickets (grouped by individual tickets, not by orders)
+        /// </summary>
+        /// <param name="type">Filter by type: upcoming (sắp chiếu), past (đã chiếu), all (tất cả)</param>
+        /// <param name="page">Page number (default 1)</param>
+        /// <param name="pageSize">Number of items per page (default 20)</param>
+        [HttpGet("tickets")]
+        [ProducesResponseType(typeof(SuccessResponse<UserTicketsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetTickets(
+            [FromQuery] string? type,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var request = new GetUserTicketsRequest
+                {
+                    Type = type,
+                    Page = page,
+                    PageSize = pageSize
+                };
+
+                var result = await _userService.GetUserTicketsAsync(userId, request);
+
+                return Ok(new SuccessResponse<UserTicketsResponse>
+                {
+                    Message = "Lấy danh sách vé thành công.",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse { Message = "Lỗi xác thực dữ liệu", Errors = ex.Errors });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse { Message = "Xác thực thất bại", Errors = ex.Errors });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse { Message = "Lỗi khi lấy danh sách vé: " + ex.Message });
             }
         }
     }

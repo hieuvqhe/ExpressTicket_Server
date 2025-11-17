@@ -3,6 +3,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using System.Linq.Dynamic.Core;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Request;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -86,8 +87,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             var customerId = customer.CustomerId;
             stats.BookingsCount = await _context.Bookings.CountAsync(b => b.CustomerId == customerId);
-            stats.RatingsCount = await _context.RatingFilms.CountAsync(r => r.UserId == customerId);
-            stats.CommentsCount = await _context.RatingFilms.CountAsync(r => r.UserId == customerId && r.Comment != null);
+
+            // Thống kê rating theo user_id và chỉ lấy những rating chưa bị xóa
+            stats.RatingsCount = await _context.RatingFilms
+                .CountAsync(r => r.UserId == userId && !r.IsDeleted);
+            stats.CommentsCount = await _context.RatingFilms
+                .CountAsync(r => r.UserId == userId && !r.IsDeleted && r.Comment != null);
 
             return stats;
         }
@@ -398,4 +403,4 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return (true, string.Empty);
         }
     }
-    }
+}
