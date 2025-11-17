@@ -26,14 +26,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 10;
 
+            // EF Core không thể translate StringComparer.OrdinalIgnoreCase trong Contains,
+            // nên dùng mảng lowercase để filter
+            var nonDraftStatusesLower = new[] { "pending", "rejected", "resubmitted", "approved" };
             var q = _context.MovieSubmissions
                 .Include(ms => ms.Partner)
-                .Where(ms => NonDraftStatuses.Contains(ms.Status))
+                .Where(ms => nonDraftStatusesLower.Contains(ms.Status.ToLower()))
                 .AsQueryable();
 
             // optional filter theo status
             if (!string.IsNullOrWhiteSpace(status) && NonDraftStatuses.Contains(status))
-                q = q.Where(ms => ms.Status.Equals(status, StringComparison.OrdinalIgnoreCase));
+            {
+                // EF Core không thể translate StringComparison.OrdinalIgnoreCase, nên dùng ToLower()
+                var statusLower = status.Trim().ToLower();
+                q = q.Where(ms => ms.Status.ToLower() == statusLower);
+            }
 
             // optional search theo title/director
             if (!string.IsNullOrWhiteSpace(search))
@@ -110,9 +117,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 {
                     a.MovieSubmissionActorId,
                     a.ActorId,
-                    Name = a.ActorId != null && a.Actor != null ? a.Actor.Name : a.ActorName,
-                    AvatarUrl = a.ActorId != null && a.Actor != null ? a.Actor.AvatarUrl : a.ActorAvatarUrl,
-                    a.Role
+                    actorName = a.ActorId != null && a.Actor != null ? a.Actor.Name : a.ActorName,
+                    actorAvatarUrl = a.ActorId != null && a.Actor != null ? a.Actor.AvatarUrl : a.ActorAvatarUrl,
+                    role = a.Role
                 })
                 .ToList();
 
@@ -122,13 +129,24 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ms.Title,
                 ms.Director,
                 ms.Genre,
+                ms.DurationMinutes,
                 ms.Description,
                 ms.Language,
                 ms.Country,
+                ms.PosterUrl,
+                ms.BannerUrl,
+                ms.Production,
                 ms.PremiereDate,
                 ms.EndDate,
+                ms.TrailerUrl,
+                ms.CopyrightDocumentUrl,
+                ms.DistributionLicenseUrl,
+                ms.AdditionalNotes,
                 ms.Status,
                 ms.SubmittedAt,
+                ms.ReviewedAt,
+                ms.RejectionReason,
+                ms.MovieId,
                 ms.CreatedAt,
                 ms.UpdatedAt,
                 Partner = ms.Partner != null ? new
@@ -217,10 +235,24 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             string key = NormalizeTitle(s.Title);
 
             // 1) Tạo Movie nếu chưa có (đặt unique bằng logic hoặc index ở Movie)
-            var movie = await _context.Movies.FirstOrDefaultAsync(m => NormalizeTitle(m.Title) == key);
-            if (movie == null)
+            // Lưu ý: NormalizeTitle là hàm .NET nên EF không translate được xuống SQL.
+            // Vì vậy ta load danh sách title lên memory rồi so sánh.
+            var existingMovieTitles = await _context.Movies
+                .Select(m => m.Title)
+                .ToListAsync();
+            
+            var movie = existingMovieTitles
+                .FirstOrDefault(t => NormalizeTitle(t) == key);
+            
+            Movie? movieEntity = null;
+            if (movie != null)
             {
-                movie = new Movie
+                movieEntity = await _context.Movies.FirstOrDefaultAsync(m => m.Title == movie);
+            }
+            
+            if (movieEntity == null)
+            {
+                movieEntity = new Movie
                 {
                     Title = s.Title.Trim(),
                     Genre = s.Genre,
@@ -238,7 +270,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
-                _context.Movies.Add(movie);
+                _context.Movies.Add(movieEntity);
                 await _context.SaveChangesAsync();
             }
 
@@ -263,7 +295,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
                 _context.MovieActors.Add(new MovieActor
                 {
-                    MovieId = movie.MovieId,
+                    MovieId = movieEntity.MovieId,
                     ActorId = actorId,
                     Role = msa.Role
                 });
@@ -271,20 +303,31 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             // 3) Cập nhật submission được duyệt
             s.Status = "Approved";
-            s.MovieId = movie.MovieId;
+            s.MovieId = movieEntity.MovieId;
             s.ReviewerId = managerId;
             s.ReviewedAt = DateTime.UtcNow;
             s.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
             // 4) Auto-reject các Pending khác trùng tiêu đề
-            var others = await _context.MovieSubmissions
+            // Lưu ý: NormalizeTitle là hàm .NET nên EF không translate được xuống SQL.
+            // Vì vậy ta load danh sách Pending lên memory rồi filter.
+            var allPending = await _context.MovieSubmissions
                 .Where(x => x.MovieSubmissionId != s.MovieSubmissionId
-                        && x.Status == "Pending"
-                        && NormalizeTitle(x.Title) == key)
+                        && x.Status == "Pending")
+                .Select(x => new { x.MovieSubmissionId, x.Title })
+                .ToListAsync();
+            
+            var others = allPending
+                .Where(x => NormalizeTitle(x.Title) == key)
+                .Select(x => x.MovieSubmissionId)
+                .ToList();
+            
+            var othersEntities = await _context.MovieSubmissions
+                .Where(x => others.Contains(x.MovieSubmissionId))
                 .ToListAsync();
 
-            foreach (var o in others)
+            foreach (var o in othersEntities)
             {
                 o.Status = "Rejected";
                 o.RejectionReason = "Đã có phim trùng";

@@ -852,6 +852,10 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(1000)
                 .IsUnicode(false)
                 .HasColumnName("theater_photos_url");
+            entity.Property(e => e.AdditionalDocumentsUrl)
+                .HasMaxLength(1000)
+                .IsUnicode(false)
+                .HasColumnName("additional_documents_url");
             entity.Property(e => e.UpdatedAt)
                 .HasColumnType("datetime")
                 .HasColumnName("updated_at");

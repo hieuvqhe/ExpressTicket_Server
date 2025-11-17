@@ -35,6 +35,8 @@ public partial class Partner
 
     public string? TheaterPhotosUrl { get; set; }
 
+    public string? AdditionalDocumentsUrl { get; set; }
+
     public string? Status { get; set; }
 
     public string? RejectionReason { get; set; }

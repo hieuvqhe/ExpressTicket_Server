@@ -51,6 +51,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                               "https://example.com/photos/theater1.jpg",
                               "https://example.com/photos/theater2.jpg"
                             ],
+                            "additionalDocumentsUrls": [
+                              "https://example.com/docs/doc1.jpg",
+                              "https://example.com/docs/doc2.jpg"
+                            ],
                             "status": "approved",
                             "createdAt": "2025-10-19T10:30:00Z",
                             "updatedAt": "2025-10-19T11:00:00Z"

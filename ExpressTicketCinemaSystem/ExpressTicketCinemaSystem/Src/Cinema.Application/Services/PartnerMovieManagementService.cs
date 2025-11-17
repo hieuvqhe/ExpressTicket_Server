@@ -821,7 +821,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await using var tx = await _context.Database.BeginTransactionAsync();
             try
             {
-                var submission = await ValidateSubmissionAccessAsync(submissionId, partnerId);
+                var submission = await ValidateSubmissionAccessAsync(submissionId, partnerId, allowRejected: true);
+                
+                // Chặn update nếu bị reject vì trùng phim (phim đã tồn tại, không thể sửa)
+                if (submission.Status == "Rejected" &&
+                    string.Equals(submission.RejectionReason, "Đã có phim trùng", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ValidationException(new Dictionary<string, ValidationError>
+                    {
+                        ["status"] = new ValidationError
+                        {
+                            Msg = "Phim này đã tồn tại trong hệ thống. Không thể chỉnh sửa submission đã bị từ chối vì lý do trùng phim.",
+                            Path = "status",
+                            Location = "body"
+                        }
+                    });
+                }
 
                 // Validate các trường scalar nếu có
                 if (!string.IsNullOrWhiteSpace(request.Title) ||

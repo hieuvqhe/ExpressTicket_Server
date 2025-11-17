@@ -43,6 +43,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                           "theaterPhotosUrls": [
                             "https://example.com/theater1.jpg",
                             "https://example.com/theater2.jpg"
+                          ],
+                          "additionalDocumentsUrls": [
+                            "https://example.com/doc1.jpg",
+                            "https://example.com/doc2.jpg"
                           ]
                         }
                         """

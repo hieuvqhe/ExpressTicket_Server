@@ -26,6 +26,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses
         public string? TaxRegistrationCertificateUrl { get; set; }
         public string? IdentityCardUrl { get; set; }
         public string? TheaterPhotosUrl { get; set; }
+        public string? AdditionalDocumentsUrl { get; set; }
     }
 
     public class PaginatedPartnersResponse

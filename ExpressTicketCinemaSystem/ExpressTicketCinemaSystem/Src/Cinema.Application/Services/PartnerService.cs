@@ -49,6 +49,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateCommissionRate(request.CommissionRate);
             ValidateDocuments(request);
             ValidateTheaterPhotos(request.TheaterPhotosUrls);
+            ValidateAdditionalDocuments(request.AdditionalDocumentsUrls);
 
             // ==================== BUSINESS LOGIC SECTION ====================
             var defaultManager = await _context.Managers
@@ -89,7 +90,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 BusinessRegistrationCertificateUrl = request.BusinessRegistrationCertificateUrl,
                 TaxRegistrationCertificateUrl = request.TaxRegistrationCertificateUrl,
                 IdentityCardUrl = request.IdentityCardUrl,
-                TheaterPhotosUrl = string.Join(";", request.TheaterPhotosUrls), 
+                TheaterPhotosUrl = string.Join(";", request.TheaterPhotosUrls),
+                AdditionalDocumentsUrl = request.AdditionalDocumentsUrls != null && request.AdditionalDocumentsUrls.Any() 
+                    ? string.Join(";", request.AdditionalDocumentsUrls) 
+                    : null,
                 Status = "pending",
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -304,6 +308,42 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (errors.Any())
                 throw new ValidationException(errors); 
         }
+
+        private void ValidateAdditionalDocuments(List<string> additionalDocumentsUrls)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            // Optional field - chỉ validate nếu có giá trị
+            if (additionalDocumentsUrls != null && additionalDocumentsUrls.Any())
+            {
+                if (additionalDocumentsUrls.Count > 10)
+                    errors.TryAdd("additionalDocumentsUrls", new ValidationError { Msg = "Chỉ được phép tối đa 10 ảnh giấy tờ khác", Path = "additionalDocumentsUrls" });
+                else
+                {
+                    var urlPattern = @"^https?://.+\.(jpg|jpeg|png|webp|svg)$";
+                    foreach (var documentUrl in additionalDocumentsUrls)
+                    {
+                        if (string.IsNullOrWhiteSpace(documentUrl))
+                        {
+                            errors.TryAdd("additionalDocumentsUrls_empty", new ValidationError { Msg = "URL ảnh giấy tờ không được để trống", Path = "additionalDocumentsUrls" });
+                            break;
+                        }
+                        if (!Regex.IsMatch(documentUrl, urlPattern, RegexOptions.IgnoreCase))
+                        {
+                            errors.TryAdd("additionalDocumentsUrls_pattern", new ValidationError { Msg = $"URL ảnh giấy tờ không hợp lệ: {documentUrl}. Phải là URL ảnh (jpg, jpeg, png, webp, svg)", Path = "additionalDocumentsUrls" });
+                            break;
+                        }
+                    }
+
+                    if (additionalDocumentsUrls.Distinct().Count() != additionalDocumentsUrls.Count)
+                        errors.TryAdd("additionalDocumentsUrls_duplicate", new ValidationError { Msg = "Không được phép có URL ảnh trùng lặp", Path = "additionalDocumentsUrls" });
+                }
+            }
+
+            if (errors.Any())
+                throw new ValidationException(errors); 
+        }
+
         private void ValidatePasswordConfirmation(string password, string confirmPassword)
         {
             var errors = new Dictionary<string, ValidationError>();
@@ -338,6 +378,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ? new List<string>()
                 : partner.TheaterPhotosUrl.Split(';').ToList();
 
+            var additionalDocuments = string.IsNullOrEmpty(partner.AdditionalDocumentsUrl)
+                ? new List<string>()
+                : partner.AdditionalDocumentsUrl.Split(';').ToList();
+
             return new PartnerProfileResponse
             {
                 UserId = partner.User.UserId,
@@ -356,6 +400,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 TaxRegistrationCertificateUrl = partner.TaxRegistrationCertificateUrl ?? "",
                 IdentityCardUrl = partner.IdentityCardUrl ?? "",
                 TheaterPhotosUrls = theaterPhotos,
+                AdditionalDocumentsUrls = additionalDocuments,
 
                 Status = partner.Status,
                 CreatedAt = partner.CreatedAt,
@@ -371,6 +416,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateCommissionRate(request.CommissionRate);
             ValidateDocuments(request);
             ValidateTheaterPhotos(request.TheaterPhotosUrls);
+            ValidateAdditionalDocuments(request.AdditionalDocumentsUrls);
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
@@ -410,6 +456,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (request.TheaterPhotosUrls != null && request.TheaterPhotosUrls.Any())
                 partner.TheaterPhotosUrl = string.Join(";", request.TheaterPhotosUrls);
 
+            if (request.AdditionalDocumentsUrls != null && request.AdditionalDocumentsUrls.Any())
+                partner.AdditionalDocumentsUrl = string.Join(";", request.AdditionalDocumentsUrls);
+            else if (request.AdditionalDocumentsUrls != null && !request.AdditionalDocumentsUrls.Any())
+                partner.AdditionalDocumentsUrl = null;
+
             partner.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -417,6 +468,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var theaterPhotos = string.IsNullOrEmpty(partner.TheaterPhotosUrl)
                 ? new List<string>()
                 : partner.TheaterPhotosUrl.Split(';').ToList();
+
+            var additionalDocuments = string.IsNullOrEmpty(partner.AdditionalDocumentsUrl)
+                ? new List<string>()
+                : partner.AdditionalDocumentsUrl.Split(';').ToList();
 
             return new PartnerProfileResponse
             {
@@ -436,6 +491,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 TaxRegistrationCertificateUrl = partner.TaxRegistrationCertificateUrl ?? "",
                 IdentityCardUrl = partner.IdentityCardUrl ?? "",
                 TheaterPhotosUrls = theaterPhotos,
+                AdditionalDocumentsUrls = additionalDocuments,
 
                 Status = partner.Status,
                 CreatedAt = partner.CreatedAt,
@@ -569,7 +625,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     BusinessRegistrationCertificateUrl = p.BusinessRegistrationCertificateUrl,
                     TaxRegistrationCertificateUrl = p.TaxRegistrationCertificateUrl,
                     IdentityCardUrl = p.IdentityCardUrl,
-                    TheaterPhotosUrl = p.TheaterPhotosUrl
+                    TheaterPhotosUrl = p.TheaterPhotosUrl,
+                    AdditionalDocumentsUrl = p.AdditionalDocumentsUrl
                 })
                 .ToListAsync();  
 
