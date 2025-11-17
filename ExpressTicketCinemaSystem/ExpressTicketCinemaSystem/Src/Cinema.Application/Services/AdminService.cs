@@ -3,6 +3,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using System.Linq.Dynamic.Core;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Request;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -402,4 +403,4 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return (true, string.Empty);
         }
     }
-    }
+}

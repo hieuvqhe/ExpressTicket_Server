@@ -22,12 +22,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly ContractService _contractService;
         private readonly PartnerService _partnerService;
         private readonly IAzureBlobService _azureBlobService;
+        private readonly IManagerService _managerService;
 
-        public ManagerController(ContractService contractService , PartnerService partnerService, IAzureBlobService azureBlobService)
+        public ManagerController(ContractService contractService , PartnerService partnerService, IAzureBlobService azureBlobService, IManagerService managerService)
         {
             _contractService = contractService;
             _partnerService = partnerService;
             _azureBlobService = azureBlobService;
+            _managerService = managerService;
         }
 
         private int GetCurrentManagerId()
@@ -683,6 +685,164 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi tạo URL upload PDF."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get all booking orders (Manager only) with filtering and pagination
+        /// </summary>
+        /// <remarks>
+        /// Manager only - View all bookings from all partners and all cinemas
+        /// </remarks>
+        /// <param name="partnerId">Filter by partner ID</param>
+        /// <param name="cinemaId">Filter by cinema ID</param>
+        /// <param name="status">Filter by booking status</param>
+        /// <param name="paymentStatus">Filter by payment status</param>
+        /// <param name="fromDate">Filter from booking date</param>
+        /// <param name="toDate">Filter to booking date</param>
+        /// <param name="customerId">Filter by customer ID</param>
+        /// <param name="customerEmail">Search by customer email</param>
+        /// <param name="customerPhone">Search by customer phone</param>
+        /// <param name="customerName">Search by customer name</param>
+        /// <param name="bookingCode">Search by booking code</param>
+        /// <param name="orderCode">Search by order code</param>
+        /// <param name="movieId">Filter by movie ID</param>
+        /// <param name="minAmount">Filter by minimum amount</param>
+        /// <param name="maxAmount">Filter by maximum amount</param>
+        /// <param name="page">Page number</param>
+        /// <param name="pageSize">Items per page</param>
+        /// <param name="sortBy">Sort by field</param>
+        /// <param name="sortOrder">Sort order (asc/desc)</param>
+        [HttpGet("/manager/bookings")]
+        [ProducesResponseType(typeof(SuccessResponse<ManagerBookingsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetBookings(
+            [FromQuery] int? partnerId,
+            [FromQuery] int? cinemaId,
+            [FromQuery] string? status,
+            [FromQuery] string? paymentStatus,
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] int? customerId,
+            [FromQuery] string? customerEmail,
+            [FromQuery] string? customerPhone,
+            [FromQuery] string? customerName,
+            [FromQuery] string? bookingCode,
+            [FromQuery] string? orderCode,
+            [FromQuery] int? movieId,
+            [FromQuery] decimal? minAmount,
+            [FromQuery] decimal? maxAmount,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string sortBy = "booking_time",
+            [FromQuery] string sortOrder = "desc")
+        {
+            try
+            {
+                var userId = GetCurrentManagerId();
+
+                var request = new GetManagerBookingsRequest
+                {
+                    PartnerId = partnerId,
+                    CinemaId = cinemaId,
+                    Status = status,
+                    PaymentStatus = paymentStatus,
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    CustomerId = customerId,
+                    CustomerEmail = customerEmail,
+                    CustomerPhone = customerPhone,
+                    CustomerName = customerName,
+                    BookingCode = bookingCode,
+                    OrderCode = orderCode,
+                    MovieId = movieId,
+                    MinAmount = minAmount,
+                    MaxAmount = maxAmount,
+                    Page = page,
+                    PageSize = pageSize,
+                    SortBy = sortBy,
+                    SortOrder = sortOrder
+                };
+
+                var result = await _managerService.GetManagerBookingsAsync(userId, request);
+
+                return Ok(new SuccessResponse<ManagerBookingsResponse>
+                {
+                    Message = "Lấy danh sách đơn hàng thành công.",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Lỗi xác thực dữ liệu",
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return StatusCode(403, new ValidationErrorResponse
+                {
+                    Message = ex.Message,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Lỗi khi lấy danh sách đơn hàng: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get detailed information of a specific booking by ID (Manager only)
+        /// </summary>
+        /// <param name="bookingId">The ID of the booking to retrieve</param>
+        [HttpGet("/manager/bookings/{bookingId}")]
+        [ProducesResponseType(typeof(SuccessResponse<BookingDetailResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetBookingDetail(int bookingId)
+        {
+            try
+            {
+                var userId = GetCurrentManagerId();
+                var result = await _managerService.GetBookingDetailAsync(userId, bookingId);
+
+                return Ok(new SuccessResponse<BookingDetailResponse>
+                {
+                    Message = "Lấy chi tiết đơn hàng thành công.",
+                    Result = result
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return StatusCode(403, new ValidationErrorResponse
+                {
+                    Message = ex.Message,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse
+                {
+                    Message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Lỗi khi lấy chi tiết đơn hàng: " + ex.Message
                 });
             }
         }

@@ -18,3 +18,4 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses
     }
 }
 
+

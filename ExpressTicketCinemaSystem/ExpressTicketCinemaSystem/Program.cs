@@ -138,6 +138,7 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<PartnerGetServicesExampleFilter>();
     options.OperationFilter<PartnerUpdateServiceExampleFilter>();
     options.OperationFilter<PartnerDeleteServiceExampleFilter>();
+    options.OperationFilter<PartnerGetBookingsExampleFilter>();
     options.OperationFilter<Booking_CreateSession_ExampleFilter>();
     options.OperationFilter<Booking_GetSession_ExampleFilter>();
     options.OperationFilter<Booking_DeleteSession_ExampleFilter>();
@@ -156,6 +157,9 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<ManagerSendVoucherToAllExampleFilter>();
     options.OperationFilter<ManagerSendVoucherToSpecificExampleFilter>();
     options.OperationFilter<UserGetVouchersExampleFilter>();
+    options.OperationFilter<UserGetOrdersExampleFilter>();
+    options.OperationFilter<UserGetOrderDetailExampleFilter>();
+    options.OperationFilter<UserGetTicketsExampleFilter>();
     options.OperationFilter<CreateMovieReviewExampleFilter>();
     options.OperationFilter<UpdateMovieReviewExampleFilter>();
     options.OperationFilter<DeleteMovieReviewExampleFilter>();
@@ -175,6 +179,8 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
     options.OperationFilter<AdminUserExamplesFilter>();
+    options.OperationFilter<ManagerGetBookingsExampleFilter>();
+    options.OperationFilter<ManagerGetBookingDetailExampleFilter>();
 
 });
 
