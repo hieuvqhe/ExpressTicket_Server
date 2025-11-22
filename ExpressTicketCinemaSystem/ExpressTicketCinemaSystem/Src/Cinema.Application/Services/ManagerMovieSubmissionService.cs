@@ -252,6 +252,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             
             if (movieEntity == null)
             {
+                // Lấy thông tin manager để set CreatedBy
+                var manager = await _context.Managers
+                    .Include(m => m.User)
+                    .FirstOrDefaultAsync(m => m.ManagerId == managerId);
+                
                 movieEntity = new Movie
                 {
                     Title = s.Title.Trim(),
@@ -260,6 +265,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     Director = s.Director,
                     Language = s.Language,
                     Country = s.Country,
+                    IsActive = true, // Phim được duyệt thì active ngay
                     PosterUrl = s.PosterUrl,
                     BannerUrl = s.BannerUrl,
                     Production = s.Production,
@@ -267,6 +273,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     PremiereDate = s.PremiereDate,
                     EndDate = s.EndDate,
                     TrailerUrl = s.TrailerUrl,
+                    PartnerId = s.PartnerId, // Link với partner đã submit
+                    CreatedBy = manager?.User?.Fullname ?? $"Manager_{managerId}", // Tên manager hoặc fallback
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };

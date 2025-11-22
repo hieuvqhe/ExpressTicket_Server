@@ -588,7 +588,7 @@ public partial class CinemaDbCoreContext : DbContext
                .HasColumnName("banner_url");
             entity.Property(e => e.Country)
                 .HasMaxLength(100)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("country");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
             entity.Property(e => e.CreatedBy)
@@ -597,20 +597,20 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.Director)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("director");
             entity.Property(e => e.DurationMinutes).HasColumnName("duration_minutes");
             entity.Property(e => e.EndDate).HasColumnName("endDate");
             entity.Property(e => e.Genre)
                 .HasMaxLength(100)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("genre");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
             entity.Property(e => e.Language)
                 .HasMaxLength(50)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("language");
             entity.Property(e => e.PartnerId).HasColumnName("partner_id");
             entity.Property(e => e.PosterUrl).HasColumnName("poster_url");
@@ -621,7 +621,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.RatingsCount).HasColumnName("ratings_count");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("title");
             entity.Property(e => e.TrailerUrl)
                 .HasMaxLength(500)

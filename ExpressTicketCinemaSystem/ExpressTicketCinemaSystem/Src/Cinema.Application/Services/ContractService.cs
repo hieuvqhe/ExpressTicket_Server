@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using System.Threading.Tasks;
+using System.Net;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests.ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
 using Microsoft.Extensions.Logging;
@@ -183,36 +184,109 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 {
                     var subject = "HỢP ĐỒNG HỢP TÁC - CHỜ KÝ DUYỆT";
 
-                    // Sử dụng format giống hệt SendContractFinalizedEmailAsync
-                    var body = $@"
-Kính gửi Ông/Bà {contract.Partner.User.Fullname},
+                    var htmlBody = $@"
+<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+    <div style='background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 30px; text-align: center; color: white;'>
+        <h1 style='margin: 0; font-size: 28px;'>🎬 TicketExpress</h1>
+        <p style='margin: 10px 0 0 0; font-size: 16px;'>Hệ thống đặt vé rạp chiếu phim</p>
+    </div>
+    
+    <div style='padding: 30px; background: #f9f9f9;'>
+        <div style='background: white; padding: 25px; border-radius: 8px; border-left: 4px solid #2563eb;'>
+            <p style='margin-bottom: 10px;'>Kính gửi Ông/Bà <strong>{contract.Partner.User.Fullname}</strong>,</p>
+            <p style='margin-bottom: 20px;'>Hợp đồng hợp tác đã được soạn thảo và đang chờ Quý đối tác ký duyệt.</p>
+            
+            <h4 style='color: #333; margin-bottom: 15px;'>THÔNG TIN HỢP ĐỒNG:</h4>
+            <div style='background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;'>
+                <table style='width: 100%; border-collapse: collapse;'>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666; width: 160px;'>Số hợp đồng:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.ContractNumber}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Tiêu đề:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.Title}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Loại hợp đồng:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.ContractType}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Ngày bắt đầu:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.StartDate:dd/MM/yyyy}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Ngày kết thúc:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.EndDate:dd/MM/yyyy}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Tỷ lệ hoa hồng:</td>
+                        <td style='padding: 8px 0;'><strong style='color: #2563eb;'>{contract.CommissionRate}%</strong></td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div style='background: #e0e7ff; padding: 20px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #c7d2fe;'>
+                <h4 style='color: #1e40af; margin: 0 0 15px 0;'>📄 LINK TẢI HỢP ĐỒNG PDF:</h4>
+                <div style='text-align: center; margin: 15px 0;'>
+                    <a href='{pdfUrl}' style='
+                        display: inline-block;
+                        background-color: #2563eb;
+                        color: white;
+                        padding: 12px 30px;
+                        text-decoration: none;
+                        border-radius: 5px;
+                        font-weight: bold;
+                        font-size: 16px;
+                    '>Tải xuống hợp đồng PDF</a>
+                </div>
+                <p style='margin: 10px 0 0 0; color: #1e40af; font-size: 12px; word-break: break-all;'>
+                    Hoặc copy link: <a href='{pdfUrl}' style='color: #2563eb;'>{pdfUrl}</a>
+                </p>
+            </div>
+            
+            <div style='background: #fff7ed; padding: 20px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #f59e0b;'>
+                <h4 style='color: #92400e; margin: 0 0 15px 0;'>✍️ HƯỚNG DẪN KÝ:</h4>
+                <ol style='color: #92400e; line-height: 1.8; margin: 0; padding-left: 20px;'>
+                    <li>Tải file PDF từ link trên</li>
+                    <li>In hợp đồng ra giấy</li>
+                    <li>Ký tay và đóng dấu (nếu có)</li>
+                    <li>Scan hợp đồng đã ký thành file PDF</li>
+                    <li>Upload file PDF đã ký lên hệ thống</li>
+                </ol>
+            </div>
+            
+            {(string.IsNullOrWhiteSpace(notes) ? "" : $@"
+            <div style='background: #fef3c7; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #fde68a;'>
+                <h4 style='color: #78350f; margin: 0 0 10px 0;'>📌 GHI CHÚ:</h4>
+                <p style='margin: 0; color: #78350f; line-height: 1.6;'>{WebUtility.HtmlEncode(notes)}</p>
+            </div>
+            ")}
+            
+            <div style='background: #fef2f2; padding: 15px; border-radius: 5px; border: 1px solid #fecaca;'>
+                <p style='margin: 0; color: #991b1b; line-height: 1.6;'>
+                    <strong>⏰ Lưu ý quan trọng:</strong><br>
+                    Thực hiện ký kết hợp đồng trong vòng <strong>3 ngày</strong> và gửi lại qua hệ thống.
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div style='padding: 20px; text-align: center; background: #333; color: white;'>
+        <p style='margin: 0 0 10px 0; font-size: 16px; font-weight: bold;'>ĐỘI NGŨ HỖ TRỢ TICKET EXPRESS</p>
+        <p style='margin: 5px 0;'>Hotline: 1900 1234 | Email: support@ticketexpress.com</p>
+        <p style='margin: 15px 0 0 0; font-size: 12px; opacity: 0.8;'>
+            © 2024 TicketExpress. All rights reserved.<br>
+            Đây là email tự động, vui lòng không trả lời.
+        </p>
+        <p style='margin: 10px 0 0 0; font-size: 12px; opacity: 0.9;'>
+            Trân trọng,<br>
+            <strong>{GetCompanyInfo().Name}</strong>
+        </p>
+    </div>
+</div>";
 
-Hợp đồng hợp tác đã được soạn thảo và đang chờ Quý đối tác ký duyệt.
-
-THÔNG TIN HỢP ĐỒNG:
-- Số hợp đồng: {contract.ContractNumber}
-- Tiêu đề: {contract.Title}
-- Loại hợp đồng: {contract.ContractType}
-- Ngày bắt đầu: {contract.StartDate:dd/MM/yyyy}
-- Ngày kết thúc: {contract.EndDate:dd/MM/yyyy}
-- Tỷ lệ hoa hồng: {contract.CommissionRate}%
-
-LINK TẢI HỢP ĐỒNG PDF:
-{pdfUrl}
-
-HƯỚNG DẪN KÝ:
-1. Tải file PDF từ link trên
-2. In hợp đồng ra giấy
-3. Ký tay và đóng dấu (nếu có)
-4. Scan hợp đồng đã ký thành file PDF
-5. Upload file PDF đã ký lên hệ thống
-
-{(string.IsNullOrEmpty(notes) ? "" : $"GHI CHÚ: {notes}")}
-
-Trân trọng,
-{GetCompanyInfo().Name}";
-
-                    await _emailService.SendEmailAsync(contract.Partner.User.Email, subject, body);
+                    await _emailService.SendEmailAsync(contract.Partner.User.Email, subject, htmlBody);
                 }
             }
             catch (Exception ex)
@@ -675,28 +749,88 @@ Trân trọng,
         {
             try
             {
-                var subject = "HỢP ĐỒNG ĐÃ ĐƯỢC KÍCH HOẠT";
-                var body = $"""
-            Kính gửi Ông/Bà {contract.Partner?.User?.Fullname},
-
-            Hợp đồng {contract.ContractNumber} - {contract.Title} đã được kích hoạt thành công.
-
-            Thông tin hợp đồng:
-            - Số hợp đồng: {contract.ContractNumber}
-            - Loại hợp đồng: {contract.ContractType}
-            - Ngày bắt đầu: {contract.StartDate:dd/MM/yyyy}
-            - Ngày kết thúc: {contract.EndDate:dd/MM/yyyy}
-            - Tỷ lệ hoa hồng: {contract.CommissionRate}%
-
-            Từ thời điểm này, Quý đối tác có thể bắt đầu sử dụng hệ thống để quản lý rạp chiếu phim.
-
-            Trân trọng,
-            {GetCompanyInfo().Name}
-            """;
-
                 if (contract.Partner?.User?.Email != null)
                 {
-                    await _emailService.SendEmailAsync(contract.Partner.User.Email, subject, body);
+                    var subject = "HỢP ĐỒNG ĐÃ ĐƯỢC KÍCH HOẠT";
+
+                    var htmlBody = $@"
+<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
+    <div style='background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center; color: white;'>
+        <h1 style='margin: 0; font-size: 28px;'>🎬 TicketExpress</h1>
+        <p style='margin: 10px 0 0 0; font-size: 16px;'>Hệ thống đặt vé rạp chiếu phim</p>
+    </div>
+    
+    <div style='padding: 30px; background: #f9f9f9;'>
+        <div style='text-align: center; margin-bottom: 20px;'>
+            <div style='font-size: 48px; margin-bottom: 10px;'>✅</div>
+            <h2 style='color: #10b981; margin-bottom: 10px;'>KÍCH HOẠT THÀNH CÔNG!</h2>
+            <p style='color: #666; font-size: 18px;'>Hợp đồng đã được kích hoạt và sẵn sàng sử dụng</p>
+        </div>
+        
+        <div style='background: white; padding: 25px; border-radius: 8px; border-left: 4px solid #10b981;'>
+            <p style='margin-bottom: 10px;'>Kính gửi Ông/Bà <strong>{contract.Partner?.User?.Fullname}</strong>,</p>
+            <p style='margin-bottom: 20px;'>Hợp đồng <strong>{contract.ContractNumber} - {contract.Title}</strong> đã được kích hoạt thành công.</p>
+            
+            <h4 style='color: #333; margin-bottom: 15px;'>THÔNG TIN HỢP ĐỒNG:</h4>
+            <div style='background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;'>
+                <table style='width: 100%; border-collapse: collapse;'>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666; width: 160px;'>Số hợp đồng:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.ContractNumber}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Loại hợp đồng:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.ContractType}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Ngày bắt đầu:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.StartDate:dd/MM/yyyy}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Ngày kết thúc:</td>
+                        <td style='padding: 8px 0;'><strong>{contract.EndDate:dd/MM/yyyy}</strong></td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; color: #666;'>Tỷ lệ hoa hồng:</td>
+                        <td style='padding: 8px 0;'><strong style='color: #10b981;'>{contract.CommissionRate}%</strong></td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div style='background: #d1fae5; padding: 20px; border-radius: 5px; border: 1px solid #a7f3d0; margin-bottom: 20px;'>
+                <h4 style='color: #065f46; margin: 0 0 15px 0;'>🎉 Bắt đầu ngay:</h4>
+                <p style='margin: 0; color: #065f46; line-height: 1.8;'>
+                    Từ thời điểm này, Quý đối tác có thể bắt đầu sử dụng hệ thống để quản lý rạp chiếu phim.
+                </p>
+            </div>
+            
+            <div style='background: #eff6ff; padding: 15px; border-radius: 5px; border-left: 4px solid #3b82f6;'>
+                <h4 style='color: #1e40af; margin: 0 0 10px 0;'>💡 Các tính năng có sẵn:</h4>
+                <ul style='color: #1e40af; line-height: 1.8; margin: 0; padding-left: 20px;'>
+                    <li>Quản lý thông tin rạp chiếu phim</li>
+                    <li>Tạo và quản lý lịch chiếu phim</li>
+                    <li>Theo dõi doanh thu và báo cáo</li>
+                    <li>Quản lý đặt vé và khách hàng</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div style='padding: 20px; text-align: center; background: #333; color: white;'>
+        <p style='margin: 0 0 10px 0; font-size: 16px; font-weight: bold;'>ĐỘI NGŨ HỖ TRỢ TICKET EXPRESS</p>
+        <p style='margin: 5px 0;'>Hotline: 1900 1234 | Email: support@ticketexpress.com</p>
+        <p style='margin: 15px 0 0 0; font-size: 12px; opacity: 0.8;'>
+            © 2024 TicketExpress. All rights reserved.<br>
+            Đây là email tự động, vui lòng không trả lời.
+        </p>
+        <p style='margin: 10px 0 0 0; font-size: 12px; opacity: 0.9;'>
+            Trân trọng,<br>
+            <strong>{GetCompanyInfo().Name}</strong>
+        </p>
+    </div>
+</div>";
+
+                    await _emailService.SendEmailAsync(contract.Partner.User.Email, subject, htmlBody);
                 }
             }
             catch (Exception ex)

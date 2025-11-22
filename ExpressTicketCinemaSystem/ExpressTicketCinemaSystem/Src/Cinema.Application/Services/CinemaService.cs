@@ -31,12 +31,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // ==================== BUSINESS LOGIC SECTION ====================
             await ValidateCinemaBusinessRulesAsync(request, partnerId);
             // SỬA Ở ĐÂY: Sử dụng fully qualified name hoặc alias nếu cần
+            var normalizedPhone = string.IsNullOrWhiteSpace(request.Phone) 
+                ? null 
+                : NormalizePhoneNumber(Regex.Replace(request.Phone.Trim(), @"\s+", ""));
+            
             var cinema = new Infrastructure.Models.Cinema
             {
                 PartnerId = partnerId,
                 CinemaName = request.CinemaName.Trim(),
                 Address = request.Address.Trim(),
-                Phone = request.Phone?.Trim(),
+                Phone = normalizedPhone,
                 Code = request.Code.Trim().ToUpper(),
                 City = request.City.Trim(),
                 District = request.District.Trim(),
@@ -160,7 +164,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             cinema.CinemaName = request.CinemaName.Trim();
             cinema.Address = request.Address.Trim();
-            cinema.Phone = request.Phone?.Trim();
+            cinema.Phone = string.IsNullOrWhiteSpace(request.Phone) 
+                ? null 
+                : NormalizePhoneNumber(Regex.Replace(request.Phone.Trim(), @"\s+", ""));
             cinema.City = request.City.Trim();
             cinema.District = request.District.Trim();
             cinema.Latitude = request.Latitude;
@@ -210,27 +216,34 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (!string.IsNullOrWhiteSpace(request.Phone))
             {
                 var phone = request.Phone.Trim();
-                if (!Regex.IsMatch(phone, @"^(0|\+84|84)[0-9]{9,10}$"))
+                var cleanPhone = Regex.Replace(phone, @"\s+", ""); // Bỏ tất cả khoảng trắng
+                
+                if (!ValidateCinemaPhoneNumber(cleanPhone))
                 {
                     errors["phone"] = new ValidationError
                     {
-                        Msg = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678)",
+                        Msg = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678, +84912345678, +84 1900 6017)",
                         Path = "phone"
                     };
                 }
-
-                var existingPhone = await _context.Cinemas
-                    .FirstOrDefaultAsync(c => c.PartnerId == partnerId &&
-                                             c.CinemaId != cinemaId && 
-                                             c.Phone == phone);
-
-                if (existingPhone != null)
+                else
                 {
-                    errors["phone"] = new ValidationError
+                    // Lưu số điện thoại đã được clean
+                    var normalizedPhone = NormalizePhoneNumber(cleanPhone);
+                    
+                    var existingPhone = await _context.Cinemas
+                        .FirstOrDefaultAsync(c => c.PartnerId == partnerId &&
+                                                 c.CinemaId != cinemaId && 
+                                                 c.Phone == normalizedPhone);
+
+                    if (existingPhone != null)
                     {
-                        Msg = "Số điện thoại đã được sử dụng cho rạp khác",
-                        Path = "phone"
-                    };
+                        errors["phone"] = new ValidationError
+                        {
+                            Msg = "Số điện thoại đã được sử dụng cho rạp khác",
+                            Path = "phone"
+                        };
+                    }
                 }
             }
 
@@ -521,25 +534,33 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (!string.IsNullOrWhiteSpace(request.Phone))
             {
                 var phone = request.Phone.Trim();
-                if (!Regex.IsMatch(phone, @"^(0|\+84|84)[0-9]{9,10}$"))
+                var cleanPhone = Regex.Replace(phone, @"\s+", ""); // Bỏ tất cả khoảng trắng
+                
+                if (!ValidateCinemaPhoneNumber(cleanPhone))
                 {
                     errors["phone"] = new ValidationError
                     {
-                        Msg = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678)",
+                        Msg = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678, +84912345678, +84 1900 6017)",
                         Path = "phone"
                     };
                 }
-
-                var existingPhone = await _context.Cinemas
-                    .FirstOrDefaultAsync(c => c.Phone == phone && c.PartnerId == partnerId);
-
-                if (existingPhone != null)
+                else
                 {
-                    errors["phone"] = new ValidationError
+                    // Lưu số điện thoại đã được clean
+                    var normalizedPhone = NormalizePhoneNumber(cleanPhone);
+                    
+                    var existingPhone = await _context.Cinemas
+                        .FirstOrDefaultAsync(c => c.PartnerId == partnerId &&
+                                                 c.Phone == normalizedPhone);
+
+                    if (existingPhone != null)
                     {
-                        Msg = "Số điện thoại đã được sử dụng cho rạp khác",
-                        Path = "phone"
-                    };
+                        errors["phone"] = new ValidationError
+                        {
+                            Msg = "Số điện thoại đã được sử dụng cho rạp khác",
+                            Path = "phone"
+                        };
+                    }
                 }
             }
 
@@ -628,6 +649,105 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 "updated_at" => isAscending ? query.OrderBy(c => c.UpdatedAt) : query.OrderByDescending(c => c.UpdatedAt),
                 _ => isAscending ? query.OrderBy(c => c.CinemaName) : query.OrderByDescending(c => c.CinemaName)
             };
+        }
+
+        /// <summary>
+        /// Validate số điện thoại cho rạp chiếu phim
+        /// Hỗ trợ: 0xxxxxxxxx (10 số), +84xxxxxxxxx (9 số sau +84), +84xxxxxxxx (8 số sau +84 phải bắt đầu bằng 1900)
+        /// </summary>
+        private bool ValidateCinemaPhoneNumber(string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+                return false;
+
+            // Bỏ tất cả khoảng trắng
+            var cleanPhone = Regex.Replace(phone, @"\s+", "");
+
+            // Nếu bắt đầu bằng +84
+            if (cleanPhone.StartsWith("+84"))
+            {
+                var numberPart = cleanPhone.Substring(3); // Lấy phần sau +84
+
+                // Nếu 8 số: phải bắt đầu bằng 1900
+                if (numberPart.Length == 8)
+                {
+                    return numberPart.StartsWith("1900") && Regex.IsMatch(numberPart, @"^1900[0-9]{4}$");
+                }
+                // Nếu 9 số: kiểm tra đầu số hợp lệ
+                else if (numberPart.Length == 9)
+                {
+                    return Regex.IsMatch(numberPart, @"^(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            // Nếu bắt đầu bằng 0
+            else if (cleanPhone.StartsWith("0"))
+            {
+                // Phải có đúng 10 số và đầu số hợp lệ
+                if (cleanPhone.Length == 10)
+                {
+                    return Regex.IsMatch(cleanPhone, @"^0(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            // Nếu bắt đầu bằng 84 (không có dấu +)
+            else if (cleanPhone.StartsWith("84"))
+            {
+                var numberPart = cleanPhone.Substring(2); // Lấy phần sau 84
+
+                // Nếu 8 số: phải bắt đầu bằng 1900
+                if (numberPart.Length == 8)
+                {
+                    return numberPart.StartsWith("1900") && Regex.IsMatch(numberPart, @"^1900[0-9]{4}$");
+                }
+                // Nếu 9 số: kiểm tra đầu số hợp lệ
+                else if (numberPart.Length == 9)
+                {
+                    return Regex.IsMatch(numberPart, @"^(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Chuẩn hóa số điện thoại về dạng 0xxxxxxxxx hoặc +84xxxxxxxxx
+        /// </summary>
+        private string NormalizePhoneNumber(string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+                return phone;
+
+            // Bỏ tất cả khoảng trắng
+            var cleanPhone = Regex.Replace(phone.Trim(), @"\s+", "");
+
+            // Nếu bắt đầu bằng +84
+            if (cleanPhone.StartsWith("+84"))
+            {
+                return cleanPhone; // Giữ nguyên +84
+            }
+            // Nếu bắt đầu bằng 84 (không có dấu +)
+            else if (cleanPhone.StartsWith("84") && cleanPhone.Length >= 11)
+            {
+                return "+" + cleanPhone; // Thêm dấu +
+            }
+            // Nếu bắt đầu bằng 0
+            else if (cleanPhone.StartsWith("0"))
+            {
+                return cleanPhone; // Giữ nguyên
+            }
+
+            return cleanPhone;
         }
     }
 }

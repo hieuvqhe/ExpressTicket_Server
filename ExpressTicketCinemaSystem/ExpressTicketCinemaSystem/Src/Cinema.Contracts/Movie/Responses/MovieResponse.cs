@@ -13,6 +13,7 @@
         public string? Country { get; set; }
         public bool IsActive { get; set; }
         public string? PosterUrl { get; set; }
+        public string? BannerUrl { get; set; }
         public string? Production { get; set; }
         public string? Description { get; set; }
         public string Status { get; set; }
