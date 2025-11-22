@@ -19,21 +19,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class SeatLockAppService : ISeatLockAppService
     {
         private readonly CinemaDbCoreContext _db;
-        private readonly InfraRT.IShowtimeSeatEventStream _eventStream;
+        private readonly InfraRT.IShowtimeSeatEventPublisher _eventPublisher;
         private readonly ILogger<SeatLockAppService> _logger;
 
         private static readonly TimeSpan SeatLockTtl = TimeSpan.FromMinutes(3);
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(10);
-        private const int MaxSseRetryAttempts = 3;
-        private static readonly TimeSpan SseRetryDelay = TimeSpan.FromMilliseconds(100);
 
         public SeatLockAppService(
             CinemaDbCoreContext db,
-            InfraRT.IShowtimeSeatEventStream eventStream,
+            InfraRT.IShowtimeSeatEventPublisher eventPublisher,
             ILogger<SeatLockAppService> logger)
         {
             _db = db;
-            _eventStream = eventStream;
+            _eventPublisher = eventPublisher;
             _logger = logger;
         }
 
@@ -288,8 +286,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw;
             }
 
-            // ✅ Publish SSE với retry mechanism
-            await PublishSeatEventsWithRetryAsync(requestedDistinct.Select(sid => new InfraRT.SeatEvent
+            // ✅ Publish SignalR events
+            await PublishSeatEventsAsync(requestedDistinct.Select(sid => new InfraRT.SeatEvent
             {
                 ShowtimeId = showtimeId,
                 SeatId = sid,
@@ -363,8 +361,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw;
             }
 
-            // ✅ Publish SSE với retry
-            await PublishSeatEventsWithRetryAsync(request.SeatIds.Distinct().Select(sid => new InfraRT.SeatEvent
+            // ✅ Publish SignalR events
+            await PublishSeatEventsAsync(request.SeatIds.Distinct().Select(sid => new InfraRT.SeatEvent
             {
                 ShowtimeId = showtimeId,
                 SeatId = sid,
@@ -572,7 +570,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw;
             }
 
-            // ✅ Publish SSE với retry
+            // ✅ Publish SignalR events
             var eventsToPublish = new List<InfraRT.SeatEvent>();
             eventsToPublish.AddRange(toAdd.Select(sid => new InfraRT.SeatEvent
             {
@@ -587,7 +585,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 SeatId = sid,
                 Type = InfraRT.SeatEventType.Released
             }));
-            await PublishSeatEventsWithRetryAsync(eventsToPublish, ct);
+            await PublishSeatEventsAsync(eventsToPublish, ct);
 
             return new ReplaceSeatsResponse
             {
@@ -599,9 +597,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
         /// <summary>
-        /// ✅ Helper: Publish SSE events với retry mechanism để đảm bảo eventual consistency
+        /// ✅ Helper: Publish SignalR events
         /// </summary>
-        private async Task PublishSeatEventsWithRetryAsync(
+        private async Task PublishSeatEventsAsync(
             List<InfraRT.SeatEvent> events,
             CancellationToken ct = default)
         {
@@ -609,32 +607,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             foreach (var evt in events)
             {
-                int attempt = 0;
-                bool success = false;
-
-                while (attempt < MaxSseRetryAttempts && !success)
+                try
                 {
-                    try
-                    {
-                        await _eventStream.PublishAsync(evt, ct);
-                        success = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        attempt++;
-                        if (attempt >= MaxSseRetryAttempts)
-                        {
-                            // ✅ Log nhưng không throw - data đã commit, chỉ là SSE notification fail
-                            // Client sẽ nhận update khi refresh hoặc qua SSE stream
-                            _logger.LogWarning(ex,
-                                "Failed to publish SSE event after {Attempts} attempts. ShowtimeId: {ShowtimeId}, SeatId: {SeatId}, Type: {Type}",
-                                MaxSseRetryAttempts, evt.ShowtimeId, evt.SeatId, evt.Type);
-                        }
-                        else
-                        {
-                            await Task.Delay(SseRetryDelay, ct);
-                        }
-                    }
+                    await _eventPublisher.PublishSeatEventAsync(evt, ct);
+                }
+                catch (Exception ex)
+                {
+                    // ✅ Log nhưng không throw - data đã commit, chỉ là SignalR notification fail
+                    // Client sẽ nhận update khi refresh hoặc reconnect SignalR
+                    _logger.LogWarning(ex,
+                        "Failed to publish SignalR event. ShowtimeId: {ShowtimeId}, SeatId: {SeatId}, Type: {Type}",
+                        evt.ShowtimeId, evt.SeatId, evt.Type);
                 }
             }
         }

@@ -61,8 +61,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         Task<MoviePaginatedByGenreResponse> GetMoviesByGenreAsync(string genre, int page, int limit, string sortBy, string sortOrder);
         Task<MovieStatisticsResponse> GetMovieStatisticsAsync();
         Task<IEnumerable<TopRatedMovieResponse>> GetTopRatedMoviesAsync(int limit = 10, int minRatingsCount = 1, string timePeriod = "all");
-        Task<(bool success, string message, RatingFilm? rating)> CreateReviewAsync(int movieId, int userId, int ratingStar, string comment);
-        Task<(bool success, string message, RatingFilm? rating)> UpdateReviewAsync(int movieId, int userId, int ratingStar, string comment);
+        Task<(bool success, string message, RatingFilm? rating)> CreateReviewAsync(int movieId, int userId, int ratingStar, string comment, List<string>? imageUrls = null);
+        Task<(bool success, string message, RatingFilm? rating)> UpdateReviewAsync(int movieId, int userId, int ratingStar, string comment, List<string>? imageUrls = null);
         Task<(bool success, string message)> DeleteReviewAsync(int movieId, int userId);
         Task<(bool success, string message, GetMovieReviewsResponse? data)> GetMovieReviewsAsync(
             int movieId,

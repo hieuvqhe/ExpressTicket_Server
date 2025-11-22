@@ -51,9 +51,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                                                     ["rating_id"] = new OpenApiInteger(30),
                                                     ["user_id"] = new OpenApiInteger(12),
                                                     ["user_name"] = new OpenApiString("Quang Ngoc"),
+                                                    ["user_avatar"] = new OpenApiString("https://example.com/storage/avatars/user12.jpg"),
                                                     ["rating_star"] = new OpenApiInteger(2),
                                                     ["comment"] = new OpenApiString("Plot hơi rối và khó hiểu, mình không thích nhiều tầng nghĩa kiểu này. 2 sao."),
-                                                    ["rating_at"] = new OpenApiString("2025-09-27T00:00:00")
+                                                    ["rating_at"] = new OpenApiString("2025-09-27T00:00:00"),
+                                                    ["image_urls"] = new OpenApiArray()
                                                 },
                                                 new OpenApiObject
                                                 {
@@ -88,19 +90,28 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                                                 {
                                                     ["rating_id"] = new OpenApiInteger(29),
                                                     ["user_id"] = new OpenApiInteger(11),
-                                                    ["user_name"] = new OpenApiString("string"),
+                                                    ["user_name"] = new OpenApiString("Nguyễn Huy Toàn"),
+                                                    ["user_avatar"] = new OpenApiString("https://example.com/storage/avatars/user11.jpg"),
                                                     ["rating_star"] = new OpenApiInteger(5),
                                                     ["comment"] = new OpenApiString("Ý tưởng độc đáo, hình ảnh và âm nhạc rất ấn tượng. 5 sao."),
-                                                    ["rating_at"] = new OpenApiString("2025-09-24T00:00:00")
+                                                    ["rating_at"] = new OpenApiString("2025-09-24T00:00:00"),
+                                                    ["image_urls"] = new OpenApiArray
+                                                    {
+                                                        new OpenApiString("https://example.com/storage/review1.jpg"),
+                                                        new OpenApiString("https://example.com/storage/review2.jpg"),
+                                                        new OpenApiString("https://example.com/storage/review3.jpg")
+                                                    }
                                                 },
                                                 new OpenApiObject
                                                 {
                                                     ["rating_id"] = new OpenApiInteger(30),
                                                     ["user_id"] = new OpenApiInteger(12),
                                                     ["user_name"] = new OpenApiString("Quang Ngoc"),
+                                                    ["user_avatar"] = new OpenApiString("https://example.com/storage/avatars/user12.jpg"),
                                                     ["rating_star"] = new OpenApiInteger(2),
                                                     ["comment"] = new OpenApiString("Plot hơi rối và khó hiểu, mình không thích nhiều tầng nghĩa kiểu này. 2 sao."),
-                                                    ["rating_at"] = new OpenApiString("2025-09-27T00:00:00")
+                                                    ["rating_at"] = new OpenApiString("2025-09-27T00:00:00"),
+                                                    ["image_urls"] = new OpenApiArray()
                                                 }
                                             }
                                         }

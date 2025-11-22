@@ -987,6 +987,9 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.DeletedAt)
                 .HasColumnName("deleted_at")
                 .IsRequired(false);
+            entity.Property(e => e.ImageUrls)
+                .HasColumnName("image_urls")
+                .IsRequired(false);
 
             entity.HasOne(d => d.Movie).WithMany(p => p.RatingFilms)
                 .HasForeignKey(d => d.MovieId)

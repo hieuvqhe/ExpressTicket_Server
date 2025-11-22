@@ -13,6 +13,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses
         [JsonPropertyName("user_id")]
         public int UserId { get; set; }
 
+        [JsonPropertyName("user_name")]
+        public string UserName { get; set; } = string.Empty;
+
+        [JsonPropertyName("user_avatar")]
+        public string? UserAvatar { get; set; }
+
         [JsonPropertyName("rating_star")]
         public int RatingStar { get; set; }
 
@@ -21,6 +27,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses
 
         [JsonPropertyName("rating_at")]
         public DateTime RatingAt { get; set; }
+
+        [JsonPropertyName("image_urls")]
+        public List<string>? ImageUrls { get; set; }
     }
 }
 

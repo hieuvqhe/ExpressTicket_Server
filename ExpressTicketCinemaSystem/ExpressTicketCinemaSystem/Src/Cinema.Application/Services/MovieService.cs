@@ -862,7 +862,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             int movieId, 
             int userId, 
             int ratingStar, 
-            string comment)
+            string comment,
+            List<string>? imageUrls = null)
         {
             // 1. Kiểm tra phim tồn tại
             var movie = await _context.Movies.FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
@@ -909,19 +910,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 return (false, "Bạn cần mua vé và thanh toán thành công để đánh giá phim này", null);
             }
 
-            // 4. Tạo review mới
+            // 4. Validate image URLs (tối đa 3 ảnh)
+            if (imageUrls != null && imageUrls.Count > 3)
+            {
+                return (false, "Tối đa 3 ảnh được phép", null);
+            }
+
+            // 5. Tạo review mới
             var newRating = new RatingFilm
             {
                 MovieId = movieId,
                 UserId = userId,
                 RatingStar = ratingStar,
                 Comment = comment,
-                RatingAt = DateTime.UtcNow
+                RatingAt = DateTime.UtcNow,
+                ImageUrls = imageUrls != null && imageUrls.Any() ? string.Join(";", imageUrls) : null
             };
 
             _context.RatingFilms.Add(newRating);
 
-            // 5. Cập nhật Movie (ratings_count và average_rating)
+            // 6. Cập nhật Movie (ratings_count và average_rating)
             var oldCount = movie.RatingsCount ?? 0;
             var oldAvg = movie.AverageRating ?? 0;
 
@@ -930,8 +938,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Movies.Update(movie);
 
-            // 6. Lưu thay đổi
+            // 7. Lưu thay đổi
             await _context.SaveChangesAsync();
+
+            // 8. Load User để trả về user_name và user_avatar
+            await _context.Entry(newRating).Reference(r => r.User).LoadAsync();
 
             return (true, "Đã tạo review thành công", newRating);
         }
@@ -940,7 +951,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             int movieId,
             int userId,
             int ratingStar,
-            string comment)
+            string comment,
+            List<string>? imageUrls = null)
         {
             // 1. Kiểm tra phim tồn tại
             var movie = await _context.Movies.FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
@@ -958,17 +970,24 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 return (false, "Bạn chưa review phim này", null);
             }
 
-            // 3. Lưu rating cũ để tính toán lại average
+            // 3. Validate image URLs (tối đa 3 ảnh)
+            if (imageUrls != null && imageUrls.Count > 3)
+            {
+                return (false, "Tối đa 3 ảnh được phép", null);
+            }
+
+            // 4. Lưu rating cũ để tính toán lại average
             var oldRatingStar = existingReview.RatingStar;
 
-            // 4. Cập nhật review
+            // 5. Cập nhật review
             existingReview.RatingStar = ratingStar;
             existingReview.Comment = comment;
             existingReview.RatingAt = DateTime.UtcNow;
+            existingReview.ImageUrls = imageUrls != null && imageUrls.Any() ? string.Join(";", imageUrls) : null;
 
             _context.RatingFilms.Update(existingReview);
 
-            // 5. Recalculate Movie average_rating
+            // 6. Recalculate Movie average_rating
             // Công thức: newAvg = (oldAvg * totalCount - oldStar + newStar) / totalCount
             var totalCount = movie.RatingsCount ?? 0;
             var oldAvg = movie.AverageRating ?? 0;
@@ -980,8 +999,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Movies.Update(movie);
 
-            // 6. Lưu thay đổi
+            // 7. Lưu thay đổi
             await _context.SaveChangesAsync();
+
+            // 8. Load User để trả về user_name và user_avatar
+            await _context.Entry(existingReview).Reference(r => r.User).LoadAsync();
 
             return (true, "Cập nhật review thành công", existingReview);
         }
@@ -1081,22 +1103,39 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 _ => query.OrderByDescending(r => r.RatingAt) // "newest" is default
             };
 
-            // 5. Apply pagination
-            var reviews = await query
+            // 5. Apply pagination - Load data first
+            var reviewsData = await query
                 .Skip((page - 1) * limit)
                 .Take(limit)
-                .Select(r => new MovieReviewItem
+                .Select(r => new
                 {
-                    RatingId = r.RatingId,
-                    UserId = r.UserId,
+                    r.RatingId,
+                    r.UserId,
                     UserName = r.User.Fullname ?? "Ẩn danh",
-                    RatingStar = r.RatingStar,
+                    UserAvatar = r.User.AvatarUrl,
+                    r.RatingStar,
                     Comment = r.Comment ?? "",
-                    RatingAt = r.RatingAt
+                    r.RatingAt,
+                    r.ImageUrls
                 })
                 .ToListAsync();
 
-            // 6. Tạo response
+            // 6. Map to MovieReviewItem and process ImageUrls in memory
+            var reviews = reviewsData.Select(r => new MovieReviewItem
+            {
+                RatingId = r.RatingId,
+                UserId = r.UserId,
+                UserName = r.UserName,
+                UserAvatar = r.UserAvatar,
+                RatingStar = r.RatingStar,
+                Comment = r.Comment,
+                RatingAt = r.RatingAt,
+                ImageUrls = !string.IsNullOrEmpty(r.ImageUrls) 
+                    ? r.ImageUrls.Split(';', StringSplitOptions.RemoveEmptyEntries).ToList() 
+                    : new List<string>()
+            }).ToList();
+
+            // 7. Tạo response
             var response = new GetMovieReviewsResponse
             {
                 MovieId = movieId,
@@ -1162,8 +1201,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 return (false, "Không tìm thấy phim", null);
             }
 
-            // 2. Tìm review của user cho phim này (chỉ lấy review chưa xóa)
+            // 2. Tìm review của user cho phim này (chỉ lấy review chưa xóa) và include User
             var review = await _context.RatingFilms
+                .Include(r => r.User)
                 .FirstOrDefaultAsync(r => r.MovieId == movieId && r.UserId == userId && !r.IsDeleted);
 
             // 3. Tạo response
@@ -1174,9 +1214,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Review = review != null ? new MyReviewDetail
                 {
                     RatingId = review.RatingId,
+                    UserName = review.User.Fullname ?? "Ẩn danh",
+                    UserAvatar = review.User.AvatarUrl,
                     RatingStar = review.RatingStar,
                     Comment = review.Comment ?? "",
-                    RatingAt = review.RatingAt
+                    RatingAt = review.RatingAt,
+                    ImageUrls = !string.IsNullOrEmpty(review.ImageUrls) 
+                        ? review.ImageUrls.Split(';').ToList() 
+                        : new List<string>()
                 } : null
             };
 

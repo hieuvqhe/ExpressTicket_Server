@@ -21,6 +21,8 @@ using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Serialization;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Booking;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Catalog;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
+using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,9 +38,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .SetIsOriginAllowed(_ => true) // Cho phép tất cả origins
             .AllowAnyHeader()
             .AllowAnyMethod();
+        // Không dùng AllowCredentials() vì xung đột với SetIsOriginAllowed
     });
 });
 
@@ -148,7 +151,7 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<Booking_ReplaceSeats_ExampleFilter>();
     options.OperationFilter<Catalog_GetMovieShowtimesOverview_ExampleFilter>();
     options.OperationFilter<Catalog_GetShowtimeSeats_ExampleFilter>();
-    options.OperationFilter<Catalog_GetShowtimeSeatsStream_ExampleFilter>();
+    // Catalog_GetShowtimeSeatsStream_ExampleFilter đã bị xóa vì SSE endpoint không còn tồn tại (đã chuyển sang SignalR)
     options.OperationFilter<ManagerCreateVoucherExampleFilter>();
     options.OperationFilter<ManagerGetAllVouchersExampleFilter>();
     options.OperationFilter<ManagerUpdateVoucherExampleFilter>();
@@ -221,6 +224,17 @@ builder.Services.AddScoped<IBookingExtrasService, BookingExtrasService>();
 builder.Services.AddScoped<IBookingComboQueryService, BookingComboQueryService>();
 builder.Services.AddScoped<ISeatLockAppService, SeatLockAppService>();
 builder.Services.AddScoped<ICatalogQueryService, CatalogQueryService>();
+
+// SignalR
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true; // Bật để debug dễ hơn
+});
+
+// SignalR-based event stream service (thay thế SSE)
+builder.Services.AddSingleton<IShowtimeSeatEventPublisher, SignalRShowtimeSeatEventPublisher>();
+
+// Giữ lại IShowtimeSeatEventStream cho backward compatibility (có thể xóa sau)
 builder.Services.AddSingleton<
     ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.IShowtimeSeatEventStream,
     ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.InMemoryShowtimeSeatEventStream>();
@@ -322,6 +336,11 @@ app.UseSwaggerUI();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Map SignalR Hub với CORS
+app.MapHub<ShowtimeSeatHub>("/hubs/showtime-seat")
+    .RequireCors("AllowAll");
+
 app.MapControllers();
 
 app.Run();

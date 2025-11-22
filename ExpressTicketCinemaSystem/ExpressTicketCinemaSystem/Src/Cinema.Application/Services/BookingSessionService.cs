@@ -37,21 +37,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class BookingSessionService : IBookingSessionService
     {
         private readonly CinemaDbCoreContext _db;
-        private readonly InfraRT.IShowtimeSeatEventStream _eventStream;
+        private readonly InfraRT.IShowtimeSeatEventPublisher _eventPublisher;
         private readonly ILogger<BookingSessionService> _logger;
 
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan SeatLockTtl = TimeSpan.FromMinutes(3);
-        private const int MaxSseRetryAttempts = 3;
-        private static readonly TimeSpan SseRetryDelay = TimeSpan.FromMilliseconds(100);
 
         public BookingSessionService(
             CinemaDbCoreContext db,
-            InfraRT.IShowtimeSeatEventStream eventStream,
+            InfraRT.IShowtimeSeatEventPublisher eventPublisher,
             ILogger<BookingSessionService> logger)
         {
             _db = db;
-            _eventStream = eventStream;
+            _eventPublisher = eventPublisher;
             _logger = logger;
         }
 
@@ -282,7 +280,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                 await _db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
-                await PublishSeatEventsWithRetryAsync(locks.Select(lk => new InfraRT.SeatEvent
+                
+                // Publish SignalR events
+                await PublishSeatEventsAsync(locks.Select(lk => new InfraRT.SeatEvent
                 {
                     ShowtimeId = lk.ShowtimeId,
                     SeatId = lk.SeatId,
@@ -310,7 +310,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw;
             }
         }
-        private async Task PublishSeatEventsWithRetryAsync(
+        private async Task PublishSeatEventsAsync(
             System.Collections.Generic.List<InfraRT.SeatEvent> events,
             CancellationToken ct = default)
         {
@@ -318,30 +318,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             foreach (var evt in events)
             {
-                int attempt = 0;
-                bool success = false;
-
-                while (attempt < MaxSseRetryAttempts && !success)
+                try
                 {
-                    try
-                    {
-                        await _eventStream.PublishAsync(evt, ct);
-                        success = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        attempt++;
-                        if (attempt >= MaxSseRetryAttempts)
-                        {
-                            _logger.LogWarning(ex,
-                                "Failed to publish SSE event after {Attempts} attempts. ShowtimeId: {ShowtimeId}, SeatId: {SeatId}",
-                                MaxSseRetryAttempts, evt.ShowtimeId, evt.SeatId);
-                        }
-                        else
-                        {
-                            await Task.Delay(SseRetryDelay, ct);
-                        }
-                    }
+                    await _eventPublisher.PublishSeatEventAsync(evt, ct);
+                }
+                catch (Exception ex)
+                {
+                    // ✅ Log nhưng không throw - data đã commit, chỉ là SignalR notification fail
+                    _logger.LogWarning(ex,
+                        "Failed to publish SignalR event. ShowtimeId: {ShowtimeId}, SeatId: {SeatId}",
+                        evt.ShowtimeId, evt.SeatId);
                 }
             }
         }

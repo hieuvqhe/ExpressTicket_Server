@@ -32,12 +32,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                     content.Examples.Clear();
                     content.Examples.Add("Update to 4 stars", new OpenApiExample
                     {
-                        Summary = "Update review to 4 stars",
+                        Summary = "Update review to 4 stars with images",
                         Value = new OpenApiString(
                             """
                             {
                                 "rating_star": 4,
-                                "comment": "Xem lại lần 2 thấy cũng ổn, nhưng không quá xuất sắc."
+                                "comment": "Xem lại lần 2 thấy cũng ổn, nhưng không quá xuất sắc.",
+                                "image_urls": [
+                                    "https://example.com/storage/updated_review1.jpg",
+                                    "https://example.com/storage/updated_review2.jpg"
+                                ]
                             }
                             """
                         )
@@ -90,9 +94,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                                     "rating_id": 1001,
                                     "movie_id": 123,
                                     "user_id": 10,
+                                    "user_name": "Nguyễn Huy Toàn",
+                                    "user_avatar": "https://example.com/storage/avatars/user10.jpg",
                                     "rating_star": 4,
                                     "comment": "Xem lại lần 2 thấy cũng ổn, nhưng không quá xuất sắc.",
-                                    "rating_at": "2025-11-16T11:00:00Z"
+                                    "rating_at": "2025-11-16T11:00:00Z",
+                                    "image_urls": [
+                                        "https://example.com/storage/updated_review1.jpg",
+                                        "https://example.com/storage/updated_review2.jpg"
+                                    ]
                                 }
                             }
                             """
@@ -138,6 +148,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                         "comment": {
                             "msg": "Bình luận không được vượt quá 1000 ký tự",
                             "path": "comment",
+                            "location": "body"
+                        }
+                    }
+                }
+                """);
+
+            AddErrorResponseExamples(operation, "400", "Bad Request - Too many images",
+                """
+                {
+                    "message": "Lỗi xác thực dữ liệu",
+                    "errors": {
+                        "image_urls": {
+                            "msg": "Tối đa 3 ảnh được phép",
+                            "path": "image_urls",
                             "location": "body"
                         }
                     }

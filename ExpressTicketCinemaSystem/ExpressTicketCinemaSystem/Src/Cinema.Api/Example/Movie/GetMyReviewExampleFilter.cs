@@ -44,9 +44,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                                             ["review"] = new OpenApiObject
                                             {
                                                 ["rating_id"] = new OpenApiInteger(999),
+                                                ["user_name"] = new OpenApiString("Nguyễn Huy Toàn"),
+                                                ["user_avatar"] = new OpenApiString("https://example.com/storage/avatars/user10.jpg"),
                                                 ["rating_star"] = new OpenApiInteger(4),
                                                 ["comment"] = new OpenApiString("Phim ổn, kỹ xảo tốt."),
-                                                ["rating_at"] = new OpenApiString("2025-11-16T09:00:00Z")
+                                                ["rating_at"] = new OpenApiString("2025-11-16T09:00:00Z"),
+                                                ["image_urls"] = new OpenApiArray
+                                                {
+                                                    new OpenApiString("https://example.com/storage/my_review1.jpg"),
+                                                    new OpenApiString("https://example.com/storage/my_review2.jpg")
+                                                }
                                             }
                                         }
                                     }

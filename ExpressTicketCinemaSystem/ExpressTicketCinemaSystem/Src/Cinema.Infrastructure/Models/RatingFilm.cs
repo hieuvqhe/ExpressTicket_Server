@@ -22,6 +22,8 @@ public partial class RatingFilm
 
     public DateTime? DeletedAt { get; set; }
 
+    public string? ImageUrls { get; set; }
+
     public virtual Movie Movie { get; set; } = null!;
 
     public virtual User User { get; set; } = null!;

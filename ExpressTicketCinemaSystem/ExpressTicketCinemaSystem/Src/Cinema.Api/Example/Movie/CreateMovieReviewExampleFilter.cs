@@ -32,7 +32,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                     content.Examples.Clear();
                     content.Examples.Add("Valid Review", new OpenApiExample
                     {
-                        Summary = "Create review with 5 stars",
+                        Summary = "Create review with 5 stars and images",
+                        Value = new OpenApiString(
+                            """
+                            {
+                                "rating_star": 5,
+                                "comment": "Rất hay, âm nhạc đỉnh. Đáng xem!",
+                                "image_urls": [
+                                    "https://example.com/storage/review1.jpg",
+                                    "https://example.com/storage/review2.jpg",
+                                    "https://example.com/storage/review3.jpg"
+                                ]
+                            }
+                            """
+                        )
+                    });
+
+                    content.Examples.Add("Review without images", new OpenApiExample
+                    {
+                        Summary = "Create review without images",
                         Value = new OpenApiString(
                             """
                             {
@@ -50,7 +68,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                             """
                             {
                                 "rating_star": 1,
-                                "comment": "Không hay lắm, cốt truyện nhàm chán."
+                                "comment": "Không hay lắm, cốt truyện nhàm chán.",
+                                "image_urls": []
+                            }
+                            """
+                        )
+                    });
+
+                    content.Examples.Add("Invalid - Too many images", new OpenApiExample
+                    {
+                        Summary = "❌ Invalid - Maximum 3 images allowed",
+                        Value = new OpenApiString(
+                            """
+                            {
+                                "rating_star": 5,
+                                "comment": "Test với quá nhiều ảnh",
+                                "image_urls": [
+                                    "https://example.com/storage/review1.jpg",
+                                    "https://example.com/storage/review2.jpg",
+                                    "https://example.com/storage/review3.jpg",
+                                    "https://example.com/storage/review4.jpg"
+                                ]
                             }
                             """
                         )
@@ -103,9 +141,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                                     "rating_id": 1001,
                                     "movie_id": 123,
                                     "user_id": 10,
+                                    "user_name": "Nguyễn Huy Toàn",
+                                    "user_avatar": "https://example.com/storage/avatars/user10.jpg",
                                     "rating_star": 5,
                                     "comment": "Rất hay, âm nhạc đỉnh. Đáng xem!",
-                                    "rating_at": "2025-11-16T10:30:00Z"
+                                    "rating_at": "2025-11-16T10:30:00Z",
+                                    "image_urls": [
+                                        "https://example.com/storage/review1.jpg",
+                                        "https://example.com/storage/review2.jpg",
+                                        "https://example.com/storage/review3.jpg"
+                                    ]
                                 }
                             }
                             """
@@ -165,6 +210,34 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie
                         "Comment": {
                             "msg": "Bình luận không được vượt quá 1000 ký tự",
                             "path": "Comment",
+                            "location": "body"
+                        }
+                    }
+                }
+                """);
+
+            AddErrorResponseExamples(operation, "400", "Bad Request - Too many images",
+                """
+                {
+                    "message": "Lỗi xác thực dữ liệu",
+                    "errors": {
+                        "image_urls": {
+                            "msg": "Tối đa 3 ảnh được phép",
+                            "path": "image_urls",
+                            "location": "body"
+                        }
+                    }
+                }
+                """);
+
+            AddErrorResponseExamples(operation, "400", "Bad Request - Invalid image URL format",
+                """
+                {
+                    "message": "Lỗi xác thực dữ liệu",
+                    "errors": {
+                        "image_urls": {
+                            "msg": "URL ảnh không hợp lệ. Phải là URL ảnh (jpg, jpeg, png)",
+                            "path": "image_urls",
                             "location": "body"
                         }
                     }

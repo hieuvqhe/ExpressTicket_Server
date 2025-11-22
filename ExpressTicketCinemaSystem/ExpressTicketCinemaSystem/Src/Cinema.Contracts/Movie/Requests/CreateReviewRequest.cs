@@ -15,6 +15,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Requests
         [MaxLength(1000, ErrorMessage = "Bình luận không được vượt quá 1000 ký tự")]
         [JsonPropertyName("comment")]
         public string Comment { get; set; } = string.Empty;
+
+        [MaxLength(3, ErrorMessage = "Tối đa 3 ảnh được phép")]
+        [JsonPropertyName("image_urls")]
+        public List<string>? ImageUrls { get; set; }
     }
 }
 

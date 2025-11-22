@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
 {
@@ -439,6 +440,68 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
                     });
                 }
 
+                // Validate image URLs (tối đa 3 ảnh)
+                if (request.ImageUrls != null && request.ImageUrls.Count > 3)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["image_urls"] = new ValidationError
+                            {
+                                Msg = "Tối đa 3 ảnh được phép",
+                                Path = "image_urls",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate image URL format (nếu có)
+                if (request.ImageUrls != null && request.ImageUrls.Any())
+                {
+                    var urlPattern = @"^https?://.+\.(jpg|jpeg|png)$";
+                    var invalidUrls = request.ImageUrls
+                        .Where(url => string.IsNullOrWhiteSpace(url) || !Regex.IsMatch(url, urlPattern, RegexOptions.IgnoreCase))
+                        .ToList();
+
+                    if (invalidUrls.Any())
+                    {
+                        return BadRequest(new ValidationErrorResponse
+                        {
+                            Message = "Lỗi xác thực dữ liệu",
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["image_urls"] = new ValidationError
+                                {
+                                    Msg = "URL ảnh không hợp lệ. Phải là URL ảnh (jpg, jpeg, png)",
+                                    Path = "image_urls",
+                                    Location = "body"
+                                }
+                            }
+                        });
+                    }
+
+                    // Kiểm tra trùng lặp
+                    if (request.ImageUrls.Distinct().Count() != request.ImageUrls.Count)
+                    {
+                        return BadRequest(new ValidationErrorResponse
+                        {
+                            Message = "Lỗi xác thực dữ liệu",
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["image_urls"] = new ValidationError
+                                {
+                                    Msg = "Không được phép có URL ảnh trùng lặp",
+                                    Path = "image_urls",
+                                    Location = "body"
+                                }
+                            }
+                        });
+                    }
+                }
+
                 // Lấy userId từ token
                 var userIdClaim = User.FindFirst("userId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
@@ -463,7 +526,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
                     movieId, 
                     userId, 
                     request.RatingStar, 
-                    request.Comment);
+                    request.Comment,
+                    request.ImageUrls);
 
                 if (!success)
                 {
@@ -541,9 +605,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
                         RatingId = rating!.RatingId,
                         MovieId = rating.MovieId,
                         UserId = rating.UserId,
+                        UserName = rating.User?.Fullname ?? "Ẩn danh",
+                        UserAvatar = rating.User?.AvatarUrl,
                         RatingStar = rating.RatingStar,
                         Comment = rating.Comment,
-                        RatingAt = rating.RatingAt
+                        RatingAt = rating.RatingAt,
+                        ImageUrls = !string.IsNullOrEmpty(rating.ImageUrls) 
+                            ? rating.ImageUrls.Split(';').ToList() 
+                            : new List<string>()
                     }
                 };
 
@@ -633,6 +702,68 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
                     });
                 }
 
+                // Validate image URLs (tối đa 3 ảnh)
+                if (request.ImageUrls != null && request.ImageUrls.Count > 3)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["image_urls"] = new ValidationError
+                            {
+                                Msg = "Tối đa 3 ảnh được phép",
+                                Path = "image_urls",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate image URL format (nếu có)
+                if (request.ImageUrls != null && request.ImageUrls.Any())
+                {
+                    var urlPattern = @"^https?://.+\.(jpg|jpeg|png)$";
+                    var invalidUrls = request.ImageUrls
+                        .Where(url => string.IsNullOrWhiteSpace(url) || !Regex.IsMatch(url, urlPattern, RegexOptions.IgnoreCase))
+                        .ToList();
+
+                    if (invalidUrls.Any())
+                    {
+                        return BadRequest(new ValidationErrorResponse
+                        {
+                            Message = "Lỗi xác thực dữ liệu",
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["image_urls"] = new ValidationError
+                                {
+                                    Msg = "URL ảnh không hợp lệ. Phải là URL ảnh (jpg, jpeg, png)",
+                                    Path = "image_urls",
+                                    Location = "body"
+                                }
+                            }
+                        });
+                    }
+
+                    // Kiểm tra trùng lặp
+                    if (request.ImageUrls.Distinct().Count() != request.ImageUrls.Count)
+                    {
+                        return BadRequest(new ValidationErrorResponse
+                        {
+                            Message = "Lỗi xác thực dữ liệu",
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["image_urls"] = new ValidationError
+                                {
+                                    Msg = "Không được phép có URL ảnh trùng lặp",
+                                    Path = "image_urls",
+                                    Location = "body"
+                                }
+                            }
+                        });
+                    }
+                }
+
                 // Lấy userId từ token
                 var userIdClaim = User.FindFirst("userId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
@@ -657,7 +788,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
                     movieId,
                     userId,
                     request.RatingStar,
-                    request.Comment);
+                    request.Comment,
+                    request.ImageUrls);
 
                 if (!success)
                 {
@@ -719,9 +851,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
                         RatingId = rating!.RatingId,
                         MovieId = rating.MovieId,
                         UserId = rating.UserId,
+                        UserName = rating.User?.Fullname ?? "Ẩn danh",
+                        UserAvatar = rating.User?.AvatarUrl,
                         RatingStar = rating.RatingStar,
                         Comment = rating.Comment,
-                        RatingAt = rating.RatingAt
+                        RatingAt = rating.RatingAt,
+                        ImageUrls = !string.IsNullOrEmpty(rating.ImageUrls) 
+                            ? rating.ImageUrls.Split(';').ToList() 
+                            : new List<string>()
                     }
                 };
 

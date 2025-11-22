@@ -1,21 +1,14 @@
 ﻿using System.Linq;
-using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Net.Http.Headers;
 
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Catalog.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Catalog.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Realtime;
-using RT = ExpressTicketCinemaSystem.Src.Cinema.Contracts.Realtime;
-using InfraRT = ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -25,16 +18,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
     public class CatalogController : ControllerBase
     {
 
-        private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(15);
-        private readonly IShowtimeSeatEventStream _eventStream;
         private readonly ICatalogQueryService _service;
 
-        public CatalogController(
-             ICatalogQueryService service,
-             IShowtimeSeatEventStream eventStream)
+        public CatalogController(ICatalogQueryService service)
         {
             _service = service;
-            _eventStream = eventStream;
         }
 
         /// <summary>
@@ -105,114 +93,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// (SSE) Stream trạng thái ghế realtime cho 1 suất chiếu.
-        /// - Sự kiện: snapshot | seat_locked | seat_released | seat_sold | heartbeat
-        /// - Giữ kết nối lâu: client nên tự reconnect khi mất kết nối.
-        /// </summary>
-        [HttpGet("showtimes/{showtimeId:int}/seats/stream")]
-        [AllowAnonymous]
-        public async Task GetShowtimeSeatsStream(int showtimeId, CancellationToken ct)
-        {
-            Response.Headers["Content-Type"] = "text/event-stream";
-            Response.Headers["Cache-Control"] = "no-cache";
-            Response.Headers["X-Accel-Buffering"] = "no"; // nginx
-
-            // 1) Gửi ảnh chụp ban đầu
-            var snap = await _service.GetShowtimeSeatMapAsync(showtimeId, ct);
-            var payload = new RT.SnapshotPayload
-            {
-                ServerTime = snap.ServerTime,
-                Seats = snap.Seats.Select(s => new RT.SeatCell
-                {
-                    SeatId = s.SeatId,
-                    RowCode = s.RowCode,
-                    SeatNumber = s.SeatNumber,
-                    SeatTypeId = s.SeatTypeId,
-                    Status = s.Status,
-                    LockedUntil = s.LockedUntil
-                }).ToList()
-            };
-            await WriteSseAsync("snapshot", payload, ct);
-
-            // 2) Heartbeat định kỳ
-            var hbCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            _ = Task.Run(async () =>
-            {
-                while (!hbCts.IsCancellationRequested)
-                {
-                    try
-                    {
-                        await Task.Delay(HeartbeatInterval, hbCts.Token);
-                        await WriteSseAsync("heartbeat", new HeartbeatPayload
-                        {
-                            ServerTime = DateTime.UtcNow
-                        }, hbCts.Token);
-                    }
-                    catch { /* ignore */ }
-                }
-            }, hbCts.Token);
-
-            // 3) Stream delta từ broker với error handling
-            try
-            {
-                await foreach (var ev in _eventStream.SubscribeAsync(showtimeId, ct))
-                {
-                    try
-                    {
-                        switch (ev.Type)
-                        {
-                            case InfraRT.SeatEventType.Locked:
-                                await WriteSseAsync("seat_locked", new RT.SeatDeltaPayload
-                                {
-                                    SeatId = ev.SeatId,
-                                    LockedUntil = ev.LockedUntil
-                                }, ct);
-                                break;
-
-                            case InfraRT.SeatEventType.Released:
-                                await WriteSseAsync("seat_released", new RT.SeatDeltaPayload
-                                {
-                                    SeatId = ev.SeatId,
-                                    LockedUntil = null
-                                }, ct);
-                                break;
-
-                            case InfraRT.SeatEventType.Sold:
-                                await WriteSseAsync("seat_sold", new { seatId = ev.SeatId }, ct);
-                                break;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        // ✅ Log lỗi nhưng tiếp tục stream - không break connection
-                        // Có thể gửi error event cho client nếu cần
-                        try
-                        {
-                            await WriteSseAsync("error", new { message = "Lỗi xử lý sự kiện", seatId = ev.SeatId }, ct);
-                        }
-                        catch { /* ignore - connection có thể đã đóng */ }
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // ✅ Client disconnect - normal case, không cần log
-            }
-            catch (Exception)
-            {
-                // ✅ Lỗi stream - gửi error event cho client
-                try
-                {
-                    await WriteSseAsync("error", new { message = "Lỗi kết nối stream" }, ct);
-                }
-                catch { /* ignore */ }
-            }
-            finally
-            {
-                hbCts.Cancel();
-            }
-        }
+        // ===== SSE ENDPOINT ĐÃ ĐƯỢC THAY THẾ BẰNG SIGNALR =====
+        // Endpoint SSE cũ đã được thay thế bằng SignalR Hub tại /hubs/showtime-seat
+        // Client nên:
+        // 1. Gọi GET /api/cinema/showtimes/{showtimeId}/seats để lấy snapshot ban đầu
+        // 2. Kết nối SignalR Hub và join group "showtime_{showtimeId}" để nhận realtime updates
+        // 3. Lắng nghe events: SeatLocked, SeatReleased, SeatSold
+        //
+        // [Obsolete("SSE endpoint đã được thay thế bằng SignalR. Sử dụng /hubs/showtime-seat thay thế.")]
+        // [HttpGet("showtimes/{showtimeId:int}/seats/stream")]
+        // [AllowAnonymous]
+        // public async Task GetShowtimeSeatsStream(int showtimeId, CancellationToken ct) { ... }
         /// <summary>
         /// Lấy danh sách suất chiếu theo rạp (cho màn home)
         /// </summary>
@@ -245,15 +136,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
-        // ===== Helpers =====
-        private async Task WriteSseAsync(string @event, object data, CancellationToken ct)
-        {
-            var json = JsonSerializer.Serialize(data);
-            var sb = new StringBuilder();
-            sb.Append("event: ").Append(@event).Append('\n');
-            sb.Append("data: ").Append(json).Append("\n\n");
-            await Response.BodyWriter.WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()), ct);
-            await Response.Body.FlushAsync(ct);
-        }
+        // ===== SSE Helper đã không còn cần thiết (đã chuyển sang SignalR) =====
     }
 }
