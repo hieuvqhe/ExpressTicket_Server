@@ -2535,5 +2535,87 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Get partner's booking statistics from their cinemas
+        /// Partner can only view statistics from their own cinemas
+        /// </summary>
+        /// <param name="fromDate">Filter from booking date (ISO format). If null, defaults to 30 days ago</param>
+        /// <param name="toDate">Filter to booking date (ISO format). If null, defaults to today</param>
+        /// <param name="cinemaId">Filter by cinema ID (if null, get statistics for all partner's cinemas)</param>
+        /// <param name="groupBy">Group by time period: "day", "week", "month", "year" (default: "day")</param>
+        /// <param name="includeComparison">Include comparison with previous period (default: false)</param>
+        /// <param name="topLimit">Limit for top items (default: 10)</param>
+        /// <param name="page">Page number for paginated lists (default: 1)</param>
+        /// <param name="pageSize">Page size for paginated lists (default: 20, max: 100)</param>
+        /// <returns>Booking statistics</returns>
+        [HttpGet("/partners/bookings/statistics")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerBookingStatisticsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetPartnerBookingStatistics(
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] int? cinemaId,
+            [FromQuery] string groupBy = "day",
+            [FromQuery] bool includeComparison = false,
+            [FromQuery] int topLimit = 10,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var request = new GetPartnerBookingStatisticsRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    CinemaId = cinemaId,
+                    GroupBy = groupBy,
+                    IncludeComparison = includeComparison,
+                    TopLimit = topLimit,
+                    Page = page,
+                    PageSize = pageSize
+                };
+
+                var result = await _partnerService.GetPartnerBookingStatisticsAsync(userId, request);
+
+                return Ok(new SuccessResponse<PartnerBookingStatisticsResponse>
+                {
+                    Message = "Lấy thống kê đơn hàng thành công.",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Lỗi xác thực dữ liệu",
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = "Xác thực thất bại",
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Lỗi khi lấy thống kê đơn hàng: " + ex.Message
+                });
+            }
+        }
     }
 }

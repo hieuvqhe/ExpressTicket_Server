@@ -552,5 +552,115 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Send voucher to top buyers (customers with most bookings)
+        /// </summary>
+        /// <param name="id">Voucher ID</param>
+        [HttpPost("{id}/send-to-top-buyers")]
+        [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> SendVoucherToTopBuyers(int id, [FromBody] SendVoucherToTopBuyersRequest request)
+        {
+            try
+            {
+                var managerId = await GetCurrentManagerId();
+                var result = await _voucherService.SendVoucherToTopBuyersAsync(id, managerId, request);
+
+                var response = new SuccessResponse<SendVoucherEmailResponse>
+                {
+                    Message = $"Đã gửi voucher thành công đến {result.TotalSent} khách hàng top mua nhiều nhất, thất bại: {result.TotalFailed}",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi gửi voucher"
+                });
+            }
+        }
+
+        /// <summary>
+        /// Send voucher to top spenders (customers with highest total spending)
+        /// </summary>
+        /// <param name="id">Voucher ID</param>
+        [HttpPost("{id}/send-to-top-spenders")]
+        [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> SendVoucherToTopSpenders(int id, [FromBody] SendVoucherToTopSpendersRequest request)
+        {
+            try
+            {
+                var managerId = await GetCurrentManagerId();
+                var result = await _voucherService.SendVoucherToTopSpendersAsync(id, managerId, request);
+
+                var response = new SuccessResponse<SendVoucherEmailResponse>
+                {
+                    Message = $"Đã gửi voucher thành công đến {result.TotalSent} khách hàng top chi tiêu nhiều nhất, thất bại: {result.TotalFailed}",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi gửi voucher"
+                });
+            }
+        }
     }
 }

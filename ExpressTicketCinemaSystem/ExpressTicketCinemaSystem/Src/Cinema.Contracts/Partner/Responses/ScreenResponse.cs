@@ -1,6 +1,6 @@
-﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
-using System;
+﻿using System;
+using System.Collections.Generic;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses
 {
@@ -22,19 +22,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses
         public DateTime CreatedDate { get; set; }
         public DateTime UpdatedDate { get; set; }
     }
-}
 
-public class ScreenActionResponse
-{
-    public int ScreenId { get; set; }
-    public string ScreenName { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
-    public bool IsActive { get; set; }
-    public DateTime UpdatedDate { get; set; }
-}
+    public class ScreenActionResponse
+    {
+        public int ScreenId { get; set; }
+        public string ScreenName { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public DateTime UpdatedDate { get; set; }
+    }
 
-public class PaginatedScreensResponse
-{
-    public List<ScreenResponse> Screens { get; set; } = new();
-    public PaginationMetadata Pagination { get; set; } = new();
+    public class PaginatedScreensResponse
+    {
+        public List<ScreenResponse> Screens { get; set; } = new();
+        public PaginationMetadata Pagination { get; set; } = new();
+    }
 }

@@ -58,6 +58,8 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.MapType<DateOnly>(() => new OpenApiSchema { Type = "string", Format = "date" });
     options.MapType<DateOnly?>(() => new OpenApiSchema { Type = "string", Format = "date", Nullable = true });
+    // Ignore schema errors for complex types
+    options.CustomSchemaIds(type => type.FullName?.Replace("+", "."));
     // Cấu hình JWT Bearer để có nút "Authorize" trong Swagger
     var jwtSecurityScheme = new OpenApiSecurityScheme
     {

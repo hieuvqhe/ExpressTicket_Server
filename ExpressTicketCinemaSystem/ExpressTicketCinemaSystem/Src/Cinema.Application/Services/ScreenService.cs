@@ -98,7 +98,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 screenResponses.Add(await MapToScreenResponseAsync(screen));
             }
 
-            var pagination = new PaginationMetadata
+            var pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
             {
                 CurrentPage = page,
                 PageSize = limit,
