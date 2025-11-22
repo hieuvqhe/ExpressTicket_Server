@@ -11,5 +11,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         Task<bool> IsUserManagerAsync(int userId);
         Task<ManagerBookingsResponse> GetManagerBookingsAsync(int userId, GetManagerBookingsRequest request);
         Task<BookingDetailResponse> GetBookingDetailAsync(int userId, int bookingId);
+        Task<ManagerBookingStatisticsResponse> GetBookingStatisticsAsync(int userId, GetManagerBookingStatisticsRequest request);
+        Task<SuccessfulBookingCustomersResponse> GetSuccessfulBookingCustomersAsync(int userId, GetSuccessfulBookingCustomersRequest request);
     }
 }

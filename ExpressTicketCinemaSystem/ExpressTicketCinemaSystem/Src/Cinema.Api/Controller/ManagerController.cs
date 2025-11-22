@@ -847,5 +847,182 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// Get booking statistics (Manager only) with filtering and time period
+        /// </summary>
+        /// <remarks>
+        /// Manager only - View statistics from all partners and all cinemas
+        /// Returns comprehensive statistics including revenue by cinema, top customers, partner statistics, movie statistics, time-based statistics, voucher usage, and payment statistics
+        /// </remarks>
+        /// <param name="fromDate">Filter from booking date (default: 30 days ago)</param>
+        /// <param name="toDate">Filter to booking date (default: today)</param>
+        /// <param name="partnerId">Filter by partner ID (null = all partners)</param>
+        /// <param name="cinemaId">Filter by cinema ID (null = all cinemas)</param>
+        /// <param name="movieId">Filter by movie ID (null = all movies)</param>
+        /// <param name="topLimit">Number of top items to return (default: 10, max: 50)</param>
+        /// <param name="groupBy">Group by time period for trends: day, week, month (default: day)</param>
+        /// <param name="includeComparison">Include comparison with previous period (default: true)</param>
+        /// <param name="page">Page number for paginated lists (default: 1)</param>
+        /// <param name="pageSize">Page size for paginated lists (default: 20, max: 100)</param>
+        [HttpGet("/manager/bookings/statistics")]
+        [ProducesResponseType(typeof(SuccessResponse<ManagerBookingStatisticsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetBookingStatistics(
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] int? partnerId,
+            [FromQuery] int? cinemaId,
+            [FromQuery] int? movieId,
+            [FromQuery] int topLimit = 10,
+            [FromQuery] string groupBy = "day",
+            [FromQuery] bool includeComparison = true,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                var userId = GetCurrentManagerId();
+
+                var request = new GetManagerBookingStatisticsRequest
+                {
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    PartnerId = partnerId,
+                    CinemaId = cinemaId,
+                    MovieId = movieId,
+                    TopLimit = topLimit,
+                    GroupBy = groupBy,
+                    IncludeComparison = includeComparison,
+                    Page = page,
+                    PageSize = pageSize
+                };
+
+                var result = await _managerService.GetBookingStatisticsAsync(userId, request);
+
+                return Ok(new SuccessResponse<ManagerBookingStatisticsResponse>
+                {
+                    Message = "Lấy thống kê đơn hàng thành công.",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Lỗi xác thực dữ liệu",
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return StatusCode(403, new ValidationErrorResponse
+                {
+                    Message = ex.Message,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Lỗi khi lấy thống kê đơn hàng: " + ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get customers with successful bookings (Manager only)
+        /// Returns top customers by booking count and total spent, plus full paginated list
+        /// </summary>
+        /// <param name="topLimit">Top N customers to return for each sort type (default: 5, max: 50)</param>
+        /// <param name="fromDate">Filter from booking date (optional)</param>
+        /// <param name="toDate">Filter to booking date (optional)</param>
+        /// <param name="partnerId">Filter by partner ID (optional)</param>
+        /// <param name="cinemaId">Filter by cinema ID (optional)</param>
+        /// <param name="customerEmail">Search by customer email (optional)</param>
+        /// <param name="customerName">Search by customer name (optional)</param>
+        /// <param name="page">Page number for full list pagination (default: 1)</param>
+        /// <param name="pageSize">Page size for full list pagination (default: 20, max: 100)</param>
+        /// <param name="sortOrder">Sort order for full list: "asc" or "desc" (default: "desc")</param>
+        /// <param name="sortBy">Sort by for full list: "booking_count" or "total_spent" (default: "booking_count")</param>
+        /// <param name="topByBookingCountSortOrder">Sort order for top customers by booking count: "asc" or "desc" (default: "desc")</param>
+        /// <param name="topByTotalSpentSortOrder">Sort order for top customers by total spent: "asc" or "desc" (default: "desc")</param>
+        [HttpGet("/manager/customers/successful-bookings")]
+        [ProducesResponseType(typeof(SuccessResponse<SuccessfulBookingCustomersResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetSuccessfulBookingCustomers(
+            [FromQuery] int topLimit = 5,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] int? partnerId = null,
+            [FromQuery] int? cinemaId = null,
+            [FromQuery] string? customerEmail = null,
+            [FromQuery] string? customerName = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string sortOrder = "desc",
+            [FromQuery] string sortBy = "booking_count",
+            [FromQuery] string topByBookingCountSortOrder = "desc",
+            [FromQuery] string topByTotalSpentSortOrder = "desc")
+        {
+            try
+            {
+                var userId = GetCurrentManagerId();
+
+                var request = new GetSuccessfulBookingCustomersRequest
+                {
+                    TopLimit = topLimit,
+                    FromDate = fromDate,
+                    ToDate = toDate,
+                    PartnerId = partnerId,
+                    CinemaId = cinemaId,
+                    CustomerEmail = customerEmail,
+                    CustomerName = customerName,
+                    Page = page,
+                    PageSize = pageSize,
+                    SortOrder = sortOrder,
+                    SortBy = sortBy,
+                    TopByBookingCountSortOrder = topByBookingCountSortOrder,
+                    TopByTotalSpentSortOrder = topByTotalSpentSortOrder
+                };
+
+                var result = await _managerService.GetSuccessfulBookingCustomersAsync(userId, request);
+
+                return Ok(new SuccessResponse<SuccessfulBookingCustomersResponse>
+                {
+                    Message = "Lấy danh sách khách hàng thành công.",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = "Dữ liệu đầu vào không hợp lệ.",
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ErrorResponse
+                {
+                    Message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi khi lấy danh sách khách hàng."
+                });
+            }
+        }
+
     }
 }

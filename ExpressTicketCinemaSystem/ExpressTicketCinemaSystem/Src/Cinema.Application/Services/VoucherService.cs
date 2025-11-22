@@ -24,6 +24,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         // THÊM MỚI - Gửi voucher cho users cụ thể
         Task<SendVoucherEmailResponse> SendVoucherToSpecificUsersAsync(int voucherId, int managerId, SendVoucherEmailRequest request);
 
+        // THÊM MỚI - Gửi voucher cho top khách hàng mua nhiều nhất
+        Task<SendVoucherEmailResponse> SendVoucherToTopBuyersAsync(int voucherId, int managerId, SendVoucherToTopBuyersRequest request);
+
+        // THÊM MỚI - Gửi voucher cho top khách hàng chi tiêu nhiều nhất
+        Task<SendVoucherEmailResponse> SendVoucherToTopSpendersAsync(int voucherId, int managerId, SendVoucherToTopSpendersRequest request);
+
         Task<List<UserVoucherResponse>> GetValidVouchersForUserAsync();
 
         // THÊM MỚI - Validate voucher khi user sử dụng
@@ -618,6 +624,192 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Subject = request.Subject,
                 CustomMessage = request.CustomMessage,
                 UserIds = null // Không có userIds
+            };
+
+            return await SendVoucherEmailsAsync(voucher, users, emailRequest);
+        }
+
+        public async Task<SendVoucherEmailResponse> SendVoucherToTopBuyersAsync(int voucherId, int managerId, SendVoucherToTopBuyersRequest request)
+        {
+            var voucher = await _context.Vouchers
+                .FirstOrDefaultAsync(v => v.VoucherId == voucherId && !v.IsDeleted);
+
+            if (voucher == null)
+            {
+                throw new NotFoundException("Voucher không tồn tại");
+            }
+
+            if (voucher.ManagerId != managerId)
+            {
+                throw new UnauthorizedException("Bạn không có quyền gửi voucher này");
+            }
+
+            // Tính toán ngày bắt đầu nếu có periodDays
+            var startDate = request.PeriodDays.HasValue
+                ? DateTime.UtcNow.AddDays(-request.PeriodDays.Value)
+                : (DateTime?)null;
+
+            // Query bookings với các điều kiện
+            var bookingsQuery = _context.Bookings
+                .AsQueryable();
+
+            // Lọc theo onlyPaidBookings
+            if (request.OnlyPaidBookings)
+            {
+                bookingsQuery = bookingsQuery.Where(b =>
+                    b.Status == "CONFIRMED" && b.PaymentStatus == "PAID");
+            }
+
+            // Lọc theo periodDays nếu có
+            if (startDate.HasValue)
+            {
+                bookingsQuery = bookingsQuery.Where(b => b.BookingTime >= startDate.Value);
+            }
+
+            // Group by CustomerId và đếm số lượng booking, join với Customer để lấy UserId
+            var topBuyersQuery = bookingsQuery
+                .Join(_context.Customers,
+                    booking => booking.CustomerId,
+                    customer => customer.CustomerId,
+                    (booking, customer) => new { Booking = booking, Customer = customer })
+                .GroupBy(x => x.Customer.CustomerId)
+                .Select(g => new
+                {
+                    CustomerId = g.Key,
+                    BookingCount = g.Count(),
+                    UserId = g.First().Customer.UserId
+                });
+
+            // Lọc theo minBookingCount nếu có
+            if (request.MinBookingCount.HasValue)
+            {
+                topBuyersQuery = topBuyersQuery.Where(x => x.BookingCount >= request.MinBookingCount.Value);
+            }
+
+            // Order by booking count DESC và lấy top limit
+            var topBuyers = await topBuyersQuery
+                .OrderByDescending(x => x.BookingCount)
+                .Take(request.TopLimit)
+                .Select(x => x.UserId)
+                .ToListAsync();
+
+            if (!topBuyers.Any())
+            {
+                throw new ValidationException("TopBuyers", "Không tìm thấy khách hàng nào thỏa mãn điều kiện");
+            }
+
+            // Lấy users với các điều kiện: IsActive = true, EmailConfirmed = true, UserType = "User"
+            var users = await _context.Users
+                .Where(u => topBuyers.Contains(u.UserId) &&
+                           u.UserType == "User" &&
+                           u.IsActive &&
+                           u.EmailConfirmed)
+                .ToListAsync();
+
+            if (!users.Any())
+            {
+                throw new ValidationException("Users", "Không tìm thấy users hợp lệ để gửi voucher");
+            }
+
+            // Convert sang SendVoucherEmailRequest để dùng chung helper method
+            var emailRequest = new SendVoucherEmailRequest
+            {
+                Subject = request.Subject,
+                CustomMessage = request.CustomMessage,
+                UserIds = null
+            };
+
+            return await SendVoucherEmailsAsync(voucher, users, emailRequest);
+        }
+
+        public async Task<SendVoucherEmailResponse> SendVoucherToTopSpendersAsync(int voucherId, int managerId, SendVoucherToTopSpendersRequest request)
+        {
+            var voucher = await _context.Vouchers
+                .FirstOrDefaultAsync(v => v.VoucherId == voucherId && !v.IsDeleted);
+
+            if (voucher == null)
+            {
+                throw new NotFoundException("Voucher không tồn tại");
+            }
+
+            if (voucher.ManagerId != managerId)
+            {
+                throw new UnauthorizedException("Bạn không có quyền gửi voucher này");
+            }
+
+            // Tính toán ngày bắt đầu nếu có periodDays
+            var startDate = request.PeriodDays.HasValue
+                ? DateTime.UtcNow.AddDays(-request.PeriodDays.Value)
+                : (DateTime?)null;
+
+            // Query bookings với các điều kiện
+            var bookingsQuery = _context.Bookings
+                .AsQueryable();
+
+            // Lọc theo onlyPaidBookings
+            if (request.OnlyPaidBookings)
+            {
+                bookingsQuery = bookingsQuery.Where(b =>
+                    b.Status == "CONFIRMED" && b.PaymentStatus == "PAID");
+            }
+
+            // Lọc theo periodDays nếu có
+            if (startDate.HasValue)
+            {
+                bookingsQuery = bookingsQuery.Where(b => b.BookingTime >= startDate.Value);
+            }
+
+            // Group by CustomerId và sum TotalAmount, join với Customer để lấy UserId
+            var topSpendersQuery = bookingsQuery
+                .Join(_context.Customers,
+                    booking => booking.CustomerId,
+                    customer => customer.CustomerId,
+                    (booking, customer) => new { Booking = booking, Customer = customer })
+                .GroupBy(x => x.Customer.CustomerId)
+                .Select(g => new
+                {
+                    CustomerId = g.Key,
+                    TotalSpent = g.Sum(x => x.Booking.TotalAmount),
+                    UserId = g.First().Customer.UserId
+                });
+
+            // Lọc theo minTotalSpent nếu có
+            if (request.MinTotalSpent.HasValue)
+            {
+                topSpendersQuery = topSpendersQuery.Where(x => x.TotalSpent >= request.MinTotalSpent.Value);
+            }
+
+            // Order by total spent DESC và lấy top limit
+            var topSpenders = await topSpendersQuery
+                .OrderByDescending(x => x.TotalSpent)
+                .Take(request.TopLimit)
+                .Select(x => x.UserId)
+                .ToListAsync();
+
+            if (!topSpenders.Any())
+            {
+                throw new ValidationException("TopSpenders", "Không tìm thấy khách hàng nào thỏa mãn điều kiện");
+            }
+
+            // Lấy users với các điều kiện: IsActive = true, EmailConfirmed = true, UserType = "User"
+            var users = await _context.Users
+                .Where(u => topSpenders.Contains(u.UserId) &&
+                           u.UserType == "User" &&
+                           u.IsActive &&
+                           u.EmailConfirmed)
+                .ToListAsync();
+
+            if (!users.Any())
+            {
+                throw new ValidationException("Users", "Không tìm thấy users hợp lệ để gửi voucher");
+            }
+
+            // Convert sang SendVoucherEmailRequest để dùng chung helper method
+            var emailRequest = new SendVoucherEmailRequest
+            {
+                Subject = request.Subject,
+                CustomMessage = request.CustomMessage,
+                UserIds = null
             };
 
             return await SendVoucherEmailsAsync(voucher, users, emailRequest);

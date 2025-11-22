@@ -105,7 +105,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return new PaginatedServicesResponse
             {
                 Services = items.Select(Map).ToList(),
-                Pagination = new PaginationMetadata
+                Pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
                 {
                     CurrentPage = q.Page,
                     PageSize = q.Limit,

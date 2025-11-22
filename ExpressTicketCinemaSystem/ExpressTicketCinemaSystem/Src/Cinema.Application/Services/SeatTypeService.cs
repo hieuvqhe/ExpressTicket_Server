@@ -69,7 +69,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .ToListAsync();
 
             // Pagination metadata
-            var pagination = new PaginationMetadata
+            var pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
             {
                 CurrentPage = request.Page,
                 PageSize = request.Limit,

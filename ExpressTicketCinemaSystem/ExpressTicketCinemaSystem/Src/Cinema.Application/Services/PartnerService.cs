@@ -5,6 +5,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
+using PartnerResponses = ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
 using System.Text.RegularExpressions;
 using System.Collections.Generic;
 using System.Linq;
@@ -630,7 +631,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 })
                 .ToListAsync();  
 
-            var pagination = new PaginationMetadata
+            var pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
             {
                 CurrentPage = page,
                 PageSize = limit,
@@ -1015,7 +1016,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 })
                 .ToListAsync();
 
-            var pagination = new PaginationMetadata
+            var pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
             {
                 CurrentPage = page,
                 PageSize = limit,
@@ -1380,6 +1381,793 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             return response;
+        }
+
+        /// <summary>
+        /// Get partner's booking statistics from their cinemas
+        /// Partner can only view statistics from their own cinemas
+        /// </summary>
+        public async Task<PartnerBookingStatisticsResponse> GetPartnerBookingStatisticsAsync(int userId, GetPartnerBookingStatisticsRequest request)
+        {
+            // Validate top limit
+            if (request.TopLimit < 1 || request.TopLimit > 50)
+                throw new ValidationException("topLimit", "TopLimit phải trong khoảng 1-50.");
+
+            // Validate pagination
+            if (request.Page < 1)
+                throw new ValidationException("page", "Page phải lớn hơn hoặc bằng 1.");
+
+            if (request.PageSize < 1 || request.PageSize > 100)
+                throw new ValidationException("pageSize", "PageSize phải trong khoảng 1-100.");
+
+            // Validate groupBy
+            var validGroupBy = new[] { "day", "week", "month", "year" };
+            if (!validGroupBy.Contains(request.GroupBy.ToLower()))
+                throw new ValidationException("groupBy", "GroupBy phải là một trong: day, week, month, year.");
+
+            // Get partner from userId
+            var partner = await _context.Partners
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
+
+            if (partner == null)
+                throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
+
+            // Get list of cinema IDs belonging to this partner
+            var partnerCinemaIds = await _context.Cinemas
+                .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
+                .Select(c => c.CinemaId)
+                .ToListAsync();
+
+            if (!partnerCinemaIds.Any())
+            {
+                // Partner has no cinemas - return empty statistics
+                return new PartnerBookingStatisticsResponse();
+            }
+
+            // If cinemaId is specified, verify it belongs to this partner
+            if (request.CinemaId.HasValue)
+            {
+                if (!partnerCinemaIds.Contains(request.CinemaId.Value))
+                    throw new ValidationException("cinemaId", "Rạp này không thuộc về đối tác của bạn.");
+            }
+
+            // Set default date range if not provided
+            var fromDate = request.FromDate ?? DateTime.UtcNow.AddDays(-30).Date;
+            var toDate = request.ToDate ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1); // End of day
+
+            // Validate date range
+            if (toDate < fromDate)
+                throw new ValidationException("toDate", "ToDate phải lớn hơn hoặc bằng FromDate.");
+
+            // Base query for all bookings in date range from partner's cinemas
+            var baseQuery = _context.Bookings
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Cinema)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Screen)
+                .Include(b => b.Customer)
+                    .ThenInclude(c => c.User)
+                .Include(b => b.Tickets)
+                    .ThenInclude(t => t.Seat)
+                        .ThenInclude(s => s.SeatType)
+                .Include(b => b.ServiceOrders)
+                    .ThenInclude(so => so.Service)
+                .Include(b => b.Voucher)
+                .AsNoTracking()
+                .Where(b => partnerCinemaIds.Contains(b.Showtime.CinemaId))
+                .Where(b => b.BookingTime >= fromDate && b.BookingTime <= toDate);
+
+            // Apply cinema filter if specified
+            if (request.CinemaId.HasValue)
+            {
+                baseQuery = baseQuery.Where(b => b.Showtime.CinemaId == request.CinemaId.Value);
+            }
+
+            var bookings = await baseQuery.ToListAsync();
+
+            var response = new PartnerBookingStatisticsResponse();
+
+            // ========== OVERVIEW STATISTICS ==========
+            response.Overview = CalculateOverviewStatistics(bookings);
+
+            // ========== CINEMA REVENUE STATISTICS ==========
+            response.CinemaRevenue = CalculateCinemaRevenueStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== MOVIE STATISTICS ==========
+            response.MovieStatistics = CalculateMovieStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== TIME-BASED STATISTICS ==========
+            response.TimeStatistics = await CalculateTimeBasedStatisticsAsync(bookings, fromDate, toDate, request.GroupBy, request.IncludeComparison, partnerCinemaIds);
+
+            // ========== TOP CUSTOMERS STATISTICS ==========
+            response.TopCustomers = CalculateTopCustomersStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== SERVICE STATISTICS ==========
+            response.ServiceStatistics = CalculateServiceStatistics(bookings);
+
+            // ========== SEAT STATISTICS ==========
+            response.SeatStatistics = await CalculateSeatStatisticsAsync(bookings, partnerCinemaIds);
+
+            // ========== SHOWTIME STATISTICS ==========
+            response.ShowtimeStatistics = await CalculateShowtimeStatisticsAsync(bookings, partnerCinemaIds, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== PAYMENT STATISTICS ==========
+            response.PaymentStatistics = CalculatePaymentStatistics(bookings);
+
+            // ========== VOUCHER STATISTICS ==========
+            response.VoucherStatistics = CalculateVoucherStatistics(bookings);
+
+            return response;
+        }
+
+        /// <summary>
+        /// Helper method to check if a booking is paid/completed
+        /// </summary>
+        private bool IsPaidBooking(Booking booking)
+        {
+            var paymentStatus = booking.PaymentStatus?.ToUpper() ?? "";
+            var status = booking.Status.ToUpper();
+            var state = booking.State.ToUpper();
+            
+            if (paymentStatus == "PAID")
+                return true;
+            
+            if (status == "CONFIRMED" && paymentStatus == "PAID")
+                return true;
+            
+            if (state == "COMPLETED" && paymentStatus == "PAID")
+                return true;
+            
+            return false;
+        }
+
+        private PartnerResponses.BookingOverviewStatistics CalculateOverviewStatistics(List<Booking> bookings)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var totalTickets = paidBookings.Sum(b => b.Tickets.Count);
+            var totalCustomers = bookings.Select(b => b.CustomerId).Distinct().Count();
+            var totalRevenue = paidBookings.Sum(b => b.TotalAmount);
+            var averageOrderValue = paidBookings.Any() ? totalRevenue / paidBookings.Count : 0;
+
+            var bookingsByStatus = bookings
+                .GroupBy(b => b.Status.ToUpper())
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var revenueByStatus = paidBookings
+                .GroupBy(b => b.Status.ToUpper())
+                .ToDictionary(g => g.Key, g => g.Sum(b => b.TotalAmount));
+
+            var bookingsByPaymentStatus = bookings
+                .Where(b => !string.IsNullOrEmpty(b.PaymentStatus))
+                .GroupBy(b => b.PaymentStatus!.ToUpper())
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            return new PartnerResponses.BookingOverviewStatistics
+            {
+                TotalBookings = bookings.Count,
+                TotalRevenue = totalRevenue,
+                TotalPaidBookings = paidBookings.Count,
+                TotalPendingBookings = bookings.Count(b => b.Status.ToUpper() == "PENDING_PAYMENT" || b.State.ToUpper() == "PENDING_PAYMENT"),
+                TotalCancelledBookings = bookings.Count(b => b.Status.ToUpper() == "CANCELLED" || b.State.ToUpper() == "CANCELLED"),
+                TotalTicketsSold = totalTickets,
+                TotalCustomers = totalCustomers,
+                AverageOrderValue = averageOrderValue,
+                BookingsByStatus = bookingsByStatus,
+                RevenueByStatus = revenueByStatus,
+                BookingsByPaymentStatus = bookingsByPaymentStatus
+            };
+        }
+
+        private PartnerResponses.CinemaRevenueStatistics CalculateCinemaRevenueStatistics(List<Booking> bookings, int topLimit, int page, int pageSize)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+
+            var cinemaStats = paidBookings
+                .GroupBy(b => new
+                {
+                    CinemaId = b.Showtime.Cinema.CinemaId,
+                    CinemaName = b.Showtime.Cinema.CinemaName,
+                    City = b.Showtime.Cinema.City,
+                    District = b.Showtime.Cinema.District,
+                    Address = b.Showtime.Cinema.Address
+                })
+                .Select(g => new PartnerResponses.CinemaRevenueStat
+                {
+                    CinemaId = g.Key.CinemaId,
+                    CinemaName = g.Key.CinemaName,
+                    TotalRevenue = g.Sum(b => b.TotalAmount),
+                    TotalBookings = g.Count(),
+                    TotalTicketsSold = g.Sum(b => b.Tickets.Count),
+                    AverageOrderValue = g.Average(b => b.TotalAmount),
+                    City = g.Key.City,
+                    District = g.Key.District,
+                    Address = g.Key.Address
+                })
+                .OrderByDescending(c => c.TotalRevenue)
+                .ToList();
+
+            var totalCount = cinemaStats.Count;
+            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            var paginatedList = cinemaStats
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            var topCinemas = cinemaStats.Take(topLimit).ToList();
+
+            var comparison = new PartnerResponses.CinemaRevenueComparison
+            {
+                HighestRevenueCinema = cinemaStats.FirstOrDefault(),
+                LowestRevenueCinema = cinemaStats.LastOrDefault(c => c.TotalRevenue > 0),
+                AverageRevenuePerCinema = cinemaStats.Any() ? cinemaStats.Average(c => c.TotalRevenue) : 0
+            };
+
+            return new PartnerResponses.CinemaRevenueStatistics
+            {
+                CinemaRevenueList = paginatedList,
+                TopCinemasByRevenue = topCinemas,
+                Comparison = cinemaStats.Any() ? comparison : null,
+                Pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                }
+            };
+        }
+
+        private PartnerResponses.MovieRevenueStatistics CalculateMovieStatistics(List<Booking> bookings, int topLimit, int page, int pageSize)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+
+            var movieStats = paidBookings
+                .GroupBy(b => new
+                {
+                    MovieId = b.Showtime.Movie.MovieId,
+                    Title = b.Showtime.Movie.Title,
+                    Genre = b.Showtime.Movie.Genre
+                })
+                .Select(g => new PartnerResponses.MovieRevenueStat
+                {
+                    MovieId = g.Key.MovieId,
+                    Title = g.Key.Title,
+                    Genre = g.Key.Genre,
+                    TotalRevenue = g.Sum(b => b.TotalAmount),
+                    TotalBookings = g.Count(),
+                    TotalTicketsSold = g.Sum(b => b.Tickets.Count),
+                    ShowtimeCount = g.Select(b => b.ShowtimeId).Distinct().Count()
+                })
+                .ToList();
+
+            var moviesByRevenue = movieStats
+                .OrderByDescending(m => m.TotalRevenue)
+                .ToList();
+
+            var moviesByTickets = movieStats
+                .OrderByDescending(m => m.TotalTicketsSold)
+                .ToList();
+
+            var topByRevenue = moviesByRevenue.Take(topLimit).ToList();
+            var topByTickets = moviesByTickets.Take(topLimit).ToList();
+
+            // Pagination for revenue list
+            var totalCountByRevenue = moviesByRevenue.Count;
+            var totalPagesByRevenue = (int)Math.Ceiling(totalCountByRevenue / (double)pageSize);
+            var paginatedByRevenue = moviesByRevenue
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            // Pagination for tickets list
+            var totalCountByTickets = moviesByTickets.Count;
+            var totalPagesByTickets = (int)Math.Ceiling(totalCountByTickets / (double)pageSize);
+            var paginatedByTickets = moviesByTickets
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PartnerResponses.MovieRevenueStatistics
+            {
+                TopMoviesByRevenue = topByRevenue,
+                TopMoviesByTickets = topByTickets,
+                PaginationByRevenue = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCountByRevenue,
+                    TotalPages = totalPagesByRevenue
+                },
+                PaginationByTickets = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCountByTickets,
+                    TotalPages = totalPagesByTickets
+                }
+            };
+        }
+
+        private async Task<PartnerResponses.TimeBasedStatistics> CalculateTimeBasedStatisticsAsync(List<Booking> bookings, DateTime fromDate, DateTime toDate, string groupBy, bool includeComparison, List<int> partnerCinemaIds)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var today = DateTime.UtcNow.Date;
+            var yesterday = today.AddDays(-1);
+            var thisWeekStart = today.AddDays(-(int)today.DayOfWeek);
+            var thisMonthStart = new DateTime(today.Year, today.Month, 1);
+            var thisYearStart = new DateTime(today.Year, 1, 1);
+
+            var todayStats = CalculateTimePeriodStat(paidBookings, today, today.AddDays(1));
+            var yesterdayStats = CalculateTimePeriodStat(paidBookings, yesterday, today);
+            var thisWeekStats = CalculateTimePeriodStat(paidBookings, thisWeekStart, today.AddDays(1));
+            var thisMonthStats = CalculateTimePeriodStat(paidBookings, thisMonthStart, today.AddDays(1));
+            var thisYearStats = CalculateTimePeriodStat(paidBookings, thisYearStart, today.AddDays(1));
+
+            var revenueTrend = CalculateRevenueTrend(paidBookings, fromDate, toDate, groupBy);
+
+            PartnerResponses.PeriodComparison? periodComparison = null;
+            if (includeComparison)
+            {
+                var periodDays = (toDate - fromDate).Days;
+                var previousFromDate = fromDate.AddDays(-periodDays - 1);
+                var previousToDate = fromDate.AddTicks(-1);
+
+                var previousBookingsRaw = await _context.Bookings
+                    .Include(b => b.Tickets)
+                    .AsNoTracking()
+                    .Where(b => partnerCinemaIds.Contains(b.Showtime.CinemaId))
+                    .Where(b => b.BookingTime >= previousFromDate && b.BookingTime <= previousToDate)
+                    .ToListAsync();
+                
+                var previousBookings = previousBookingsRaw.Where(b => IsPaidBooking(b)).ToList();
+
+                var currentPeriod = new PartnerResponses.PeriodData
+                {
+                    Revenue = paidBookings.Sum(b => b.TotalAmount),
+                    Bookings = paidBookings.Count,
+                    Customers = paidBookings.Select(b => b.CustomerId).Distinct().Count()
+                };
+
+                var previousPeriod = new PartnerResponses.PeriodData
+                {
+                    Revenue = previousBookings.Sum(b => b.TotalAmount),
+                    Bookings = previousBookings.Count,
+                    Customers = previousBookings.Select(b => b.CustomerId).Distinct().Count()
+                };
+
+                periodComparison = new PartnerResponses.PeriodComparison
+                {
+                    CurrentPeriod = currentPeriod,
+                    PreviousPeriod = previousPeriod,
+                    Growth = new PartnerResponses.GrowthData
+                    {
+                        RevenueGrowth = previousPeriod.Revenue > 0
+                            ? (decimal)(((double)(currentPeriod.Revenue - previousPeriod.Revenue) / (double)previousPeriod.Revenue) * 100)
+                            : (currentPeriod.Revenue > 0 ? 100 : 0),
+                        BookingGrowth = previousPeriod.Bookings > 0
+                            ? (decimal)(((currentPeriod.Bookings - previousPeriod.Bookings) / (double)previousPeriod.Bookings) * 100)
+                            : (currentPeriod.Bookings > 0 ? 100 : 0),
+                        CustomerGrowth = previousPeriod.Customers > 0
+                            ? (decimal)(((currentPeriod.Customers - previousPeriod.Customers) / (double)previousPeriod.Customers) * 100)
+                            : (currentPeriod.Customers > 0 ? 100 : 0)
+                    }
+                };
+            }
+
+            return new PartnerResponses.TimeBasedStatistics
+            {
+                Today = todayStats,
+                Yesterday = yesterdayStats,
+                ThisWeek = thisWeekStats,
+                ThisMonth = thisMonthStats,
+                ThisYear = thisYearStats,
+                RevenueTrend = revenueTrend,
+                PeriodComparison = periodComparison
+            };
+        }
+
+        private PartnerResponses.TimePeriodStat CalculateTimePeriodStat(List<Booking> bookings, DateTime startDate, DateTime endDate)
+        {
+            var periodBookings = bookings.Where(b => b.BookingTime >= startDate && b.BookingTime < endDate).ToList();
+
+            return new PartnerResponses.TimePeriodStat
+            {
+                Bookings = periodBookings.Count,
+                Revenue = periodBookings.Sum(b => b.TotalAmount),
+                Tickets = periodBookings.Sum(b => b.Tickets.Count),
+                Customers = periodBookings.Select(b => b.CustomerId).Distinct().Count()
+            };
+        }
+
+        private List<PartnerResponses.TimeSeriesData> CalculateRevenueTrend(List<Booking> bookings, DateTime fromDate, DateTime toDate, string groupBy)
+        {
+            var trend = new List<PartnerResponses.TimeSeriesData>();
+
+            switch (groupBy.ToLower())
+            {
+                case "day":
+                    var dailyGroups = bookings
+                        .GroupBy(b => b.BookingTime.Date)
+                        .OrderBy(g => g.Key)
+                        .ToList();
+
+                    trend = dailyGroups.Select(g => new PartnerResponses.TimeSeriesData
+                    {
+                        Date = g.Key.ToString("yyyy-MM-dd"),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        BookingCount = g.Count(),
+                        TicketCount = g.Sum(b => b.Tickets.Count)
+                    }).ToList();
+                    break;
+
+                case "week":
+                    var weeklyGroups = bookings
+                        .GroupBy(b => GetWeekStart(b.BookingTime))
+                        .OrderBy(g => g.Key)
+                        .ToList();
+
+                    trend = weeklyGroups.Select(g => new PartnerResponses.TimeSeriesData
+                    {
+                        Date = g.Key.ToString("yyyy-MM-dd"),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        BookingCount = g.Count(),
+                        TicketCount = g.Sum(b => b.Tickets.Count)
+                    }).ToList();
+                    break;
+
+                case "month":
+                    var monthlyGroups = bookings
+                        .GroupBy(b => new DateTime(b.BookingTime.Year, b.BookingTime.Month, 1))
+                        .OrderBy(g => g.Key)
+                        .ToList();
+
+                    trend = monthlyGroups.Select(g => new PartnerResponses.TimeSeriesData
+                    {
+                        Date = g.Key.ToString("yyyy-MM"),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        BookingCount = g.Count(),
+                        TicketCount = g.Sum(b => b.Tickets.Count)
+                    }).ToList();
+                    break;
+
+                case "year":
+                    var yearlyGroups = bookings
+                        .GroupBy(b => new DateTime(b.BookingTime.Year, 1, 1))
+                        .OrderBy(g => g.Key)
+                        .ToList();
+
+                    trend = yearlyGroups.Select(g => new PartnerResponses.TimeSeriesData
+                    {
+                        Date = g.Key.ToString("yyyy"),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        BookingCount = g.Count(),
+                        TicketCount = g.Sum(b => b.Tickets.Count)
+                    }).ToList();
+                    break;
+            }
+
+            return trend;
+        }
+
+        private DateTime GetWeekStart(DateTime date)
+        {
+            var diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
+            return date.AddDays(-1 * diff).Date;
+        }
+
+        private PartnerResponses.TopCustomersStatistics CalculateTopCustomersStatistics(List<Booking> bookings, int topLimit, int page, int pageSize)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+
+            var customerStats = paidBookings
+                .GroupBy(b => new
+                {
+                    b.CustomerId,
+                    UserId = b.Customer.User.UserId,
+                    Fullname = b.Customer.User.Fullname,
+                    Email = b.Customer.User.Email,
+                    Phone = b.Customer.User.Phone
+                })
+                .Select(g => new PartnerResponses.CustomerStat
+                {
+                    CustomerId = g.Key.CustomerId,
+                    UserId = g.Key.UserId,
+                    Fullname = g.Key.Fullname,
+                    Email = g.Key.Email,
+                    Phone = g.Key.Phone,
+                    TotalSpent = g.Sum(b => b.TotalAmount),
+                    TotalBookings = g.Count(),
+                    TotalTicketsPurchased = g.Sum(b => b.Tickets.Count),
+                    AverageOrderValue = g.Average(b => b.TotalAmount),
+                    LastBookingDate = g.Max(b => b.BookingTime)
+                })
+                .ToList();
+
+            var customersByRevenue = customerStats
+                .OrderByDescending(c => c.TotalSpent)
+                .ToList();
+
+            var customersByBookingCount = customerStats
+                .OrderByDescending(c => c.TotalBookings)
+                .ToList();
+
+            var topByRevenue = customersByRevenue.Take(topLimit).ToList();
+            var topByBookingCount = customersByBookingCount.Take(topLimit).ToList();
+
+            // Pagination for revenue list
+            var totalCountByRevenue = customersByRevenue.Count;
+            var totalPagesByRevenue = (int)Math.Ceiling(totalCountByRevenue / (double)pageSize);
+            var paginatedByRevenue = customersByRevenue
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            // Pagination for booking count list
+            var totalCountByBookingCount = customersByBookingCount.Count;
+            var totalPagesByBookingCount = (int)Math.Ceiling(totalCountByBookingCount / (double)pageSize);
+            var paginatedByBookingCount = customersByBookingCount
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PartnerResponses.TopCustomersStatistics
+            {
+                ByRevenue = paginatedByRevenue,
+                ByBookingCount = paginatedByBookingCount,
+                PaginationByRevenue = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCountByRevenue,
+                    TotalPages = totalPagesByRevenue
+                },
+                PaginationByBookingCount = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCountByBookingCount,
+                    TotalPages = totalPagesByBookingCount
+                }
+            };
+        }
+
+        private PartnerResponses.ServiceStatistics CalculateServiceStatistics(List<Booking> bookings)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var totalRevenue = paidBookings.Sum(b => b.TotalAmount);
+            var totalServiceRevenue = paidBookings.Sum(b => b.ServiceOrders.Sum(so => so.Quantity * so.UnitPrice));
+            var totalServiceOrders = paidBookings.Sum(b => b.ServiceOrders.Count);
+            var serviceRevenuePercentage = totalRevenue > 0 ? (totalServiceRevenue / totalRevenue) * 100 : 0;
+
+            var topServices = paidBookings
+                .SelectMany(b => b.ServiceOrders)
+                .GroupBy(so => new
+                {
+                    so.ServiceId,
+                    ServiceName = so.Service.ServiceName
+                })
+                .Select(g => new PartnerResponses.TopServiceStat
+                {
+                    ServiceId = g.Key.ServiceId,
+                    ServiceName = g.Key.ServiceName,
+                    TotalQuantity = g.Sum(so => so.Quantity),
+                    TotalRevenue = g.Sum(so => so.Quantity * so.UnitPrice),
+                    BookingCount = g.Select(so => so.BookingId).Distinct().Count()
+                })
+                .OrderByDescending(s => s.TotalRevenue)
+                .Take(10)
+                .ToList();
+
+            return new PartnerResponses.ServiceStatistics
+            {
+                TotalServiceRevenue = totalServiceRevenue,
+                TotalServiceOrders = totalServiceOrders,
+                ServiceRevenuePercentage = serviceRevenuePercentage,
+                TopServices = topServices
+            };
+        }
+
+        private async Task<PartnerResponses.SeatStatistics> CalculateSeatStatisticsAsync(List<Booking> bookings, List<int> partnerCinemaIds)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var totalSeatsSold = paidBookings.Sum(b => b.Tickets.Count);
+
+            // Get total available seats from all screens in partner's cinemas
+            var totalSeatsAvailable = await _context.Screens
+                .Where(s => partnerCinemaIds.Contains(s.CinemaId) && s.IsActive)
+                .SumAsync(s => s.Capacity ?? 0);
+
+            var overallOccupancyRate = totalSeatsAvailable > 0 
+                ? (totalSeatsSold / (decimal)totalSeatsAvailable) * 100 
+                : 0;
+
+            // Statistics by seat type
+            var seatTypeStats = paidBookings
+                .SelectMany(b => b.Tickets)
+                .Where(t => t.Seat.SeatType != null)
+                .GroupBy(t => new
+                {
+                    SeatTypeId = t.Seat.SeatType!.Id,
+                    SeatTypeName = t.Seat.SeatType.Name
+                })
+                .Select(g => new PartnerResponses.SeatTypeStat
+                {
+                    SeatTypeId = g.Key.SeatTypeId,
+                    SeatTypeName = g.Key.SeatTypeName,
+                    TotalTicketsSold = g.Count(),
+                    TotalRevenue = g.Sum(t => t.Price),
+                    AveragePrice = g.Average(t => t.Price)
+                })
+                .OrderByDescending(s => s.TotalTicketsSold)
+                .ToList();
+
+            return new PartnerResponses.SeatStatistics
+            {
+                TotalSeatsSold = totalSeatsSold,
+                TotalSeatsAvailable = totalSeatsAvailable,
+                OverallOccupancyRate = overallOccupancyRate,
+                BySeatType = seatTypeStats
+            };
+        }
+
+        private async Task<PartnerResponses.ShowtimeStatistics> CalculateShowtimeStatisticsAsync(List<Booking> bookings, List<int> partnerCinemaIds, int topLimit, int page, int pageSize)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+
+            // Get all showtimes from partner's cinemas in the date range
+            var fromDate = bookings.Any() ? bookings.Min(b => b.BookingTime).Date : DateTime.UtcNow.AddDays(-30).Date;
+            var toDate = bookings.Any() ? bookings.Max(b => b.BookingTime).Date.AddDays(1) : DateTime.UtcNow.Date.AddDays(1);
+
+            var allShowtimes = await _context.Showtimes
+                .Include(s => s.Movie)
+                .Include(s => s.Cinema)
+                .AsNoTracking()
+                .Where(s => partnerCinemaIds.Contains(s.CinemaId))
+                .Where(s => s.ShowDatetime >= fromDate && s.ShowDatetime <= toDate)
+                .ToListAsync();
+
+            var totalShowtimes = allShowtimes.Count;
+            var showtimesWithBookings = paidBookings.Select(b => b.ShowtimeId).Distinct().Count();
+            var showtimesWithoutBookings = totalShowtimes - showtimesWithBookings;
+
+            // Top showtimes by revenue
+            var showtimesByRevenue = paidBookings
+                .GroupBy(b => new
+                {
+                    b.ShowtimeId,
+                    ShowDatetime = b.Showtime.ShowDatetime,
+                    FormatType = b.Showtime.FormatType,
+                    MovieTitle = b.Showtime.Movie.Title,
+                    CinemaName = b.Showtime.Cinema.CinemaName,
+                    ScreenCapacity = b.Showtime.Screen.Capacity ?? 0
+                })
+                .Select(g => new PartnerResponses.TopShowtimeStat
+                {
+                    ShowtimeId = g.Key.ShowtimeId,
+                    ShowDatetime = g.Key.ShowDatetime,
+                    FormatType = g.Key.FormatType,
+                    MovieTitle = g.Key.MovieTitle,
+                    CinemaName = g.Key.CinemaName ?? "",
+                    TotalRevenue = g.Sum(b => b.TotalAmount),
+                    TotalTicketsSold = g.Sum(b => b.Tickets.Count),
+                    OccupancyRate = g.Key.ScreenCapacity > 0 
+                        ? (g.Sum(b => b.Tickets.Count) / (decimal)g.Key.ScreenCapacity) * 100 
+                        : 0
+                })
+                .OrderByDescending(s => s.TotalRevenue)
+                .ToList();
+
+            var topShowtimes = showtimesByRevenue.Take(topLimit).ToList();
+
+            // Pagination
+            var totalCount = showtimesByRevenue.Count;
+            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            var paginatedShowtimes = showtimesByRevenue
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PartnerResponses.ShowtimeStatistics
+            {
+                TotalShowtimes = totalShowtimes,
+                ShowtimesWithBookings = showtimesWithBookings,
+                ShowtimesWithoutBookings = showtimesWithoutBookings,
+                TopShowtimesByRevenue = paginatedShowtimes,
+                Pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                }
+            };
+        }
+
+        private PartnerResponses.PaymentStatistics CalculatePaymentStatistics(List<Booking> bookings)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var totalBookings = bookings.Count;
+            var failedBookings = bookings.Count(b => 
+                b.PaymentStatus?.ToUpper() == "FAILED" || 
+                b.Status.ToUpper() == "FAILED");
+
+            var failedPaymentRate = totalBookings > 0 
+                ? (failedBookings / (double)totalBookings) * 100 
+                : 0;
+
+            var pendingPaymentAmount = bookings
+                .Where(b => b.PaymentStatus?.ToUpper() == "PENDING" || b.Status.ToUpper() == "PENDING_PAYMENT")
+                .Sum(b => b.TotalAmount);
+
+            var paymentByProvider = bookings
+                .Where(b => !string.IsNullOrEmpty(b.PaymentProvider))
+                .GroupBy(b => b.PaymentProvider!)
+                .Select(g => new PartnerResponses.PaymentProviderStat
+                {
+                    Provider = g.Key,
+                    BookingCount = g.Count(),
+                    TotalAmount = g.Where(b => IsPaidBooking(b)).Sum(b => b.TotalAmount)
+                })
+                .OrderByDescending(p => p.TotalAmount)
+                .ToList();
+
+            return new PartnerResponses.PaymentStatistics
+            {
+                PaymentByProvider = paymentByProvider,
+                FailedPaymentRate = (decimal)failedPaymentRate,
+                PendingPaymentAmount = pendingPaymentAmount
+            };
+        }
+
+        private PartnerResponses.VoucherStatistics CalculateVoucherStatistics(List<Booking> bookings)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var bookingsWithVoucher = paidBookings.Where(b => b.Voucher != null).ToList();
+
+            var totalVouchersUsed = bookingsWithVoucher.Count;
+            var totalVoucherDiscount = bookingsWithVoucher.Sum(b =>
+            {
+                if (b.Voucher == null) return 0;
+                if (b.Voucher.DiscountType.ToLower() == "fixed")
+                    return b.Voucher.DiscountVal;
+                else // percent
+                    return b.TotalAmount * (b.Voucher.DiscountVal / 100);
+            });
+
+            var voucherUsageRate = paidBookings.Any()
+                ? (totalVouchersUsed / (double)paidBookings.Count) * 100
+                : 0;
+
+            var mostUsedVouchers = bookingsWithVoucher
+                .Where(b => b.Voucher != null)
+                .GroupBy(b => b.Voucher!.VoucherCode)
+                .Select(g => new PartnerResponses.VoucherUsageStat
+                {
+                    VoucherCode = g.Key,
+                    UsageCount = g.Count(),
+                    TotalDiscount = g.Sum(b =>
+                    {
+                        var v = b.Voucher!;
+                        if (v.DiscountType.ToLower() == "fixed")
+                            return v.DiscountVal;
+                        else
+                            return b.TotalAmount * (v.DiscountVal / 100);
+                    })
+                })
+                .OrderByDescending(v => v.UsageCount)
+                .Take(10)
+                .ToList();
+
+            return new PartnerResponses.VoucherStatistics
+            {
+                TotalVouchersUsed = totalVouchersUsed,
+                TotalVoucherDiscount = totalVoucherDiscount,
+                VoucherUsageRate = (decimal)voucherUsageRate,
+                MostUsedVouchers = mostUsedVouchers
+            };
         }
      }
  }
