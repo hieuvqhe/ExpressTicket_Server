@@ -14,6 +14,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses
         public string Username { get; set; } = null!;
         public string Email { get; set; } = null!;
         public string? Phone { get; set; }
+        public string AvatarUrl { get; set; } = null!;
 
         // Booking statistics
         public int TotalBookings { get; set; }

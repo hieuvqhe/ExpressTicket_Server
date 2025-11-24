@@ -37,6 +37,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Catalog.Responses
         public int SeatId { get; set; }
         public string RowCode { get; set; } = "";
         public int SeatNumber { get; set; }
+        public string? SeatName { get; set; }
         public int SeatTypeId { get; set; }
         public string Status { get; set; } = "AVAILABLE"; // AVAILABLE|LOCKED|SOLD|BLOCKED
         public DateTime? LockedUntil { get; set; }

@@ -37,6 +37,8 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<Employee> Employees { get; set; }
 
+    public virtual DbSet<EmployeeCinemaAssignment> EmployeeCinemaAssignments { get; set; }
+
     public virtual DbSet<GameShow> GameShows { get; set; }
 
     public virtual DbSet<Manager> Managers { get; set; }
@@ -521,6 +523,38 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey<Employee>(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Employee_User");
+        });
+
+        modelBuilder.Entity<EmployeeCinemaAssignment>(entity =>
+        {
+            entity.HasKey(e => e.AssignmentId).HasName("PK__EmployeeCinemaAssignment__AssignmentId");
+
+            entity.ToTable("EmployeeCinemaAssignment");
+
+            entity.Property(e => e.AssignmentId).HasColumnName("assignment_id");
+            entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
+            entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.AssignedAt).HasColumnName("assigned_at");
+            entity.Property(e => e.AssignedBy).HasColumnName("assigned_by");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.UnassignedAt).HasColumnName("unassigned_at");
+
+            entity.HasOne(d => d.Employee).WithMany(p => p.CinemaAssignments)
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaAssignment_Employee");
+
+            entity.HasOne(d => d.Cinema).WithMany(p => p.EmployeeAssignments)
+                .HasForeignKey(d => d.CinemaId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaAssignment_Cinema");
+
+            // Unique constraint: một employee không thể được gán trùng lặp cùng một cinema
+            // Nhưng một employee có thể quản lý nhiều cinema khác nhau (1:N relationship)
+            entity.HasIndex(e => new { e.EmployeeId, e.CinemaId })
+                .IsUnique();
         });
 
         modelBuilder.Entity<GameShow>(entity =>

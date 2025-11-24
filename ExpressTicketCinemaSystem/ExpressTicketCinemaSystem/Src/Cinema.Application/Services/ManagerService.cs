@@ -1178,7 +1178,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     Fullname = b.Customer.User.Fullname,
                     Username = b.Customer.User.Username,
                     Email = b.Customer.User.Email,
-                    Phone = b.Customer.User.Phone
+                    Phone = b.Customer.User.Phone,
+                    AvatarUrl = b.Customer.User.AvatarUrl
                 })
                 .Select(g => new CustomerBookingInfo
                 {
@@ -1188,6 +1189,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     Username = g.Key.Username,
                     Email = g.Key.Email,
                     Phone = g.Key.Phone,
+                    AvatarUrl = g.Key.AvatarUrl,
                     TotalBookings = g.Count(),
                     TotalSpent = g.Sum(b => b.TotalAmount),
                     TotalTicketsPurchased = g.Sum(b => b.Tickets.Count),

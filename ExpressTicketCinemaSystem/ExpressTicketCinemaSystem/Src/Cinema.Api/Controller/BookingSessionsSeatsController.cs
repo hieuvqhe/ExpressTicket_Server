@@ -159,5 +159,45 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Validate tất cả ghế đã lock trong session.
+        /// Kiểm tra Rule 1 (không bỏ trống ghế ở giữa) và Rule 2 (không trống lề trái/phải).
+        /// Trả về danh sách lỗi nếu có, không throw exception.
+        /// </summary>
+        [HttpPost("validate")]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(SuccessResponse<ValidateSeatsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> Validate(Guid id, CancellationToken ct)
+        {
+            try
+            {
+                var result = await _service.ValidateAsync(id, ct);
+                return Ok(new SuccessResponse<ValidateSeatsResponse>
+                {
+                    Message = result.IsValid ? "Tất cả ghế hợp lệ" : "Có lỗi validation, vui lòng kiểm tra lại",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var msg = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse { Message = msg, Errors = ex.Errors });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi validate ghế."
+                });
+            }
+        }
     }
 }

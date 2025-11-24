@@ -3,7 +3,7 @@
     public class AdminEnum
     {
         /// <summary>
-        /// Role: Available values = customer, employee, partner, manager, admin
+        /// Role: Available values = customer, employee, partner, manager, admin, staff
         /// </summary>
         public enum UserRoleFilter
         {
@@ -11,7 +11,8 @@
             employee,
             partner,
             manager,
-            admin
+            admin,
+            staff
         }
 
         /// <summary>
@@ -47,7 +48,8 @@
                 new RoleOption { Value = "employee", Label = "employee" },
                 new RoleOption { Value = "partner", Label = "Partner" },
                 new RoleOption { Value = "manager", Label = "Manager" },
-                new RoleOption { Value = "admin", Label = "Admin" }
+                new RoleOption { Value = "admin", Label = "Admin" },
+                new RoleOption { Value = "staff", Label = "Staff" }
             };
         }
 

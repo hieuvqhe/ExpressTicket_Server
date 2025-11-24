@@ -212,7 +212,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             var seats = await _db.Seats.AsNoTracking()
                 .Where(se => se.ScreenId == show.ScreenId)
-                .Select(se => new { se.SeatId, se.RowCode, se.SeatNumber, se.SeatTypeId, se.Status })
+                .Select(se => new { se.SeatId, se.RowCode, se.SeatNumber, se.SeatName, se.SeatTypeId, se.Status })
                 .ToListAsync(ct);
 
             var locks = await _db.SeatLocks.AsNoTracking()
@@ -246,11 +246,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                            : lockMap.ContainsKey(s.SeatId) ? "LOCKED"
                            : "AVAILABLE";
 
+                // Sử dụng SeatName từ database nếu có, nếu không thì tạo từ RowCode + SeatNumber
+                var seatName = !string.IsNullOrWhiteSpace(s.SeatName) 
+                    ? s.SeatName 
+                    : $"{s.RowCode}{s.SeatNumber}";
+
                 resp.Seats.Add(new SeatCell
                 {
                     SeatId = s.SeatId,
                     RowCode = s.RowCode,
                     SeatNumber = s.SeatNumber,
+                    SeatName = seatName,
                     SeatTypeId = s.SeatTypeId ?? 0,
                     Status = status,
                     LockedUntil = lockMap.TryGetValue(s.SeatId, out var lu) ? lu : null

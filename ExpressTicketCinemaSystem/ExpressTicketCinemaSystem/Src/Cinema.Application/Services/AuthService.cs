@@ -199,9 +199,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (errors.Any())
                 throw new ValidationException(errors);
 
-            // Tìm user - INCLUDE PARTNER INFORMATION
+            // Tìm user - INCLUDE PARTNER AND EMPLOYEE INFORMATION
             var user = await _context.Users
                 .Include(u => u.Partner) // QUAN TRỌNG: Include partner info
+                .Include(u => u.Employee) // QUAN TRỌNG: Include employee info for Staff validation
+                    .ThenInclude(e => e.Partner) // Include Partner info from Employee
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername || u.Username == request.EmailOrUsername);
 
             if (user == null)
@@ -218,6 +220,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (user.UserType == "Partner")
             {
                 ValidatePartnerLogin(user);
+            }
+
+            // ==================== STAFF/EMPLOYEE SPECIFIC VALIDATION ====================
+            if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
+            {
+                await ValidateStaffLoginAsync(user);
             }
 
             // ==================== COMMON VALIDATION ====================
@@ -326,6 +334,66 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (errors.Any())
                 throw new UnauthorizedException(errors);
+        }
+
+        // ==================== NEW METHOD: VALIDATE STAFF/EMPLOYEE LOGIN ====================
+        private async Task ValidateStaffLoginAsync(User user)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            // Kiểm tra employee record có tồn tại không
+            if (user.Employee == null)
+            {
+                errors["employee"] = new ValidationError
+                {
+                    Msg = "Tài khoản nhân viên chưa được thiết lập đầy đủ. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra employee is active
+            if (!user.Employee.IsActive)
+            {
+                errors["employee"] = new ValidationError
+                {
+                    Msg = "Tài khoản nhân viên đã bị khóa. Vui lòng liên hệ quản lý để được kích hoạt lại.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra partner của employee có active không (vì Staff phụ thuộc vào Partner)
+            if (user.Employee.Partner == null)
+            {
+                errors["partner"] = new ValidationError
+                {
+                    Msg = "Thông tin đối tác chưa được thiết lập. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            if (!user.Employee.Partner.IsActive)
+            {
+                errors["partner"] = new ValidationError
+                {
+                    Msg = "Tài khoản đối tác của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra partner status
+            if (user.Employee.Partner.Status?.ToLower() != "approved")
+            {
+                errors["partner"] = new ValidationError
+                {
+                    Msg = "Tài khoản đối tác chưa được duyệt. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
         }
 
         public async Task<LoginResponse> CreateJwtResponseAsync(User user)

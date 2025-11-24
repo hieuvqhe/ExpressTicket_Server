@@ -42,4 +42,6 @@ public partial class Cinema
     public virtual ICollection<Screen> Screens { get; set; } = new List<Screen>();
 
     public virtual ICollection<Showtime> Showtimes { get; set; } = new List<Showtime>();
+
+    public virtual ICollection<EmployeeCinemaAssignment> EmployeeAssignments { get; set; } = new List<EmployeeCinemaAssignment>();
 }

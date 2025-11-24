@@ -1,5 +1,6 @@
 ﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
@@ -9,6 +10,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         Task<CinemaResponse> CreateCinemaAsync(CreateCinemaRequest request, int partnerId, int userId);
         Task<CinemaResponse> GetCinemaByIdAsync(int cinemaId, int partnerId, int userId);
         Task<PaginatedCinemasResponse> GetCinemasAsync(int partnerId, int userId, int page = 1, int limit = 10,
+            string? city = null, string? district = null, bool? isActive = null, string? search = null,
+            string? sortBy = "cinema_name", string? sortOrder = "asc");
+        Task<List<CinemaResponse>> GetAllCinemasForStaffAsync(int partnerId, int userId,
             string? city = null, string? district = null, bool? isActive = null, string? search = null,
             string? sortBy = "cinema_name", string? sortOrder = "asc");
         Task<CinemaResponse> UpdateCinemaAsync(int cinemaId, UpdateCinemaRequest request, int partnerId, int userId);

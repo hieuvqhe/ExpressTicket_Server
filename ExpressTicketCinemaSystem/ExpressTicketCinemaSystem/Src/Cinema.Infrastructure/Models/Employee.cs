@@ -22,4 +22,6 @@ public partial class Employee
     public virtual Partner Partner { get; set; } = null!;
 
     public virtual User User { get; set; } = null!;
+
+    public virtual ICollection<EmployeeCinemaAssignment> CinemaAssignments { get; set; } = new List<EmployeeCinemaAssignment>();
 }

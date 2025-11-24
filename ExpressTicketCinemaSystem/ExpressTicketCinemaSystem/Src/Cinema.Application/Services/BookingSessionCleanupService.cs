@@ -88,14 +88,36 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             // 3) Cleanup CANCELED sessions cũ hơn 24 giờ (hard delete)
+            // Chỉ xóa các sessions không có Order nào tham chiếu để tránh lỗi foreign key constraint
             var oldCanceledSessions = await context.BookingSessions
                 .Where(s => s.State == "CANCELED" && s.UpdatedAt < now.AddHours(-24))
                 .ToListAsync();
 
             if (oldCanceledSessions.Any())
             {
-                context.BookingSessions.RemoveRange(oldCanceledSessions);
-                _logger.LogInformation("Đã xóa {Count} old CANCELED sessions", oldCanceledSessions.Count);
+                // Lấy danh sách session IDs có Orders
+                var sessionIdsWithOrders = await context.Orders
+                    .Where(o => oldCanceledSessions.Select(s => s.Id).Contains(o.BookingSessionId))
+                    .Select(o => o.BookingSessionId)
+                    .Distinct()
+                    .ToListAsync();
+
+                // Chỉ xóa các sessions không có Orders
+                var sessionsToDelete = oldCanceledSessions
+                    .Where(s => !sessionIdsWithOrders.Contains(s.Id))
+                    .ToList();
+
+                if (sessionsToDelete.Any())
+                {
+                    context.BookingSessions.RemoveRange(sessionsToDelete);
+                    _logger.LogInformation("Đã xóa {Count} old CANCELED sessions (bỏ qua {Skipped} sessions có Orders)", 
+                        sessionsToDelete.Count, oldCanceledSessions.Count - sessionsToDelete.Count);
+                }
+                else if (oldCanceledSessions.Any())
+                {
+                    _logger.LogInformation("Không xóa CANCELED sessions vì tất cả đều có Orders tham chiếu ({Count} sessions)", 
+                        oldCanceledSessions.Count);
+                }
             }
 
             if (expiredLocks.Any() || expiredDraftSessions.Any() || oldCanceledSessions.Any())
@@ -107,6 +129,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
     }
 }
+
+
+
+
+
+
 
 
 

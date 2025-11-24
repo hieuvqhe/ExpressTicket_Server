@@ -125,6 +125,39 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
+        /// <summary>
+        /// Get all cinemas for Staff (without pagination in service - will be paginated in controller after filtering by assigned cinemas)
+        /// </summary>
+        public async Task<List<CinemaResponse>> GetAllCinemasForStaffAsync(int partnerId, int userId,
+            string? city = null, string? district = null, bool? isActive = null, string? search = null,
+            string? sortBy = "cinema_name", string? sortOrder = "asc")
+        {
+            // ==================== VALIDATION SECTION ====================
+            await ValidatePartnerAccessAsync(partnerId, userId);
+
+            // ==================== BUSINESS LOGIC SECTION ====================
+            var query = _context.Cinemas
+                .Where(c => c.PartnerId == partnerId)
+                .AsQueryable();
+
+            // Apply filters
+            query = ApplyCinemaFilters(query, city, district, isActive, search);
+
+            // Apply sorting
+            query = ApplyCinemaSorting(query, sortBy, sortOrder);
+
+            // Get all cinemas (no pagination - will be done in controller)
+            var cinemas = await query.ToListAsync();
+
+            var cinemaResponses = new List<CinemaResponse>();
+            foreach (var cinema in cinemas)
+            {
+                cinemaResponses.Add(await MapToCinemaResponseAsync(cinema));
+            }
+
+            return cinemaResponses;
+        }
+
         public async Task<CinemaResponse> UpdateCinemaAsync(int cinemaId, UpdateCinemaRequest request, int partnerId, int userId)
         {
             // ==================== VALIDATION SECTION ====================
@@ -469,13 +502,34 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private async Task ValidatePartnerAccessAsync(int partnerId, int userId)
         {
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.UserId == userId && u.UserType == "Partner");
+                .FirstOrDefaultAsync(u => u.UserId == userId && (u.UserType == "Partner" || u.UserType == "Staff" || u.UserType == "Marketing" || u.UserType == "Cashier"));
 
             if (user == null)
             {
-                throw new UnauthorizedException("Chỉ tài khoản Partner mới được sử dụng chức năng này");
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
             }
 
+            // Nếu là Staff, kiểm tra Employee và Partner thông qua Employee
+            if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .Include(e => e.Partner)
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee == null || employee.Partner == null)
+                {
+                    throw new UnauthorizedException("Nhân viên không thuộc Partner này");
+                }
+
+                if (employee.Partner.Status != "approved" || !employee.Partner.IsActive)
+                {
+                    throw new UnauthorizedException("Partner không tồn tại hoặc chưa được duyệt");
+                }
+
+                return; // Staff validated successfully
+            }
+
+            // Nếu là Partner, kiểm tra trực tiếp
             var partner = await _context.Partners
                 .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.UserId == userId && p.Status == "approved");
 

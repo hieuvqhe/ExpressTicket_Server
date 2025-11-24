@@ -26,3 +26,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Requests
 
 
 
+
+
+
+
+
+
+
+
+

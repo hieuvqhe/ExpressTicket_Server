@@ -40,8 +40,8 @@ builder.Services.AddCors(options =>
         policy
             .SetIsOriginAllowed(_ => true) // Cho phép tất cả origins
             .AllowAnyHeader()
-            .AllowAnyMethod();
-        // Không dùng AllowCredentials() vì xung đột với SetIsOriginAllowed
+            .AllowAnyMethod()
+            .AllowCredentials(); // Cần cho SignalR khi FE gửi credentials
     });
 });
 
@@ -204,6 +204,8 @@ builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ExpressTicketCinemaSystem.Src.Cinema.Application.Services.IMovieService, ExpressTicketCinemaSystem.Src.Cinema.Application.Services.MovieService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<PartnerService>();
+builder.Services.AddScoped<EmployeeManagementService>();
+builder.Services.AddScoped<IEmployeeCinemaAssignmentService, EmployeeCinemaAssignmentService>();
 builder.Services.AddScoped<ContractService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IManagerService, ManagerService>();
@@ -216,7 +218,6 @@ builder.Services.AddScoped<ICinemaService, CinemaService>();
 builder.Services.AddScoped<PartnerMovieManagementService>();
 builder.Services.AddScoped<ManagerMovieSubmissionService>();
 builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
-builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
 builder.Services.AddScoped<IComboService, ComboService>();
 builder.Services.AddScoped<IBookingSessionService, BookingSessionService>();
 builder.Services.AddScoped<IBookingSessionComboService, BookingSessionComboService>();
@@ -240,7 +241,8 @@ builder.Services.AddSingleton<IShowtimeSeatEventPublisher, SignalRShowtimeSeatEv
 builder.Services.AddSingleton<
     ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.IShowtimeSeatEventStream,
     ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.InMemoryShowtimeSeatEventStream>();
-builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
+
+// Background Services (Hosted Services)
 builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
 builder.Services.AddHostedService<BookingSessionCleanupService>(); 
 builder.Services.AddScoped<IVoucherService, VoucherService>();

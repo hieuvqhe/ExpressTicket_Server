@@ -11,5 +11,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         Task<LockSeatsResponse> LockAsync(Guid sessionId, LockSeatsRequest request, CancellationToken ct = default);
         Task<ReleaseSeatsResponse> ReleaseAsync(Guid sessionId, ReleaseSeatsRequest request, CancellationToken ct = default);
         Task<ReplaceSeatsResponse> ReplaceAsync(Guid sessionId, ReplaceSeatsRequest request, CancellationToken ct = default);
+        Task<ValidateSeatsResponse> ValidateAsync(Guid sessionId, CancellationToken ct = default);
     }
 }
