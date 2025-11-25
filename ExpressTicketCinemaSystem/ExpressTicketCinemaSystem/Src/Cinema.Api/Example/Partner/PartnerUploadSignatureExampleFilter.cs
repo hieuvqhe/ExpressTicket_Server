@@ -28,8 +28,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Example = new OpenApiString(
                         """
                         {
-                          "signatureImageUrl": "https://example.com/signatures/partner-signature-123.jpg",
-                          "notes": "Đã ký hợp đồng và upload biên bản ký"
+                          "signedContractPdfUrl": "https://assets/docs/signed-contract-123.pdf",
+                          "notes": "Đã ký hợp đồng và upload PDF hợp đồng đã ký"
                         }
                         """
                         )
@@ -50,13 +50,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Upload ảnh biên bản ký thành công",
+                          "message": "Upload PDF hợp đồng đã ký thành công",
                           "result": {
                             "contractId": 1,
                             "contractNumber": "HD-2024-001",
                             "title": "HỢP ĐỒNG HỢP TÁC KINH DOANH",
                             "status": "pending",
-                            "partnerSignatureUrl": "https://example.com/signatures/partner-signature-123.jpg",
+                            "pdfUrl": "https://assets/docs/signed-contract-123.pdf",
+                            "partnerSignatureUrl": "https://assets/docs/signed-contract-123.pdf",
                             "partnerSignedAt": "2024-01-18T15:30:00Z",
                             "updatedAt": "2024-01-18T15:30:00Z"
                           }
@@ -83,9 +84,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         {
                           "message": "Lỗi xác thực dữ liệu",
                           "errors": {
-                            "signatureImageUrl": {
-                              "msg": "URL ảnh biên bản ký là bắt buộc",
-                              "path": "signatureImageUrl",
+                            "signedContractPdfUrl": {
+                              "msg": "URL PDF hợp đồng đã ký là bắt buộc",
+                              "path": "signedContractPdfUrl",
                               "location": "body"
                             }
                           }
@@ -161,7 +162,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                         Value = new OpenApiString(
                         """
                         {
-                          "message": "Đã xảy ra lỗi hệ thống khi upload ảnh ký."
+                          "message": "Đã xảy ra lỗi hệ thống khi upload PDF hợp đồng đã ký."
                         }
                         """
                         )
@@ -169,8 +170,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                 }
             }
 
-            operation.Summary = "Upload signature image for contract";
-            operation.Description = "Partner uploads signed contract document image for manager review and finalization.";
+            operation.Summary = "Upload signed PDF contract";
+            operation.Description = "Partner uploads signed PDF contract. This replaces the original PDF sent by manager, so manager will view the signed version when reviewing the contract.";
         }
     }
 }

@@ -8,6 +8,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Booking.Responses
         public Guid BookingSessionId { get; set; }
         public int ShowtimeId { get; set; }
         public bool IsValid { get; set; }
+        public string Message { get; set; } = string.Empty;
         public List<int> CurrentSeatIds { get; set; } = new();
         public List<SeatValidationError> Errors { get; set; } = new();
     }

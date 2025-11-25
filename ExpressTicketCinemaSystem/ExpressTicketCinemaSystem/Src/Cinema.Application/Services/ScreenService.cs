@@ -64,6 +64,27 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return await MapToScreenResponseAsync(screen);
         }
 
+        public async Task<ScreenResponse> GetScreenByIdPublicAsync(int screenId)
+        {
+            // ==================== VALIDATION SECTION ====================
+            var screen = await _context.Screens
+                .Include(s => s.Cinema)
+                .FirstOrDefaultAsync(s => s.ScreenId == screenId);
+
+            if (screen == null)
+            {
+                throw new NotFoundException("Không tìm thấy phòng với ID này");
+            }
+
+            if (screen.IsActive != true)
+            {
+                throw new NotFoundException("Phòng này đã bị vô hiệu hóa");
+            }
+
+            // ==================== BUSINESS LOGIC SECTION ====================
+            return await MapToScreenResponseAsync(screen);
+        }
+
         public async Task<PaginatedScreensResponse> GetScreensAsync(int cinemaId, int partnerId, int userId, int page = 1, int limit = 10,
             string? screenType = null, bool? isActive = null, string? sortBy = "screen_name", string? sortOrder = "asc")
         {

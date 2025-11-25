@@ -22,6 +22,9 @@
         public bool IsLocked { get; set; }
         public string ContractHash { get; set; } = string.Empty;
 
+        // Contract PDF URL (original PDF from manager, replaced by signed PDF from partner)
+        public string? PdfUrl { get; set; }
+
         // Signature information
         public string? PartnerSignatureUrl { get; set; }
         public string? ManagerSignature { get; set; }

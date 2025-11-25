@@ -145,9 +145,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Nhưng vì đây là background service, ta cần copy logic vào đây
             // Hoặc extract thành shared method
 
-            // 1. Update Order status
-            order.Status = "PAID";
-            order.UpdatedAt = DateTime.UtcNow;
+            // LƯU Ý: KHÔNG set order.Status = "PAID" ở đây
+            // Chỉ set PAID SAU KHI đã tạo booking và update session thành công
+            // Để tránh trường hợp order PAID nhưng booking_id = NULL
 
             // 2. Get or create Customer (nếu có UserId)
             int? customerId = null;
@@ -193,7 +193,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             else
             {
                 _logger.LogWarning("Order {OrderId} has no UserId, cannot create Booking", order.OrderId);
-                await db.SaveChangesAsync(ct);
+                // KHÔNG set order.Status = "PAID" nếu không có UserId
+                // Giữ nguyên status PENDING để có thể retry sau
                 return;
             }
 
@@ -328,8 +329,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .ToListAsync(ct);
             db.SeatLocks.RemoveRange(seatLocks);
 
-            // 11. Update Order với BookingId
+            // 11. Update Order với BookingId và set status = PAID
+            // CHỈ set PAID SAU KHI đã tạo booking và update session thành công
             order.BookingId = booking.BookingId;
+            order.Status = "PAID";
+            order.UpdatedAt = DateTime.UtcNow;
 
             // 12. Save all changes
             await db.SaveChangesAsync(ct);

@@ -2,7 +2,7 @@
 {
     public class UploadSignatureRequest
     {
-        public string SignatureImageUrl { get; set; } = string.Empty; 
+        public string SignedContractPdfUrl { get; set; } = string.Empty; 
         public string? Notes { get; set; } 
     }
 }

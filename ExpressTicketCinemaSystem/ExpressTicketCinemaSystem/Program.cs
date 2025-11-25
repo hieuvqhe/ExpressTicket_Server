@@ -198,6 +198,9 @@ builder.Services.Configure<AzureBlobStorageSettings>(
     builder.Configuration.GetSection("AzureBlobStorage"));
 
 // DEPENDENCY INJECTION 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();

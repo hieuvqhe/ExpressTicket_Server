@@ -229,10 +229,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
         /// <summary>
-        /// Upload signature image for contract
+        /// Upload signed PDF contract (replaces the original PDF sent by manager)
         /// </summary>
         /// <param name="id">Contract ID</param>
-        /// <param name="request">Signature upload request</param>
+        /// <param name="request">Signed contract PDF upload request</param>
         /// <returns>Updated contract details</returns>
         [HttpPost("/partners/contracts/{id}/upload-signature")]
         [ProducesResponseType(typeof(SuccessResponse<ContractResponse>), StatusCodes.Status200OK)]
@@ -249,7 +249,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
                 var response = new SuccessResponse<ContractResponse>
                 {
-                    Message = "Upload ảnh biên bản ký thành công",
+                    Message = "Upload PDF hợp đồng đã ký thành công",
                     Result = result
                 };
                 return Ok(response);
@@ -278,7 +278,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             {
                 return StatusCode(500, new ErrorResponse
                 {
-                    Message = "Đã xảy ra lỗi hệ thống khi upload ảnh ký."
+                    Message = "Đã xảy ra lỗi hệ thống khi upload PDF hợp đồng đã ký."
                 });
             }
         }
@@ -371,9 +371,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
         /// <summary>
-        /// (Partner) Tạo SAS URL để upload file chữ ký (PDF hoặc ảnh PNG/JPG)
+        /// (Partner) Tạo SAS URL để upload file PDF hợp đồng đã ký
         /// </summary>
-        /// <param name="request">Chứa tên file, ví dụ: "signature.pdf" hoặc "signature.png"</param>
+        /// <param name="request">Chứa tên file PDF, ví dụ: "signed-contract.pdf"</param>
         /// <returns>SAS URL (for uploading) and Blob URL (for saving)</returns>
         [HttpPost("/partners/contracts/generate-signature-upload-sas")]
         [Authorize(Roles = "Partner")] // Đảm bảo chỉ partner mới được gọi
@@ -396,8 +396,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
 
-            // Cho phép upload file PDF (hợp đồng đã ký) hoặc ảnh chữ ký
-            var allowedExtensions = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
+            // Chỉ chấp nhận file PDF hợp đồng đã ký
+            var allowedExtensions = new[] { ".pdf" };
             var extension = Path.GetExtension(request.FileName).ToLower();
             if (!allowedExtensions.Contains(extension))
             {
@@ -406,7 +406,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     Message = "Định dạng file không hợp lệ",
                     Errors = new Dictionary<string, ValidationError>
                     {
-                        ["fileName"] = new ValidationError { Msg = "Chỉ chấp nhận file PDF hoặc ảnh (.png, .jpg, .jpeg)" }
+                        ["fileName"] = new ValidationError { Msg = "Chỉ chấp nhận file PDF hợp đồng đã ký" }
                     }
                 });
             }
@@ -2193,19 +2193,43 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
+                if (request == null)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Request body không được để trống"
+                    });
+                }
+
                 var partnerId = await GetCurrentPartnerId();
                 var userId = GetCurrentUserId();
                 await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
-                await _employeeCinemaAssignmentService.AssignCinemaToEmployeeAsync(
-                    partnerId, request.EmployeeId, request.CinemaId, userId);
+                // Loại bỏ duplicate cinemaIds để tránh gán trùng
+                var uniqueCinemaIds = request.CinemaIds.Distinct().ToList();
+                
+                // Gán từng rạp cho nhân viên
+                foreach (var cinemaId in uniqueCinemaIds)
+                {
+                    await _employeeCinemaAssignmentService.AssignCinemaToEmployeeAsync(
+                        partnerId, request.EmployeeId, cinemaId, userId);
+                }
 
                 var response = new SuccessResponse<object>
                 {
-                    Message = "Phân quyền quản lý rạp cho nhân viên thành công",
+                    Message = $"Phân quyền quản lý {uniqueCinemaIds.Count} rạp cho nhân viên thành công",
                     Result = null
                 };
                 return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
             }
             catch (UnauthorizedException ex)
             {
@@ -2235,6 +2259,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         [HttpDelete("/partners/employees/cinema-assignments")]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
@@ -2242,18 +2267,42 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
+                if (request == null)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Request body không được để trống"
+                    });
+                }
+
                 var partnerId = await GetCurrentPartnerId();
                 await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
 
-                await _employeeCinemaAssignmentService.UnassignCinemaFromEmployeeAsync(
-                    partnerId, request.EmployeeId, request.CinemaId);
+                // Loại bỏ duplicate cinemaIds để tránh hủy trùng
+                var uniqueCinemaIds = request.CinemaIds.Distinct().ToList();
+
+                // Hủy phân quyền từng rạp cho nhân viên
+                foreach (var cinemaId in uniqueCinemaIds)
+                {
+                    await _employeeCinemaAssignmentService.UnassignCinemaFromEmployeeAsync(
+                        partnerId, request.EmployeeId, cinemaId);
+                }
 
                 var response = new SuccessResponse<object>
                 {
-                    Message = "Hủy phân quyền quản lý rạp thành công",
+                    Message = $"Hủy phân quyền quản lý {uniqueCinemaIds.Count} rạp thành công",
                     Result = null
                 };
                 return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
             }
             catch (UnauthorizedException ex)
             {

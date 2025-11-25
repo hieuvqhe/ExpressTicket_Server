@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -9,6 +10,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Catalog.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Catalog.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -19,10 +21,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
     {
 
         private readonly ICatalogQueryService _service;
+        private readonly IScreenService _screenService;
+        private readonly IShowtimeService _showtimeService;
 
-        public CatalogController(ICatalogQueryService service)
+        public CatalogController(ICatalogQueryService service, IScreenService screenService, IShowtimeService showtimeService)
         {
             _service = service;
+            _screenService = screenService;
+            _showtimeService = showtimeService;
         }
 
         /// <summary>
@@ -133,6 +139,74 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             catch
             {
                 return StatusCode(500, new ErrorResponse { Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách suất chiếu." });
+            }
+        }
+
+        /// <summary>
+        /// Get screen by ID for public (View-only, no authentication required)
+        /// </summary>
+        [HttpGet("screens/{screen_id}")]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(SuccessResponse<ScreenResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetScreenById([FromRoute(Name = "screen_id")] int screenId)
+        {
+            try
+            {
+                var result = await _screenService.GetScreenByIdPublicAsync(screenId);
+
+                var response = new SuccessResponse<ScreenResponse>
+                {
+                    Message = "Lấy thông tin phòng thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin phòng."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get showtime by ID for public (View-only, no authentication required)
+        /// </summary>
+        [HttpGet("showtimes/{showtimeId}")]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeDetailResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetShowtimeById(int showtimeId)
+        {
+            try
+            {
+                var result = await _showtimeService.GetShowtimeByIdPublicAsync(showtimeId);
+
+                var response = new SuccessResponse<PartnerShowtimeDetailResponse>
+                {
+                    Message = "Lấy thông tin showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin suất chiếu."
+                });
             }
         }
 

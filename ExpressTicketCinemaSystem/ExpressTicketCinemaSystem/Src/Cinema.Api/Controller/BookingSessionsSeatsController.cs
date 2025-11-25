@@ -178,7 +178,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 var result = await _service.ValidateAsync(id, ct);
                 return Ok(new SuccessResponse<ValidateSeatsResponse>
                 {
-                    Message = result.IsValid ? "Tất cả ghế hợp lệ" : "Có lỗi validation, vui lòng kiểm tra lại",
+                    Message = result.Message,
                     Result = result
                 });
             }

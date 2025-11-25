@@ -23,6 +23,9 @@
         // Manager information
         public int ManagerId { get; set; }
         public string ManagerName { get; set; } = string.Empty;
+
+        // Signature information
+        public string? PartnerSignatureUrl { get; set; }
     }
 
     public class PaginatedContractsResponse

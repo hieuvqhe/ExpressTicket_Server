@@ -86,20 +86,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         // Helper: Chia hàng thành các blocks (các nhóm ghế giữa các Z0)
         // Trả về danh sách các blocks, mỗi block là danh sách ghế trong block đó
+        // allSeatNamesInRow phải được sắp xếp theo thứ tự thực tế trong hàng (theo seatNumber)
         private static List<List<string>> GetSeatBlocks(List<string> allSeatNamesInRow)
         {
             if (allSeatNamesInRow.Count == 0) return new List<List<string>>();
 
-            // Sắp xếp tất cả ghế theo position
-            var sortedSeats = allSeatNamesInRow
+            // Parse tất cả ghế và giữ nguyên thứ tự trong list (giả sử đã được sắp xếp đúng)
+            // Chỉ parse để xác định Z0, không sắp xếp lại
+            var seats = allSeatNamesInRow
                 .Select(s => new { SeatName = s, Info = ParseSeatName(s) })
-                .OrderBy(x => x.Info.position)
                 .ToList();
 
             var blocks = new List<List<string>>();
             var currentBlock = new List<string>();
 
-            foreach (var seat in sortedSeats)
+            foreach (var seat in seats)
             {
                 if (seat.Info.isAisle)
                 {
@@ -150,26 +151,31 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (sortedSeats.Count < 2) return false;
 
             // Kiểm tra xem có ghế nào bị bỏ trống giữa 2 ghế đã occupied không
-            for (int i = 0; i < sortedSeats.Count - 1; i++)
-            {
-                var current = sortedSeats[i];
-                var next = sortedSeats[i + 1];
+            // Lấy tất cả ghế đã occupied và sắp xếp theo position
+            var occupiedSeats = sortedSeats
+                .Where(s => allOccupied.Contains(s.SeatName))
+                .OrderBy(s => s.Info.position)
+                .ToList();
 
-                // Nếu cả 2 ghế đều occupied
-                if (allOccupied.Contains(current.SeatName) && allOccupied.Contains(next.SeatName))
+            if (occupiedSeats.Count < 2) return false;
+
+            // Kiểm tra từng cặp ghế đã occupied (không chỉ liền kề)
+            for (int i = 0; i < occupiedSeats.Count - 1; i++)
+            {
+                var current = occupiedSeats[i];
+                var next = occupiedSeats[i + 1];
+
+                // Kiểm tra xem có ghế nào ở giữa không
+                var gap = next.Info.position - current.Info.position;
+                if (gap == 2) // Có đúng 1 ghế ở giữa
                 {
-                    // Kiểm tra xem có ghế nào ở giữa không
-                    var gap = next.Info.position - current.Info.position;
-                    if (gap == 2) // Có đúng 1 ghế ở giữa
+                    // Tìm ghế ở giữa
+                    var middlePosition = current.Info.position + 1;
+                    var middleSeat = sortedSeats.FirstOrDefault(s => s.Info.position == middlePosition);
+                    if (middleSeat != null && !allOccupied.Contains(middleSeat.SeatName))
                     {
-                        // Tìm ghế ở giữa
-                        var middlePosition = current.Info.position + 1;
-                        var middleSeat = sortedSeats.FirstOrDefault(s => s.Info.position == middlePosition);
-                        if (middleSeat != null && !allOccupied.Contains(middleSeat.SeatName))
-                        {
-                            // Có ghế ở giữa chưa được occupied -> vi phạm rule
-                            return true;
-                        }
+                        // Có ghế ở giữa chưa được occupied -> vi phạm rule
+                        return true;
                     }
                 }
             }
@@ -240,28 +246,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 // Kiểm tra từng ghế đã selected
                 foreach (var selectedSeat in selectedSeats)
                 {
-                    var selectedPosition = selectedSeat.Info.position;
+                    var selectedSeatName = selectedSeat.SeatName;
+                    
+                    // Tìm index của ghế đã selected trong block
+                    var selectedIndex = block.IndexOf(selectedSeatName);
+                    if (selectedIndex < 0) continue;
 
-                    // Tìm ghế bên trái ghế này (ghế liền kề bên trái)
-                    var leftNeighbor = block
-                        .Select(s => new { SeatName = s, Info = ParseSeatName(s) })
-                        .Where(x => x.Info.position == selectedPosition - 1)
-                        .FirstOrDefault();
+                    // Tìm ghế bên trái ghế này (ghế liền kề bên trái trong block)
+                    string? leftNeighborName = selectedIndex > 0 ? block[selectedIndex - 1] : null;
 
-                    // Tìm ghế bên phải ghế này (ghế liền kề bên phải)
-                    var rightNeighbor = block
-                        .Select(s => new { SeatName = s, Info = ParseSeatName(s) })
-                        .Where(x => x.Info.position == selectedPosition + 1)
-                        .FirstOrDefault();
+                    // Tìm ghế bên phải ghế này (ghế liền kề bên phải trong block)
+                    string? rightNeighborName = selectedIndex < block.Count - 1 ? block[selectedIndex + 1] : null;
 
                     // Rule: Không được book một ghế nếu ghế bên trái nó là lề trái HOẶC ghế bên phải nó là lề phải
                     // (và lề đó chưa được occupied)
                     
                     // Kiểm tra lề trái: Nếu có ghế bên trái và đó là lề trái
-                    if (leftNeighbor != null && leftNeighbor.SeatName.Equals(leftEdge, StringComparison.OrdinalIgnoreCase))
+                    if (leftNeighborName != null && leftNeighborName.Equals(leftEdge, StringComparison.OrdinalIgnoreCase))
                     {
                         // Ghế bên trái là lề trái
-                        if (!allOccupied.Contains(leftNeighbor.SeatName))
+                        if (!allOccupied.Contains(leftNeighborName))
                         {
                             // Lề trái chưa được occupied -> vi phạm
                             return true;
@@ -269,10 +273,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     }
 
                     // Kiểm tra lề phải: Nếu có ghế bên phải và đó là lề phải
-                    if (rightNeighbor != null && rightNeighbor.SeatName.Equals(rightEdge, StringComparison.OrdinalIgnoreCase))
+                    if (rightNeighborName != null && rightNeighborName.Equals(rightEdge, StringComparison.OrdinalIgnoreCase))
                     {
                         // Ghế bên phải là lề phải
-                        if (!allOccupied.Contains(rightNeighbor.SeatName))
+                        if (!allOccupied.Contains(rightNeighborName))
                         {
                             // Lề phải chưa được occupied -> vi phạm
                             return true;
@@ -891,7 +895,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Validate từng hàng
             foreach (var row in rows)
             {
-                var rowSeats = allSeatsInRows.Where(s => s.RowCode == row).ToList();
+                var rowSeats = allSeatsInRows
+                    .Where(s => s.RowCode == row)
+                    .OrderBy(s => s.SeatNumber) // Sắp xếp theo seatNumber để đảm bảo thứ tự đúng
+                    .ToList();
                 var allSeatNamesInRow = rowSeats.Select(s => 
                     !string.IsNullOrWhiteSpace(s.SeatName) ? s.SeatName : $"{s.RowCode}{s.SeatNumber}")
                     .ToList();
@@ -951,13 +958,45 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
+            // Tạo message từ errors (lấy message đầu tiên hoặc tổng hợp)
+            string message;
+            if (errors.Count == 0)
+            {
+                message = "Tất cả ghế hợp lệ";
+            }
+            else if (errors.Count == 1)
+            {
+                // Nếu chỉ có 1 lỗi, dùng message của lỗi đó
+                message = errors[0].Message;
+            }
+            else
+            {
+                // Nếu có nhiều lỗi, tổng hợp message (loại bỏ trùng lặp)
+                var uniqueMessages = errors
+                    .Select(e => e.Message)
+                    .Distinct()
+                    .ToList();
+                
+                if (uniqueMessages.Count == 1)
+                {
+                    // Tất cả lỗi có cùng message
+                    message = uniqueMessages[0];
+                }
+                else
+                {
+                    // Có nhiều message khác nhau, tổng hợp
+                    message = string.Join(" ", uniqueMessages);
+                }
+            }
+
             return new ValidateSeatsResponse
             {
                 BookingSessionId = sessionId,
                 ShowtimeId = showtimeId,
                 IsValid = errors.Count == 0,
                 CurrentSeatIds = curSeats,
-                Errors = errors
+                Errors = errors,
+                Message = message
             };
         }
 

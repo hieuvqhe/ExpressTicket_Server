@@ -37,6 +37,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy nhân viên Staff hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Validate employee is active
+            if (!employee.IsActive)
+            {
+                throw new ValidationException("employeeId", "Chỉ có thể phân quyền rạp cho nhân viên đang hoạt động");
+            }
+
             // Validate cinema belongs to partner
             var cinema = await _context.Cinemas
                 .FirstOrDefaultAsync(c => c.CinemaId == cinemaId && c.PartnerId == partnerId);
@@ -46,7 +52,31 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy rạp hoặc không thuộc quyền quản lý của bạn");
             }
 
-            // Check if there's already an assignment for this cinema (even if inactive)
+            // Validate cinema is active
+            if (cinema.IsActive != true)
+            {
+                throw new ValidationException("cinemaId", "Chỉ có thể phân quyền rạp đang hoạt động cho nhân viên");
+            }
+
+            // Validate: 1 rạp chỉ được quản lý bởi 1 staff (chỉ áp dụng cho RoleType = "Staff")
+            if (employee.RoleType == "Staff")
+            {
+                var existingActiveAssignment = await _context.EmployeeCinemaAssignments
+                    .Include(a => a.Employee)
+                    .FirstOrDefaultAsync(a => 
+                        a.CinemaId == cinemaId 
+                        && a.IsActive 
+                        && a.Employee.RoleType == "Staff"
+                        && a.EmployeeId != employeeId
+                        && a.Employee.IsActive);
+
+                if (existingActiveAssignment != null)
+                {
+                    throw new ValidationException("cinemaId", $"Rạp này đã được phân quyền cho nhân viên Staff khác (ID: {existingActiveAssignment.EmployeeId}). Một rạp chỉ có thể được quản lý bởi một Staff.");
+                }
+            }
+
+            // Check if there's already an assignment for this employee-cinema pair (even if inactive)
             var existingAssignment = await _context.EmployeeCinemaAssignments
                 .FirstOrDefaultAsync(a => a.EmployeeId == employeeId && a.CinemaId == cinemaId);
 

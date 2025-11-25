@@ -407,7 +407,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 MinimumRevenue = contract.MinimumRevenue,
                 Status = contract.Status,
                 ContractHash = contract.ContractHash,
+                PdfUrl = contract.PdfUrl,
+                PartnerSignatureUrl = contract.PartnerSignatureUrl,
+                ManagerSignature = contract.ManagerSignature,
+                SignedAt = contract.SignedAt,
+                PartnerSignedAt = contract.PartnerSignedAt,
+                ManagerSignedAt = contract.ManagerSignedAt,
+                LockedAt = contract.LockedAt,
+                IsLocked = contract.IsLocked,
+                ManagerId = contract.ManagerId,
+                PartnerId = contract.PartnerId,
+                CreatedBy = contract.CreatedBy,
                 CreatedAt = contract.CreatedAt,
+                UpdatedAt = contract.UpdatedAt,
 
                 PartnerName = contract.Partner?.PartnerName ?? "",
                 PartnerAddress = contract.Partner?.Address ?? "",
@@ -422,7 +434,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 CompanyTaxCode = companyInfo.TaxCode,
                 ManagerName = contract.Manager?.User?.Fullname ?? "",
                 ManagerPosition = "Quản lý Đối tác",
-                ManagerEmail = contract.Manager?.User?.Email ?? ""
+                ManagerEmail = contract.Manager?.User?.Email ?? "",
+                CreatedByName = contract.Manager?.User?.Fullname ?? ""
             };
         }
         public async Task<PaginatedContractsResponse> GetAllContractsAsync(
@@ -517,7 +530,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     PartnerPhone = c.Partner.User.Phone,
 
                     ManagerId = c.ManagerId,
-                    ManagerName = c.Manager.User.Fullname
+                    ManagerName = c.Manager.User.Fullname,
+
+                    PartnerSignatureUrl = c.PartnerSignatureUrl
                 })
                 .ToListAsync();
 
@@ -604,12 +619,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Status = contract.Status,
                 IsLocked = contract.IsLocked,
                 ContractHash = contract.ContractHash,
+                PdfUrl = contract.PdfUrl,
                 PartnerSignatureUrl = contract.PartnerSignatureUrl,
                 ManagerSignature = contract.ManagerSignature,
                 SignedAt = contract.SignedAt,
                 PartnerSignedAt = contract.PartnerSignedAt,
                 ManagerSignedAt = contract.ManagerSignedAt,
                 LockedAt = contract.LockedAt,
+                ManagerId = contract.ManagerId,
+                PartnerId = contract.PartnerId,
+                CreatedBy = contract.CreatedBy,
                 CreatedAt = contract.CreatedAt,
                 UpdatedAt = contract.UpdatedAt,
 
@@ -885,8 +904,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
-            // Cập nhật thông tin signature
-            contract.PartnerSignatureUrl = request.SignatureImageUrl;
+            // Thay thế PDF hợp đồng bằng PDF đã ký của partner
+            // Manager sẽ xem PDF đã ký này thay vì PDF ban đầu
+            contract.PdfUrl = request.SignedContractPdfUrl;
+            
+            // Cập nhật PartnerSignatureUrl để tương thích ngược
+            contract.PartnerSignatureUrl = request.SignedContractPdfUrl;
+            
             contract.PartnerSignedAt = DateTime.UtcNow;
             contract.Status = "pending"; 
             contract.UpdatedAt = DateTime.UtcNow;
@@ -906,24 +930,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         {
             var errors = new Dictionary<string, ValidationError>();
 
-            if (string.IsNullOrWhiteSpace(request.SignatureImageUrl))
-                errors["signatureImageUrl"] = new ValidationError { Msg = "URL ảnh biên bản ký là bắt buộc", Path = "signatureImageUrl" };
+            if (string.IsNullOrWhiteSpace(request.SignedContractPdfUrl))
+                errors["signedContractPdfUrl"] = new ValidationError { Msg = "URL PDF hợp đồng đã ký là bắt buộc", Path = "signedContractPdfUrl" };
 
             // Validate URL format
-            if (!string.IsNullOrWhiteSpace(request.SignatureImageUrl) &&
-                !Uri.TryCreate(request.SignatureImageUrl, UriKind.Absolute, out _))
+            if (!string.IsNullOrWhiteSpace(request.SignedContractPdfUrl) &&
+                !Uri.TryCreate(request.SignedContractPdfUrl, UriKind.Absolute, out _))
             {
-                errors["signatureImageUrl"] = new ValidationError { Msg = "URL ảnh không hợp lệ", Path = "signatureImageUrl" };
+                errors["signedContractPdfUrl"] = new ValidationError { Msg = "URL PDF không hợp lệ", Path = "signedContractPdfUrl" };
             }
 
-            // Validate file type (cho phép ảnh hoặc PDF)
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf" };
-            if (!string.IsNullOrWhiteSpace(request.SignatureImageUrl))
+            // Validate file type - chỉ chấp nhận PDF
+            if (!string.IsNullOrWhiteSpace(request.SignedContractPdfUrl))
             {
-                var extension = Path.GetExtension(request.SignatureImageUrl.Split('?')[0]).ToLower();
-                if (!allowedExtensions.Contains(extension))
+                var extension = Path.GetExtension(request.SignedContractPdfUrl.Split('?')[0]).ToLower();
+                if (extension != ".pdf")
                 {
-                    errors["signatureImageUrl"] = new ValidationError { Msg = "Chỉ chấp nhận file ảnh hoặc PDF (jpg, jpeg, png, gif, webp, pdf)", Path = "signatureImageUrl" };
+                    errors["signedContractPdfUrl"] = new ValidationError { Msg = "Chỉ chấp nhận file PDF hợp đồng đã ký", Path = "signedContractPdfUrl" };
                 }
             }
 

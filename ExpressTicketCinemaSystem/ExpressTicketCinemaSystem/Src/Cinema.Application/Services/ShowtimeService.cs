@@ -17,6 +17,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         Task<PartnerShowtimeCreateResponse> UpdatePartnerShowtimeAsync(int partnerId, int showtimeId, PartnerShowtimeCreateRequest request);
         Task<PartnerShowtimeCreateResponse> DeletePartnerShowtimeAsync(int partnerId, int showtimeId);
         Task<PartnerShowtimeDetailResponse> GetPartnerShowtimeByIdAsync(int partnerId, int showtimeId);
+        Task<PartnerShowtimeDetailResponse> GetShowtimeByIdPublicAsync(int showtimeId);
 
         Task<PartnerShowtimeListResponse> GetPartnerShowtimesAsync(int partnerId, PartnerShowtimeQueryRequest request);
     }
@@ -315,6 +316,66 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Include(s => s.Cinema)
                 .Include(s => s.Screen)
                 .Where(s => s.ShowtimeId == showtimeId && s.Cinema.PartnerId == partnerId)
+                .Select(s => new PartnerShowtimeDetailResponse
+                {
+                    ShowtimeId = s.ShowtimeId,
+                    MovieId = s.MovieId,
+                    ScreenId = s.ScreenId,
+                    CinemaId = s.CinemaId,
+                    StartTime = s.ShowDatetime,
+                    EndTime = s.EndTime ?? DateTime.MinValue,
+                    BasePrice = s.BasePrice,
+                    FormatType = s.FormatType,
+                    AvailableSeats = s.AvailableSeats ?? 0,
+                    Status = s.Status,
+                    Movie = new ShowtimeMovieInfo
+                    {
+                        MovieId = s.Movie.MovieId,
+                        Title = s.Movie.Title,
+                        Description = s.Movie.Description ?? string.Empty,
+                        PosterUrl = s.Movie.PosterUrl ?? string.Empty,
+                        Duration = s.Movie.DurationMinutes,
+                        Genre = s.Movie.Genre ?? string.Empty,
+                        Language = s.Movie.Language ?? string.Empty
+                    },
+                    Cinema = new ShowtimeCinemaInfo
+                    {
+                        CinemaId = s.Cinema.CinemaId,
+                        Name = s.Cinema.CinemaName,
+                        Address = s.Cinema.Address ?? string.Empty,
+                        City = s.Cinema.City ?? string.Empty,
+                        District = s.Cinema.District ?? string.Empty,
+                        Email = s.Cinema.Email ?? string.Empty
+                    },
+                    Screen = new ShowtimeScreenInfo
+                    {
+                        ScreenId = s.Screen.ScreenId,
+                        Name = s.Screen.ScreenName,
+                        ScreenType = s.Screen.ScreenType ?? string.Empty,
+                        SoundSystem = s.Screen.SoundSystem ?? string.Empty,
+                        Description = s.Screen.Description ?? string.Empty,
+                        SeatRows = s.Screen.SeatRows ?? 0,
+                        SeatColumns = s.Screen.SeatColumns ?? 0,
+                        Capacity = s.Screen.Capacity ?? 0
+                    }
+                })
+                .FirstOrDefaultAsync();
+
+            if (showtime == null)
+            {
+                throw new NotFoundException("Không tìm thấy suất chiếu với ID đã cho");
+            }
+
+            return showtime;
+        }
+
+        public async Task<PartnerShowtimeDetailResponse> GetShowtimeByIdPublicAsync(int showtimeId)
+        {
+            var showtime = await _context.Showtimes
+                .Include(s => s.Movie)
+                .Include(s => s.Cinema)
+                .Include(s => s.Screen)
+                .Where(s => s.ShowtimeId == showtimeId && s.Status != "disabled")
                 .Select(s => new PartnerShowtimeDetailResponse
                 {
                     ShowtimeId = s.ShowtimeId,

@@ -155,11 +155,29 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(100)
                 .IsUnicode(false)
                 .HasColumnName("action");
+            entity.Property(e => e.Role)
+                .HasMaxLength(32)
+                .IsUnicode(false)
+                .HasColumnName("role");
             entity.Property(e => e.RecordId).HasColumnName("record_id");
             entity.Property(e => e.TableName)
                 .HasMaxLength(100)
                 .IsUnicode(false)
                 .HasColumnName("table_name");
+            entity.Property(e => e.BeforeData)
+                .HasColumnName("before_data");
+            entity.Property(e => e.AfterData)
+                .HasColumnName("after_data");
+            entity.Property(e => e.Metadata)
+                .HasColumnName("metadata");
+            entity.Property(e => e.IpAddress)
+                .HasMaxLength(64)
+                .IsUnicode(false)
+                .HasColumnName("ip_address");
+            entity.Property(e => e.UserAgent)
+                .HasMaxLength(256)
+                .IsUnicode(false)
+                .HasColumnName("user_agent");
             entity.Property(e => e.Timestamp)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("timestamp");

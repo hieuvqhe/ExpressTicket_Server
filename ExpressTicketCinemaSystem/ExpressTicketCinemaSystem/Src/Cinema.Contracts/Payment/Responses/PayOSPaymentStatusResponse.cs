@@ -32,3 +32,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Payment.Responses
 
 
 
+
+
+
+
+
