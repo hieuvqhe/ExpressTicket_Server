@@ -48,6 +48,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         private static string WriteItems(ItemsDoc doc) => JsonSerializer.Serialize(doc);
 
+        private static int? GetUserId(ClaimsPrincipal? user)
+        {
+            if (user?.Identity?.IsAuthenticated != true) return null;
+            var idClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                       ?? user.FindFirst("sub")?.Value
+                       ?? user.FindFirst("user_id")?.Value;
+            return int.TryParse(idClaim, out var id) ? id : (int?)null;
+        }
+
         public async Task<UpsertSessionCombosResponse> UpsertCombosAsync(Guid sessionId, UpsertSessionCombosRequest request, CancellationToken ct = default)
         {
             if (request.Items == null)
@@ -188,13 +197,31 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             decimal discount = 0;
             if (!string.IsNullOrWhiteSpace(request.VoucherCode) && user?.Identity?.IsAuthenticated == true)
             {
-                var validation = await _voucher.ValidateVoucherForUserAsync(request.VoucherCode.Trim().ToUpper(), subtotal);
+                var userId = GetUserId(user);
+                if (!userId.HasValue)
+                {
+                    throw new UnauthorizedException("Bạn cần đăng nhập để sử dụng voucher");
+                }
+
+                // ✅ Reserve voucher cho session này (tránh race condition)
+                var validation = await _voucher.ReserveVoucherForSessionAsync(
+                    request.VoucherCode.Trim().ToUpper(), 
+                    subtotal, 
+                    sessionId, 
+                    userId.Value, 
+                    session.ExpiresAt);
+
                 if (!validation.IsValid)
                 {
                     throw new ValidationException("voucherCode", validation.Message);
                 }
                 appliedCode = validation.Voucher!.VoucherCode;
                 discount = validation.DiscountAmount;
+            }
+            else if (string.IsNullOrWhiteSpace(request.VoucherCode) && !string.IsNullOrWhiteSpace(session.CouponCode))
+            {
+                // User xóa voucher → release reservation
+                await _voucher.ReleaseVoucherReservationAsync(sessionId);
             }
 
             var total = Math.Max(0, subtotal - discount);

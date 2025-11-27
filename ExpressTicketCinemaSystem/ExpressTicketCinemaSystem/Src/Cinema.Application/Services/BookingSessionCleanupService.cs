@@ -85,6 +85,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     session.UpdatedAt = now;
                 }
                 _logger.LogInformation("Đã cleanup {Count} expired DRAFT sessions", expiredDraftSessions.Count);
+
+                // ✅ Release voucher reservations cho các session đã expire
+                var expiredSessionIds = expiredDraftSessions.Select(s => s.Id).ToList();
+                var expiredSessionReservations = await context.VoucherReservations
+                    .Where(r => expiredSessionIds.Contains(r.SessionId) && r.ReleasedAt == null)
+                    .ToListAsync();
+
+                if (expiredSessionReservations.Any())
+                {
+                    foreach (var reservation in expiredSessionReservations)
+                    {
+                        reservation.ReleasedAt = now;
+                    }
+                    _logger.LogInformation("Đã release {Count} voucher reservations cho expired sessions", expiredSessionReservations.Count);
+                }
             }
 
             // 3) Cleanup CANCELED sessions cũ hơn 24 giờ (hard delete)
@@ -120,7 +135,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
-            if (expiredLocks.Any() || expiredDraftSessions.Any() || oldCanceledSessions.Any())
+            // ✅ Cleanup expired voucher reservations (hết hạn > 1 phút trước)
+            var expiredReservations = await context.VoucherReservations
+                .Where(r => r.ReleasedAt == null && r.ExpiresAt < now.AddMinutes(-1))
+                .ToListAsync();
+
+            if (expiredReservations.Any())
+            {
+                foreach (var reservation in expiredReservations)
+                {
+                    reservation.ReleasedAt = now;
+                }
+                _logger.LogInformation("Đã release {Count} expired voucher reservations", expiredReservations.Count);
+            }
+
+            if (expiredLocks.Any() || expiredDraftSessions.Any() || oldCanceledSessions.Any() || expiredReservations.Any())
             {
                 await context.SaveChangesAsync();
                 _logger.LogInformation("Cleanup hoàn tất. Đã xử lý {Locks} locks, {Drafts} drafts, {Canceled} canceled",

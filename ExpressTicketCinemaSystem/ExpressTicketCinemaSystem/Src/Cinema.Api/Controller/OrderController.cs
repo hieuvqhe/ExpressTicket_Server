@@ -10,6 +10,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Payment.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -36,6 +37,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// API đánh dấu một Order đang PENDING là đã hết hạn thanh toán: cập nhật trạng thái EXPIRED và giải phóng toàn bộ ghế đã lock.
         /// </summary>
         [HttpPost("{order_id}/expire")]
+        [AuditAction("ORDER_EXPIRE", "Order", recordIdRouteKey: "order_id")]
         public async Task<IActionResult> ExpireOrder(
             [FromRoute] string order_id,
             CancellationToken ct = default)

@@ -22,10 +22,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class SeatTypeService : ISeatTypeService
     {
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
 
-        public SeatTypeService(CinemaDbCoreContext context)
+        public SeatTypeService(CinemaDbCoreContext context, IAuditLogService auditLogService)
         {
             _context = context;
+            _auditLogService = auditLogService;
         }
 
         public async Task<PaginatedSeatTypesResponse> GetSeatTypesAsync(GetSeatTypesRequest request, int partnerId, int userId)
@@ -272,6 +274,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 _context.SeatTypes.Add(seatType);
                 await _context.SaveChangesAsync();
+                await _auditLogService.LogEntityChangeAsync(
+                    action: "STAFF_CREATE_SEAT_TYPE",
+                    tableName: "SeatType",
+                    recordId: seatType.Id,
+                    beforeData: null,
+                    afterData: BuildSeatTypeSnapshot(seatType),
+                    metadata: new { partnerId, userId });
             }
             catch (DbUpdateException dbEx) when (IsUniqueConstraintViolation(dbEx))
             {
@@ -333,6 +342,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
+            var beforeSnapshot = BuildSeatTypeSnapshot(seatType);
+
             seatType.Name = request.Name.Trim();
             seatType.Surcharge = request.Surcharge;
             seatType.Color = request.Color;
@@ -341,6 +352,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             seatType.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_UPDATE_SEAT_TYPE",
+                tableName: "SeatType",
+                recordId: seatType.Id,
+                beforeData: beforeSnapshot,
+                afterData: BuildSeatTypeSnapshot(seatType),
+                metadata: new { partnerId, userId });
 
             return new SeatTypeActionResponse
             {
@@ -393,10 +411,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             // SOFT DELETE - Chỉ cập nhật status
+            var beforeSnapshot = BuildSeatTypeSnapshot(seatType);
             seatType.Status = false;
             seatType.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_DELETE_SEAT_TYPE",
+                tableName: "SeatType",
+                recordId: seatType.Id,
+                beforeData: beforeSnapshot,
+                afterData: BuildSeatTypeSnapshot(seatType),
+                metadata: new { partnerId, userId });
 
             return new SeatTypeActionResponse
             {
@@ -412,6 +438,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Message = "Xóa loại ghế thành công"
             };
         }
+
+        private static object BuildSeatTypeSnapshot(SeatType seatType) => new
+        {
+            seatType.Id,
+            seatType.PartnerId,
+            seatType.Code,
+            seatType.Name,
+            seatType.Surcharge,
+            seatType.Color,
+            seatType.Description,
+            seatType.Status,
+            seatType.CreatedAt,
+            seatType.UpdatedAt
+        };
 
         private void ValidateCreateSeatTypeRequest(CreateSeatTypeRequest request)
         {

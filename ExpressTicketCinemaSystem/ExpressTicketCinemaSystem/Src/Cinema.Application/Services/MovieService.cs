@@ -756,6 +756,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     m.PremiereDate,
                     m.EndDate,
                     m.PosterUrl,
+                    m.BannerUrl,
                     m.TrailerUrl,
                     Actors = m.MovieActors.Select(ma => new ActorResponse
                     {
@@ -780,6 +781,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Title = m.Title,
                 Genre = m.Genre,
                 PosterUrl = m.PosterUrl,
+                BannerUrl = m.BannerUrl,
                 PremiereDate = m.PremiereDate.ToDateTime(TimeOnly.MinValue),
                 EndDate = m.EndDate.ToDateTime(TimeOnly.MinValue),
                 AverageRating = Math.Round(m.AverageRating, 2),

@@ -15,10 +15,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class ScreenService : IScreenService
     {
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
+        private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
 
-        public ScreenService(CinemaDbCoreContext context)
+        public ScreenService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService)
         {
             _context = context;
+            _auditLogService = auditLogService;
+            _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
         }
 
         public async Task<ScreenResponse> CreateScreenAsync(int cinemaId, CreateScreenRequest request, int partnerId, int userId)
@@ -47,6 +51,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Screens.Add(screen);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_CREATE_SCREEN",
+                tableName: "Screen",
+                recordId: screen.ScreenId,
+                beforeData: null,
+                afterData: BuildScreenSnapshot(screen),
+                metadata: new { cinemaId, partnerId, userId });
 
             return await MapToScreenResponseAsync(screen);
         }
@@ -161,6 +172,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
+            var beforeSnapshot = BuildScreenSnapshot(screen);
+
             screen.ScreenName = request.ScreenName.Trim();
             screen.Description = request.Description?.Trim();
             screen.ScreenType = request.ScreenType.Trim().ToLower();
@@ -170,6 +183,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             screen.UpdatedDate = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_UPDATE_SCREEN",
+                tableName: "Screen",
+                recordId: screen.ScreenId,
+                beforeData: beforeSnapshot,
+                afterData: BuildScreenSnapshot(screen),
+                metadata: new { screen.CinemaId, partnerId, userId });
 
             return await MapToScreenResponseAsync(screen);
         }
@@ -197,11 +217,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 });
             }
 
+            var beforeSnapshot = BuildScreenSnapshot(screen);
+
             // SOFT DELETE - set IsActive = false
             screen.IsActive = false;
             screen.UpdatedDate = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_DELETE_SCREEN",
+                tableName: "Screen",
+                recordId: screen.ScreenId,
+                beforeData: beforeSnapshot,
+                afterData: BuildScreenSnapshot(screen),
+                metadata: new { screen.CinemaId, partnerId, userId });
 
             return new ScreenActionResponse
             {
@@ -214,6 +243,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
         // ==================== PRIVATE METHODS ====================
+        private static object BuildScreenSnapshot(Screen screen)
+        {
+            return new
+            {
+                screen.ScreenId,
+                screen.CinemaId,
+                screen.ScreenName,
+                screen.Code,
+                screen.Description,
+                screen.ScreenType,
+                screen.SoundSystem,
+                screen.Capacity,
+                screen.SeatRows,
+                screen.SeatColumns,
+                screen.IsActive,
+                screen.CreatedDate,
+                screen.UpdatedDate
+            };
+        }
+
         private async Task<ScreenResponse> MapToScreenResponseAsync(Screen screen)
         {
             var hasSeatLayout = await _context.SeatMaps.AnyAsync(sm => sm.ScreenId == screen.ScreenId);
@@ -255,6 +304,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     ["cinema"] = new ValidationError { Msg = "Rạp đã bị vô hiệu hóa", Path = "cinemaId" }
                 });
             }
+
+            // Nếu là Staff, kiểm tra có được phân quyền rạp này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, cinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
+            }
         }
 
         private async Task ValidateScreenAccessAsync(int screenId, int partnerId, int userId)
@@ -266,6 +332,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (screen == null)
             {
                 throw new NotFoundException("Không tìm thấy phòng với ID này hoặc không thuộc quyền quản lý của bạn");
+            }
+
+            // Nếu là Staff, kiểm tra có được phân quyền rạp của phòng này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, screen.CinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
             }
         }
 

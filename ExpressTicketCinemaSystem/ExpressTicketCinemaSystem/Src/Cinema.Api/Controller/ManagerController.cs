@@ -10,6 +10,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests.ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -49,6 +50,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Create a new contract draft for PDF generation
         /// </summary>
         [HttpPost("/manager/contracts")]
+        [AuditAction("MANAGER_CREATE_CONTRACT", "Contract", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<ContractResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
@@ -197,6 +199,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="request">PDF information</param>
         /// <returns>Success message</returns>
         [HttpPost("/manager/contracts/{id}/send-pdf")]
+        [AuditAction("MANAGER_SEND_CONTRACT_PDF", "Contract", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -250,6 +253,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="request">Finalize contract request</param>
         /// <returns>Finalized contract details</returns>
         [HttpPut("/manager/contracts/{id}/finalize")]
+        [AuditAction("MANAGER_FINALIZE_CONTRACT", "Contract", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<ContractResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -341,6 +345,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="id">Partner ID</param>
         /// <returns>Approved partner details</returns>
         [HttpPut("/manager/partners/{id}/approve")]
+        [AuditAction("MANAGER_APPROVE_PARTNER", "Partner", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<PartnerApprovalResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -404,6 +409,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="request">Reject request with reason</param>
         /// <returns>Rejected partner details</returns>
         [HttpPut("/manager/partners/{id}/reject")]
+        [AuditAction("MANAGER_REJECT_PARTNER", "Partner", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<PartnerRejectionResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -501,6 +507,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="request">Update contract request</param>
         /// <returns>Updated contract details</returns>
         [HttpPut("/manager/contracts/{id}")]
+        [AuditAction("MANAGER_UPDATE_CONTRACT", "Contract", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<ContractResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -563,6 +570,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="id">Contract ID</param>
         /// <returns>Success message</returns>
         [HttpDelete("/manager/contracts/{id}")]
+        [AuditAction("MANAGER_DELETE_CONTRACT", "Contract", recordIdRouteKey: "id", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -624,6 +632,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="request">File name information</param>
         /// <returns>SAS URL for upload and permanent blob URL</returns>
         [HttpPost("/manager/contracts/generate-upload-sas")]
+        [AuditAction("MANAGER_GENERATE_CONTRACT_SAS", "Contract", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<GeneratePdfUploadUrlResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]

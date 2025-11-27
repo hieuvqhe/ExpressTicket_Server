@@ -15,10 +15,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class CinemaService : ICinemaService
     {
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
+        private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
 
-        public CinemaService(CinemaDbCoreContext context)
+        public CinemaService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService)
         {
             _context = context;
+            _auditLogService = auditLogService;
+            _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
         }
 
         public async Task<CinemaResponse> CreateCinemaAsync(CreateCinemaRequest request, int partnerId, int userId)
@@ -55,6 +59,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Cinemas.Add(cinema);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_CREATE_CINEMA",
+                tableName: "Cinema",
+                recordId: cinema.CinemaId,
+                beforeData: null,
+                afterData: BuildCinemaSnapshot(cinema),
+                metadata: new { partnerId, userId });
 
             return await MapToCinemaResponseAsync(cinema);
         }
@@ -73,6 +84,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy rạp với ID này hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Nếu là Staff, kiểm tra có được phân quyền rạp này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, cinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
+            }
+
             return await MapToCinemaResponseAsync(cinema);
         }
 
@@ -88,6 +116,42 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var query = _context.Cinemas
                 .Where(c => c.PartnerId == partnerId)
                 .AsQueryable();
+
+            // Nếu là Staff, chỉ lấy các rạp được phân quyền
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    // Lấy danh sách cinemaIds được phân quyền cho Staff
+                    var assignedCinemaIds = await _context.EmployeeCinemaAssignments
+                        .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                        .Select(eca => eca.CinemaId)
+                        .ToListAsync();
+
+                    if (assignedCinemaIds.Count == 0)
+                    {
+                        // Staff chưa được phân quyền rạp nào
+                        return new PaginatedCinemasResponse
+                        {
+                            Cinemas = new List<CinemaResponse>(),
+                            Pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                            {
+                                CurrentPage = page,
+                                PageSize = limit,
+                                TotalCount = 0,
+                                TotalPages = 0
+                            }
+                        };
+                    }
+
+                    // Filter chỉ lấy các rạp được phân quyền
+                    query = query.Where(c => assignedCinemaIds.Contains(c.CinemaId));
+                }
+            }
 
             // Apply filters
             query = ApplyCinemaFilters(query, city, district, isActive, search);
@@ -174,6 +238,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy rạp với ID này hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Nếu là Staff, kiểm tra có được phân quyền rạp này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, cinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
+            }
+
             await ValidateCinemaBusinessRulesForUpdateAsync(cinemaId, request, partnerId);
 
             // Validate không thể deactivate nếu còn phòng active
@@ -195,6 +276,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
+            var beforeSnapshot = BuildCinemaSnapshot(cinema);
+
             cinema.CinemaName = request.CinemaName.Trim();
             cinema.Address = request.Address.Trim();
             cinema.Phone = string.IsNullOrWhiteSpace(request.Phone) 
@@ -210,6 +293,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             cinema.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            var updateAction = await ResolveCinemaAuditActionAsync("PARTNER_UPDATE_CINEMA", "STAFF_UPDATE_CINEMA", userId);
+            await _auditLogService.LogEntityChangeAsync(
+                action: updateAction,
+                tableName: "Cinema",
+                recordId: cinema.CinemaId,
+                beforeData: beforeSnapshot,
+                afterData: BuildCinemaSnapshot(cinema),
+                metadata: new { partnerId, userId });
 
             return await MapToCinemaResponseAsync(cinema);
         }
@@ -333,6 +424,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy rạp với ID này hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Nếu là Staff, kiểm tra có được phân quyền rạp này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, cinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
+            }
+
             // Validate không thể xóa nếu còn phòng
             var screensCount = await _context.Screens
                 .CountAsync(s => s.CinemaId == cinemaId);
@@ -350,10 +458,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             // SOFT DELETE - Chỉ cập nhật IsActive = false
+            var beforeSnapshot = BuildCinemaSnapshot(cinema);
             cinema.IsActive = false;
             cinema.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            var deleteAction = await ResolveCinemaAuditActionAsync("PARTNER_DELETE_CINEMA", "STAFF_DELETE_CINEMA", userId);
+            await _auditLogService.LogEntityChangeAsync(
+                action: deleteAction,
+                tableName: "Cinema",
+                recordId: cinema.CinemaId,
+                beforeData: beforeSnapshot,
+                afterData: BuildCinemaSnapshot(cinema),
+                metadata: new { partnerId, userId });
 
             return new CinemaActionResponse
             {
@@ -802,6 +919,44 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             return cleanPhone;
+        }
+
+        private static object BuildCinemaSnapshot(Infrastructure.Models.Cinema cinema)
+        {
+            return new
+            {
+                cinema.CinemaId,
+                cinema.PartnerId,
+                cinema.CinemaName,
+                cinema.Address,
+                cinema.Phone,
+                cinema.Email,
+                cinema.Code,
+                cinema.City,
+                cinema.District,
+                cinema.Latitude,
+                cinema.Longitude,
+                cinema.LogoUrl,
+                cinema.IsActive,
+                cinema.CreatedAt,
+                cinema.UpdatedAt
+            };
+        }
+
+        private async Task<string> ResolveCinemaAuditActionAsync(string partnerAction, string? staffAction, int userId)
+        {
+            var userType = await _context.Users
+                .Where(u => u.UserId == userId)
+                .Select(u => u.UserType)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(staffAction) &&
+                string.Equals(userType, "staff", StringComparison.OrdinalIgnoreCase))
+            {
+                return staffAction!;
+            }
+
+            return partnerAction;
         }
     }
 }

@@ -17,6 +17,10 @@ using System.IO;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Permission.Requests;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Permission.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Staff.Responses;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -38,8 +42,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly IComboService _comboService;
         private readonly EmployeeManagementService _employeeManagementService;
         private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
+        private readonly IPermissionService _permissionService;
+        private readonly IStaffService _staffService;
 
-        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, IScreenService screenService, ISeatTypeService seatTypeService, ISeatLayoutService seatLayoutService, CinemaDbCoreContext context, IContractValidationService contractValidationService, ICinemaService cinemaService, IShowtimeService showtimeService, IComboService comboService, EmployeeManagementService employeeManagementService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService)
+        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, IScreenService screenService, ISeatTypeService seatTypeService, ISeatLayoutService seatLayoutService, CinemaDbCoreContext context, IContractValidationService contractValidationService, ICinemaService cinemaService, IShowtimeService showtimeService, IComboService comboService, EmployeeManagementService employeeManagementService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService, IPermissionService permissionService, IStaffService staffService)
         {
             _partnerService = partnerService;
             _contractService = contractService;
@@ -54,6 +60,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             _comboService = comboService;
             _employeeManagementService = employeeManagementService;
             _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
+            _permissionService = permissionService;
+            _staffService = staffService;
         }
         private int GetCurrentUserId()
         {
@@ -72,16 +80,91 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private async Task<int> GetCurrentPartnerId()
         {
             var userId = GetCurrentUserId();
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
 
-            // Tìm partner từ userId
-            var partner = await _contractService.GetPartnerByUserId(userId);
-            return partner.PartnerId;
+            // Nếu là Partner, lấy trực tiếp
+            if (userRole == "Partner")
+            {
+                var partner = await _contractService.GetPartnerByUserId(userId);
+                return partner.PartnerId;
+            }
+
+            // Nếu là Staff, lấy từ Employee
+            if (userRole == "Staff")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.RoleType == "Staff" && e.IsActive);
+
+                if (employee == null)
+                    throw new UnauthorizedException("Không tìm thấy nhân viên Staff hoặc tài khoản không hoạt động.");
+
+                return employee.PartnerId;
+            }
+
+            throw new UnauthorizedException("Role không hợp lệ.");
+        }
+
+        // Lấy EmployeeId từ UserId (chỉ cho Staff)
+        private async Task<int?> GetCurrentEmployeeId()
+        {
+            var userId = GetCurrentUserId();
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+
+            if (userRole != "Staff")
+                return null;
+
+            var employee = await _context.Employees
+                .FirstOrDefaultAsync(e => e.UserId == userId && e.RoleType == "Staff" && e.IsActive);
+
+            return employee?.EmployeeId;
+        }
+
+        // Kiểm tra Staff có quyền truy cập cinema không
+        private async Task ValidateStaffCinemaAccessAsync(int cinemaId)
+        {
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (userRole != "Staff")
+                return; // Partner bypass
+
+            var employeeId = await GetCurrentEmployeeId();
+            if (!employeeId.HasValue)
+                throw new UnauthorizedException("Không tìm thấy nhân viên Staff.");
+
+            var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employeeId.Value, cinemaId);
+            if (!hasAccess)
+                throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+        }
+
+        // Kiểm tra Staff có quyền truy cập screen thông qua cinema của screen đó
+        private async Task ValidateStaffScreenAccessAsync(int screenId)
+        {
+            var screen = await _context.Screens
+                .FirstOrDefaultAsync(s => s.ScreenId == screenId);
+
+            if (screen == null)
+                throw new NotFoundException("Không tìm thấy phòng chiếu");
+
+            await ValidateStaffCinemaAccessAsync(screen.CinemaId);
+        }
+
+        // Kiểm tra Staff có quyền truy cập showtime thông qua screen và cinema
+        private async Task ValidateStaffShowtimeAccessAsync(int showtimeId)
+        {
+            var showtime = await _context.Showtimes
+                .Include(s => s.Screen)
+                .FirstOrDefaultAsync(s => s.ShowtimeId == showtimeId);
+
+            if (showtime == null)
+                throw new NotFoundException("Không tìm thấy suất chiếu");
+
+            await ValidateStaffScreenAccessAsync(showtime.ScreenId);
         }
 
         /// <summary>
         /// Register a new partner
         /// </summary>
         [HttpPost("/partners/register")]
+        [AuditAction("PARTNER_REGISTER", "Partner", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<PartnerRegisterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
@@ -235,6 +318,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="request">Signed contract PDF upload request</param>
         /// <returns>Updated contract details</returns>
         [HttpPost("/partners/contracts/{id}/upload-signature")]
+        [AuditAction("PARTNER_UPLOAD_SIGNATURE", "Contract", recordIdRouteKey: "id", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<ContractResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -376,6 +460,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="request">Chứa tên file PDF, ví dụ: "signed-contract.pdf"</param>
         /// <returns>SAS URL (for uploading) and Blob URL (for saving)</returns>
         [HttpPost("/partners/contracts/generate-signature-upload-sas")]
+        [AuditAction("PARTNER_GENERATE_SIGNATURE_SAS", "Contract", includeRequestBody: true)]
         [Authorize(Roles = "Partner")] // Đảm bảo chỉ partner mới được gọi
         [ProducesResponseType(typeof(SuccessResponse<GeneratePdfUploadUrlResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -439,6 +524,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Create a new cinema
         /// </summary>
         [HttpPost("/partners/cinemas")]
+        [AuditAction("PARTNER_CREATE_CINEMA", "Cinema", includeRequestBody: true)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<CinemaResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -504,7 +590,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Get cinema by ID (View-only)
         /// </summary>
         [HttpGet("/partners/cinemas/{cinema_id}")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("CINEMA_READ")]
         [ProducesResponseType(typeof(SuccessResponse<CinemaResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -552,7 +639,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Get all cinemas for partner with filtering and pagination
         /// </summary>
         [HttpGet("/partners/cinemas")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("CINEMA_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PaginatedCinemasResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -615,6 +703,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Update cinema information
         /// </summary>
         [HttpPut("/partners/cinemas/{cinema_id}")]
+        [AuditAction("PARTNER_UPDATE_CINEMA", "Cinema", recordIdRouteKey: "cinema_id", includeRequestBody: true)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<CinemaResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -632,6 +721,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 var partnerId = await GetCurrentPartnerId();
 
                 await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffCinemaAccessAsync(cinemaId);
 
                 var result = await _cinemaService.UpdateCinemaAsync(cinemaId, request, partnerId, userId);
 
@@ -687,6 +777,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Delete/deactivate cinema
         /// </summary>
         [HttpDelete("/partners/cinemas/{cinema_id}")]
+        [AuditAction("PARTNER_DELETE_CINEMA", "Cinema", recordIdRouteKey: "cinema_id", includeRequestBody: false)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -701,6 +792,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 var partnerId = await GetCurrentPartnerId();
 
                 await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffCinemaAccessAsync(cinemaId);
 
                 await _cinemaService.DeleteCinemaAsync(cinemaId, partnerId, userId);
 
@@ -859,11 +951,213 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Create a new screen for cinema
+        /// </summary>
+        [HttpPost("/partners/cinema/{cinema_id}/screens")]
+        [AuditAction("PARTNER_CREATE_SCREEN", "Screen", recordIdRouteKey: "cinema_id", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SCREEN_CREATE")]
+        [ProducesResponseType(typeof(SuccessResponse<ScreenResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CreateScreen(
+            [FromRoute(Name = "cinema_id")] int cinemaId,
+            [FromBody] CreateScreenRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffCinemaAccessAsync(cinemaId);
+
+                var result = await _screenService.CreateScreenAsync(cinemaId, request, partnerId, userId);
+
+                var response = new SuccessResponse<ScreenResponse>
+                {
+                    Message = "Tạo phòng thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Dữ liệu bị xung đột";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo phòng."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update screen
+        /// </summary>
+        [HttpPut("/partners/screens/{screen_id}")]
+        [AuditAction("PARTNER_UPDATE_SCREEN", "Screen", recordIdRouteKey: "screen_id", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SCREEN_UPDATE")]
+        [ProducesResponseType(typeof(SuccessResponse<ScreenResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateScreen(
+            [FromRoute(Name = "screen_id")] int screenId,
+            [FromBody] UpdateScreenRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _screenService.UpdateScreenAsync(screenId, request, partnerId, userId);
+
+                var response = new SuccessResponse<ScreenResponse>
+                {
+                    Message = "Cập nhật phòng thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật phòng."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Delete screen (Soft Delete)
+        /// </summary>
+        [HttpDelete("/partners/screens/{screen_id}")]
+        [AuditAction("PARTNER_DELETE_SCREEN", "Screen", recordIdRouteKey: "screen_id", includeRequestBody: false)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SCREEN_DELETE")]
+        [ProducesResponseType(typeof(SuccessResponse<ScreenActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteScreen([FromRoute(Name = "screen_id")] int screenId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _screenService.DeleteScreenAsync(screenId, partnerId, userId);
+
+                var response = new SuccessResponse<ScreenActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa phòng."
+                });
+            }
+        }
+
         /// <summary>
         /// Get all seat types with pagination and filtering
         /// </summary>
         [HttpGet("/partners/seat-types")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_TYPE_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PaginatedSeatTypesResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -943,7 +1237,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Get seat type details by ID
         /// </summary>
         [HttpGet("/partners/seat-types/{id}")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_TYPE_READ")]
         [ProducesResponseType(typeof(SuccessResponse<SeatTypeDetailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -997,11 +1292,201 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Create a new seat type
+        /// </summary>
+        [HttpPost("/partners/seat-types")]
+        [AuditAction("PARTNER_CREATE_SEAT_TYPE", "SeatType", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_TYPE_CREATE")]
+        [ProducesResponseType(typeof(SuccessResponse<SeatTypeActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CreateSeatType([FromBody] CreateSeatTypeRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+
+                var result = await _seatTypeService.CreateSeatTypeAsync(request, partnerId, userId);
+
+                var response = new SuccessResponse<SeatTypeActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Dữ liệu bị xung đột";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo loại ghế."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update seat type by ID
+        /// </summary>
+        [HttpPut("/partners/seat-types/{id}")]
+        [AuditAction("PARTNER_UPDATE_SEAT_TYPE", "SeatType", recordIdRouteKey: "id", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_TYPE_UPDATE")]
+        [ProducesResponseType(typeof(SuccessResponse<SeatTypeActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateSeatType(int id, [FromBody] UpdateSeatTypeRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+
+                var result = await _seatTypeService.UpdateSeatTypeAsync(id, request, partnerId, userId);
+
+                var response = new SuccessResponse<SeatTypeActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật loại ghế."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Delete seat type by ID (Soft Delete)
+        /// </summary>
+        [HttpDelete("/partners/seat-types/{id}")]
+        [AuditAction("PARTNER_DELETE_SEAT_TYPE", "SeatType", recordIdRouteKey: "id", includeRequestBody: false)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_TYPE_DELETE")]
+        [ProducesResponseType(typeof(SuccessResponse<SeatTypeActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteSeatType(int id)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+
+                var result = await _seatTypeService.DeleteSeatTypeAsync(id, partnerId, userId);
+
+                var response = new SuccessResponse<SeatTypeActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa loại ghế."
+                });
+            }
+        }
+
         /// <summary>
         /// Get seat layout for screen
         /// </summary>
         [HttpGet("/partners/screens/{screenId}/seat-layout")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_READ")]
         [ProducesResponseType(typeof(SuccessResponse<SeatLayoutResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -1061,7 +1546,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Get available seat types for screen
         /// </summary>
         [HttpGet("/partners/screens/{screenId}/seat-types")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_READ")]
         [ProducesResponseType(typeof(SuccessResponse<ScreenSeatTypesResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -1116,12 +1602,456 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// Create seat layout for screen
+        /// </summary>
+        [HttpPost("/partners/screens/{screenId}/seat-layout")]
+        [AuditAction("PARTNER_CREATE_SEAT_LAYOUT", "SeatLayout", recordIdRouteKey: "screenId", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_CREATE")]
+        [ProducesResponseType(typeof(SuccessResponse<SeatLayoutActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CreateSeatLayout(int screenId, [FromBody] CreateSeatLayoutRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _seatLayoutService.CreateOrUpdateSeatLayoutAsync(screenId, request, partnerId, userId);
+
+                var response = new SuccessResponse<SeatLayoutActionResponse>
+                {
+                    Message = "Tạo layout ghế thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Dữ liệu bị xung đột";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo layout ghế."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update seat layout for screen
+        /// </summary>
+        [HttpPut("/partners/screens/{screenId}/seat-layout")]
+        [AuditAction("PARTNER_UPDATE_SEAT_LAYOUT", "SeatLayout", recordIdRouteKey: "screenId", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_UPDATE")]
+        [ProducesResponseType(typeof(SuccessResponse<SeatLayoutActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateSeatLayout(int screenId, [FromBody] CreateSeatLayoutRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _seatLayoutService.CreateOrUpdateSeatLayoutAsync(screenId, request, partnerId, userId);
+
+                var response = new SuccessResponse<SeatLayoutActionResponse>
+                {
+                    Message = "Cập nhật layout ghế thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật layout ghế."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update individual seat
+        /// </summary>
+        [HttpPut("/partners/screens/{screenId}/seat-layout/{seatId}")]
+        [AuditAction("PARTNER_UPDATE_SEAT_LAYOUT_ITEM", "SeatLayout", recordIdRouteKey: "seatId", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_UPDATE")]
+        [ProducesResponseType(typeof(SuccessResponse<SeatActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateSeat(int screenId, int seatId, [FromBody] UpdateSeatRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _seatLayoutService.UpdateSeatAsync(screenId, seatId, request, partnerId, userId);
+
+                var response = new SuccessResponse<SeatActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật ghế."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Bulk create/update multiple seats
+        /// </summary>
+        [HttpPost("/partners/screens/{screenId}/seat-layout/bulk")]
+        [AuditAction("PARTNER_CREATE_SEAT_LAYOUT_BULK", "SeatLayout", recordIdRouteKey: "screenId", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_BULK_CREATE")]
+        [ProducesResponseType(typeof(SuccessResponse<BulkSeatActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> BulkUpdateSeats(int screenId, [FromBody] BulkUpdateSeatsRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _seatLayoutService.BulkUpdateSeatsAsync(screenId, request, partnerId, userId);
+
+                var response = new SuccessResponse<BulkSeatActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var errorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = errorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật hàng loạt ghế."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Delete entire seat layout for screen
+        /// </summary>
+        [HttpDelete("/partners/screens/{screenId}/seat-layout")]
+        [AuditAction("PARTNER_DELETE_SEAT_LAYOUT", "SeatLayout", recordIdRouteKey: "screenId", includeRequestBody: false)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_DELETE")]
+        [ProducesResponseType(typeof(SuccessResponse<SeatLayoutActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteSeatLayout(int screenId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _seatLayoutService.DeleteSeatLayoutAsync(screenId, partnerId, userId);
+
+                var response = new SuccessResponse<SeatLayoutActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa layout ghế."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Delete individual seat
+        /// </summary>
+        [HttpDelete("/partners/screens/{screenId}/seat-layout/{seatId}")]
+        [AuditAction("PARTNER_DELETE_SEAT_LAYOUT_ITEM", "SeatLayout", recordIdRouteKey: "seatId", includeRequestBody: false)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_DELETE")]
+        [ProducesResponseType(typeof(SuccessResponse<SeatActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteSeat(int screenId, int seatId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _seatLayoutService.DeleteSeatAsync(screenId, seatId, partnerId, userId);
+
+                var response = new SuccessResponse<SeatActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa ghế."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Bulk delete multiple seats
+        /// </summary>
+        [HttpDelete("/partners/screens/{screenId}/seat-layout/bulk")]
+        [AuditAction("PARTNER_DELETE_SEAT_LAYOUT_BULK", "SeatLayout", recordIdRouteKey: "screenId", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SEAT_LAYOUT_BULK_DELETE")]
+        [ProducesResponseType(typeof(SuccessResponse<BulkSeatActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> BulkDeleteSeats(int screenId, [FromBody] BulkDeleteSeatsRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var partnerId = await GetCurrentPartnerId();
+
+                await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+                await ValidateStaffScreenAccessAsync(screenId);
+
+                var result = await _seatLayoutService.BulkDeleteSeatsAsync(screenId, request, partnerId, userId);
+
+                var response = new SuccessResponse<BulkSeatActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa hàng loạt ghế."
+                });
+            }
+        }
 
         /// <summary>
         /// Get showtime by ID (View-only)
         /// </summary>
         [HttpGet("/partners/showtimes/{showtimeId}")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SHOWTIME_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeDetailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -1130,8 +2060,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
+                var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
-                var result = await _showtimeService.GetPartnerShowtimeByIdAsync(partnerId, showtimeId);
+                var result = await _showtimeService.GetPartnerShowtimeByIdAsync(partnerId, showtimeId, userId);
 
                 var response = new SuccessResponse<PartnerShowtimeDetailResponse>
                 {
@@ -1166,7 +2097,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Get all showtimes for partners with pagination and filtering.
         /// </summary>
         [HttpGet("/partners/showtimes")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SHOWTIME_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeListResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -1184,6 +2116,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
+                var userId = GetCurrentUserId();
                 var partnerId = await GetCurrentPartnerId();
                 var request = new PartnerShowtimeQueryRequest
                 {
@@ -1198,7 +2131,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     SortOrder = sort_order
                 };
 
-                var result = await _showtimeService.GetPartnerShowtimesAsync(partnerId, request);
+                var result = await _showtimeService.GetPartnerShowtimesAsync(partnerId, userId, request);
 
                 var response = new SuccessResponse<PartnerShowtimeListResponse>
                 {
@@ -1233,8 +2166,200 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Create a new showtime
+        /// </summary>
+        [HttpPost("/partners/showtimes")]
+        [AuditAction("PARTNER_CREATE_SHOWTIME", "Showtime", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SHOWTIME_CREATE")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeCreateResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CreateShowtime([FromBody] PartnerShowtimeCreateRequest request)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                await ValidateStaffScreenAccessAsync(request.ScreenId);
+                var result = await _showtimeService.CreatePartnerShowtimeAsync(partnerId, request, auditAction: "PARTNER_CREATE_SHOWTIME");
+
+                var response = new SuccessResponse<PartnerShowtimeCreateResponse>
+                {
+                    Message = "Tạo showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xung đột dữ liệu";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi tạo suất chiếu."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update showtime
+        /// </summary>
+        [HttpPut("/partners/showtimes/{showtimeId}")]
+        [AuditAction("PARTNER_UPDATE_SHOWTIME", "Showtime", recordIdRouteKey: "showtimeId", includeRequestBody: true)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SHOWTIME_UPDATE")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeCreateResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateShowtime(int showtimeId, [FromBody] PartnerShowtimeCreateRequest request)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                await ValidateStaffShowtimeAccessAsync(showtimeId);
+                await ValidateStaffScreenAccessAsync(request.ScreenId);
+                var result = await _showtimeService.UpdatePartnerShowtimeAsync(partnerId, showtimeId, request, auditAction: "PARTNER_UPDATE_SHOWTIME");
+
+                var response = new SuccessResponse<PartnerShowtimeCreateResponse>
+                {
+                    Message = "Cập nhật showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xung đột dữ liệu";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cập nhật suất chiếu."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Delete showtime (Soft Delete)
+        /// </summary>
+        [HttpDelete("/partners/showtimes/{showtimeId}")]
+        [AuditAction("PARTNER_DELETE_SHOWTIME", "Showtime", recordIdRouteKey: "showtimeId", includeRequestBody: false)]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SHOWTIME_DELETE")]
+        [ProducesResponseType(typeof(SuccessResponse<PartnerShowtimeCreateResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteShowtime(int showtimeId)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                await ValidateStaffShowtimeAccessAsync(showtimeId);
+                var result = await _showtimeService.DeletePartnerShowtimeAsync(partnerId, showtimeId, auditAction: "PARTNER_DELETE_SHOWTIME");
+
+                var response = new SuccessResponse<PartnerShowtimeCreateResponse>
+                {
+                    Message = "Xóa showtime thành công",
+                    Result = result
+                };
+                return Ok(response);
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (ConflictException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xung đột dữ liệu";
+                return Conflict(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi xóa suất chiếu."
+                });
+            }
+        }
+
         /// <summary>Create a new combo</summary>
         [HttpPost("/partners/services")]
+        [AuditAction("PARTNER_CREATE_COMBO", "Combo", includeRequestBody: true)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<ServiceResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -1277,7 +2402,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>Get combo by id</summary>
         [HttpGet("/partners/services/{serviceId}")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SERVICE_READ")]
         [ProducesResponseType(typeof(SuccessResponse<ServiceResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -1312,7 +2438,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>Get combos (paging/filter/sort)</summary>
         [HttpGet("/partners/services")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SERVICE_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PaginatedServicesResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -1365,6 +2492,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>Update combo</summary>
         [HttpPut("/partners/services/{serviceId}")]
+        [AuditAction("PARTNER_UPDATE_COMBO", "Combo", recordIdRouteKey: "serviceId", includeRequestBody: true)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<ServiceResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -1406,6 +2534,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>Delete combo (soft: set is_available = false)</summary>
         [HttpDelete("/partners/services/{serviceId}")]
+        [AuditAction("PARTNER_DELETE_COMBO", "Combo", recordIdRouteKey: "serviceId", includeRequestBody: false)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<ServiceActionResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -1456,7 +2585,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="sortBy">Sort by field</param>
         /// <param name="sortOrder">Sort order (asc/desc)</param>
         [HttpGet("/partners/bookings")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("BOOKING_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PartnerBookingsResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -1541,7 +2671,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="bookingId">Booking ID</param>
         /// <returns>Booking detail</returns>
         [HttpGet("/partners/bookings/{bookingId}")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("BOOKING_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PartnerBookingDetailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -1603,7 +2734,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="pageSize">Page size for paginated lists (default: 20, max: 100)</param>
         /// <returns>Booking statistics</returns>
         [HttpGet("/partners/bookings/statistics")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("BOOKING_STATISTICS")]
         [ProducesResponseType(typeof(SuccessResponse<PartnerBookingStatisticsResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -1908,6 +3040,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Create a new employee (Staff, Marketing, or Cashier)
         /// </summary>
         [HttpPost("/partners/employees")]
+        [AuditAction("PARTNER_CREATE_EMPLOYEE", "Employee", includeRequestBody: true)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<EmployeeResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2077,6 +3210,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Update employee
         /// </summary>
         [HttpPut("/partners/employees/{employeeId}")]
+        [AuditAction("PARTNER_UPDATE_EMPLOYEE", "Employee", recordIdRouteKey: "employeeId", includeRequestBody: true)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<EmployeeResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2134,6 +3268,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Delete employee (Soft Delete)
         /// </summary>
         [HttpDelete("/partners/employees/{employeeId}")]
+        [AuditAction("PARTNER_DELETE_EMPLOYEE", "Employee", recordIdRouteKey: "employeeId", includeRequestBody: false)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -2183,6 +3318,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Gán cinema cho Staff (phân quyền quản lý cụm rạp)
         /// </summary>
         [HttpPost("/partners/employees/cinema-assignments")]
+        [AuditAction("PARTNER_ASSIGN_EMPLOYEE_CINEMA", "EmployeeCinemaAssignment", includeRequestBody: true)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2257,6 +3393,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Hủy phân quyền cinema cho Staff
         /// </summary>
         [HttpDelete("/partners/employees/cinema-assignments")]
+        [AuditAction("PARTNER_REMOVE_EMPLOYEE_CINEMA", "EmployeeCinemaAssignment", includeRequestBody: true)]
         [Authorize(Roles = "Partner")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2393,6 +3530,271 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách phân quyền."
+                });
+            }
+        }
+
+        // ============================================
+        // PERMISSION MANAGEMENT APIs
+        // ============================================
+
+        /// <summary>
+        /// Grant permissions to employee
+        /// </summary>
+        [HttpPost("/partners/employees/{employeeId}/permissions")]
+        [AuditAction("PARTNER_GRANT_PERMISSION", "EmployeeCinemaPermission", recordIdRouteKey: "employeeId", includeRequestBody: true)]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PermissionActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GrantPermissions(int employeeId, [FromBody] GrantPermissionRequest request)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _permissionService.GrantPermissionsAsync(partnerId, employeeId, request);
+
+                return Ok(new SuccessResponse<PermissionActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi cấp quyền."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Revoke permissions from employee
+        /// </summary>
+        [HttpDelete("/partners/employees/{employeeId}/permissions")]
+        [AuditAction("PARTNER_REVOKE_PERMISSION", "EmployeeCinemaPermission", recordIdRouteKey: "employeeId", includeRequestBody: true)]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<PermissionActionResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> RevokePermissions(int employeeId, [FromBody] RevokePermissionRequest request)
+        {
+            try
+            {
+                var partnerId = await GetCurrentPartnerId();
+                var result = await _permissionService.RevokePermissionsAsync(partnerId, employeeId, request);
+
+                return Ok(new SuccessResponse<PermissionActionResponse>
+                {
+                    Message = result.Message,
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi thu hồi quyền."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get employee permissions
+        /// </summary>
+        [HttpGet("/partners/employees/{employeeId}/permissions")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<EmployeePermissionsListResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetEmployeePermissions(int employeeId, [FromQuery] List<int>? cinemaIds = null)
+        {
+            try
+            {
+                var result = await _permissionService.GetEmployeePermissionsAsync(employeeId, cinemaIds);
+
+                return Ok(new SuccessResponse<EmployeePermissionsListResponse>
+                {
+                    Message = "Lấy danh sách quyền thành công",
+                    Result = result
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách quyền."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get all available permissions in system
+        /// </summary>
+        [HttpGet("/partners/permissions")]
+        [Authorize(Roles = "Partner")]
+        [ProducesResponseType(typeof(SuccessResponse<AvailablePermissionsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetAvailablePermissions()
+        {
+            try
+            {
+                var result = await _permissionService.GetAvailablePermissionsAsync();
+
+                return Ok(new SuccessResponse<AvailablePermissionsResponse>
+                {
+                    Message = "Lấy danh sách quyền có sẵn thành công",
+                    Result = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách quyền."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get Staff Profile - Lấy thông tin quyền và rạp được phân công của Staff
+        /// </summary>
+        [HttpGet("/partners/staff/profile")]
+        [Authorize(Roles = "Staff")]
+        [ProducesResponseType(typeof(SuccessResponse<StaffProfileResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetStaffProfile()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var result = await _staffService.GetStaffProfileAsync(userId);
+
+                return Ok(new SuccessResponse<StaffProfileResponse>
+                {
+                    Message = "Lấy thông tin hồ sơ nhân viên thành công",
+                    Result = result
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin hồ sơ nhân viên."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get My Permissions - Staff tự xem quyền của mình
+        /// </summary>
+        [HttpGet("/partners/staff/permissions")]
+        [Authorize(Roles = "Staff")]
+        [ProducesResponseType(typeof(SuccessResponse<EmployeePermissionsListResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetMyPermissions([FromQuery] List<int>? cinemaIds = null)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var result = await _staffService.GetMyPermissionsAsync(userId, cinemaIds);
+
+                return Ok(new SuccessResponse<EmployeePermissionsListResponse>
+                {
+                    Message = "Lấy danh sách quyền thành công",
+                    Result = result
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Xác thực thất bại";
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (NotFoundException ex)
+            {
+                return NotFound(new ErrorResponse { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách quyền."
                 });
             }
         }

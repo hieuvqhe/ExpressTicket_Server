@@ -22,11 +22,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     {
         private readonly CinemaDbCoreContext _context;
         private readonly IContractValidationService _contractValidation;
+        private readonly IAuditLogService _auditLogService;
 
-        public ComboService(CinemaDbCoreContext context, IContractValidationService contractValidation)
+        public ComboService(CinemaDbCoreContext context, IContractValidationService contractValidation, IAuditLogService auditLogService)
         {
             _context = context;
             _contractValidation = contractValidation;
+            _auditLogService = auditLogService;
         }
 
         // ====== CREATE ======
@@ -52,6 +54,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Services.Add(svc);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_CREATE_COMBO",
+                tableName: "Service",
+                recordId: svc.ServiceId,
+                beforeData: null,
+                afterData: BuildServiceSnapshot(svc),
+                metadata: new { partnerId, userId });
             return Map(svc);
         }
 
@@ -128,6 +137,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (svc == null)
                 throw new NotFoundException("Không tìm thấy combo với ID này hoặc không thuộc quyền quản lý của bạn");
 
+            var beforeSnapshot = BuildServiceSnapshot(svc);
+
             svc.ServiceName = request.Name.Trim();
             svc.Price = request.Price;
             svc.Description = Normalize(request.Description);
@@ -136,6 +147,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             svc.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_UPDATE_COMBO",
+                tableName: "Service",
+                recordId: svc.ServiceId,
+                beforeData: beforeSnapshot,
+                afterData: BuildServiceSnapshot(svc),
+                metadata: new { partnerId, userId });
             return Map(svc);
         }
 
@@ -152,12 +170,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy combo với ID này hoặc không thuộc quyền quản lý của bạn");
 
             // Soft delete: set IsAvailable = false
+            var beforeSnapshot = BuildServiceSnapshot(svc);
             if (svc.IsAvailable)
             {
                 svc.IsAvailable = false;
                 svc.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
             }
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_DELETE_COMBO",
+                tableName: "Service",
+                recordId: svc.ServiceId,
+                beforeData: beforeSnapshot,
+                afterData: BuildServiceSnapshot(svc),
+                metadata: new { partnerId, userId });
 
             return new ServiceActionResponse
             {
@@ -253,6 +279,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ImageUrl = s.ImageUrl,
             CreatedAt = s.CreatedAt,
             UpdatedAt = s.UpdatedAt
+        };
+
+        private static object BuildServiceSnapshot(Service service) => new
+        {
+            service.ServiceId,
+            service.PartnerId,
+            Name = service.ServiceName,
+            service.Code,
+            service.Price,
+            service.Description,
+            service.ImageUrl,
+            service.IsAvailable,
+            service.CreatedAt,
+            service.UpdatedAt
         };
     }
 }

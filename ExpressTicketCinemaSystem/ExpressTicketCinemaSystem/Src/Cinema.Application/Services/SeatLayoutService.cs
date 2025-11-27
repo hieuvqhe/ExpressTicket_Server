@@ -12,10 +12,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class SeatLayoutService : ISeatLayoutService
     {
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
+        private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
 
-        public SeatLayoutService(CinemaDbCoreContext context)
+        public SeatLayoutService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService)
         {
             _context = context;
+            _auditLogService = auditLogService;
+            _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
         }
 
         public async Task<SeatLayoutResponse> GetSeatLayoutAsync(int screenId, int partnerId, int userId)
@@ -122,6 +126,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await ValidateCreateSeatLayoutRequestAsync(screenId, request, partnerId, screen);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = await BuildSeatLayoutSnapshotAsync(screenId);
+            var hasExistingLayout = beforeSnapshot.SeatMap != null || beforeSnapshot.Seats.Count > 0;
 
             using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -210,6 +216,24 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 await transaction.CommitAsync();
 
                 var blockedSeatsCount = newSeatsDict.Values.Count(s => s.Status == "Blocked");
+                var afterSnapshot = await BuildSeatLayoutSnapshotAsync(screenId);
+                var layoutAction = hasExistingLayout ? "STAFF_UPDATE_SEAT_LAYOUT" : "STAFF_CREATE_SEAT_LAYOUT";
+
+                await _auditLogService.LogEntityChangeAsync(
+                    action: layoutAction,
+                    tableName: "SeatLayout",
+                    recordId: screenId,
+                    beforeData: beforeSnapshot,
+                    afterData: afterSnapshot,
+                    metadata: new
+                    {
+                        partnerId,
+                        userId,
+                        createdSeats = seatsToAdd.Count,
+                        updatedSeats = seatsToUpdate.Count,
+                        removedSeats = seatsToRemove.Count,
+                        blockedSeats = blockedSeatsCount
+                    });
 
                 return new SeatLayoutActionResponse
                 {
@@ -269,12 +293,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 });
             }
 
+            var beforeSeatSnapshot = BuildSeatSnapshot(seat);
+
             seat.SeatTypeId = request.SeatTypeId;
             seat.Status = request.Status;
             seat.SeatName = request.SeatName;
             seat.SeatType = seatType;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_UPDATE_SEAT_LAYOUT_ITEM",
+                tableName: "SeatLayout",
+                recordId: seat.SeatId,
+                beforeData: beforeSeatSnapshot,
+                afterData: BuildSeatSnapshot(seat),
+                metadata: new { screenId, partnerId, userId });
 
             return new SeatActionResponse
             {
@@ -296,6 +329,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateBulkUpdateSeatsRequest(request);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var targetSeatIds = request.SeatUpdates
+                .Where(su => su.SeatId > 0)
+                .Select(su => su.SeatId)
+                .Distinct()
+                .ToList();
+            var beforeSeatSnapshots = await _context.Seats
+                .Where(s => s.ScreenId == screenId && targetSeatIds.Contains(s.SeatId))
+                .ToListAsync();
+            var beforeSnapshotPayload = beforeSeatSnapshots.Select(BuildSeatSnapshot).ToList();
 
             using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -404,6 +446,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 {
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
+
+                    var afterSeatEntities = await _context.Seats
+                        .Where(s => s.ScreenId == screenId && targetSeatIds.Contains(s.SeatId))
+                        .ToListAsync();
+                    var afterSnapshotPayload = afterSeatEntities.Select(BuildSeatSnapshot).ToList();
+
+                    await _auditLogService.LogEntityChangeAsync(
+                        action: "STAFF_CREATE_SEAT_LAYOUT_BULK",
+                        tableName: "SeatLayout",
+                        recordId: screenId,
+                        beforeData: beforeSnapshotPayload,
+                        afterData: afterSnapshotPayload,
+                        metadata: new { partnerId, userId, successCount, failedCount });
                 }
                 else
                 {
@@ -440,27 +495,51 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (errors.Any())
                 throw new ValidationException(errors);
 
-            // Validate user có role Partner
+            // Validate user có role Partner hoặc Staff
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.UserId == userId && u.UserType == "Partner");
+                .FirstOrDefaultAsync(u => u.UserId == userId && (u.UserType == "Partner" || u.UserType == "Staff" || u.UserType == "Marketing" || u.UserType == "Cashier"));
 
             if (user == null)
             {
-                throw new UnauthorizedException("Chỉ tài khoản Partner mới được sử dụng chức năng này");
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
             }
 
-            // Validate partner approved và active
-            var partner = await _context.Partners
-                .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.UserId == userId && p.Status == "approved");
+            Partner? partner = null;
 
-            if (partner == null)
+            // Nếu là Partner, validate trực tiếp
+            if (user.UserType == "Partner")
             {
-                throw new UnauthorizedException("Partner không tồn tại hoặc không thuộc quyền quản lý của bạn");
+                partner = await _context.Partners
+                    .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.UserId == userId && p.Status == "approved");
+
+                if (partner == null)
+                {
+                    throw new UnauthorizedException("Partner không tồn tại hoặc không thuộc quyền quản lý của bạn");
+                }
+
+                if (!partner.IsActive)
+                {
+                    throw new UnauthorizedException("Tài khoản partner đã bị vô hiệu hóa");
+                }
             }
-
-            if (!partner.IsActive)
+            // Nếu là Staff, validate qua Employee
+            else if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
             {
-                throw new UnauthorizedException("Tài khoản partner đã bị vô hiệu hóa");
+                var employee = await _context.Employees
+                    .Include(e => e.Partner)
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee == null || employee.Partner == null)
+                {
+                    throw new UnauthorizedException("Nhân viên không thuộc Partner này");
+                }
+
+                partner = employee.Partner;
+
+                if (partner.Status != "approved" || !partner.IsActive)
+                {
+                    throw new UnauthorizedException("Partner không tồn tại hoặc chưa được duyệt");
+                }
             }
 
             // Validate screen thuộc về partner
@@ -471,6 +550,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (screen == null)
             {
                 throw new NotFoundException("Không tìm thấy phòng chiếu với ID này hoặc không thuộc quyền quản lý của bạn");
+            }
+
+            // Nếu là Staff, kiểm tra có được phân quyền rạp của phòng này không
+            if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, screen.CinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
             }
 
             if (!screen.IsActive)
@@ -691,6 +786,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await ValidateCanDeleteSeatsAsync(screenId);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = await BuildSeatLayoutSnapshotAsync(screenId);
 
             using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -721,6 +817,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+
+                var afterSnapshot = await BuildSeatLayoutSnapshotAsync(screenId);
+                await _auditLogService.LogEntityChangeAsync(
+                    action: "STAFF_DELETE_SEAT_LAYOUT",
+                    tableName: "SeatLayout",
+                    recordId: screenId,
+                    beforeData: beforeSnapshot,
+                    afterData: afterSnapshot,
+                    metadata: new { partnerId, userId, totalSeats });
 
                 return new SeatLayoutActionResponse
                 {
@@ -766,9 +871,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Lưu thông tin để response
             var row = seat.RowCode;
             var column = seat.SeatNumber;
+            var beforeSeatSnapshot = BuildSeatSnapshot(seat);
 
             _context.Seats.Remove(seat);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_DELETE_SEAT_LAYOUT_ITEM",
+                tableName: "SeatLayout",
+                recordId: seatId,
+                beforeData: beforeSeatSnapshot,
+                afterData: new { SeatId = seatId, Deleted = true },
+                metadata: new { screenId, partnerId, userId });
 
             return new SeatActionResponse
             {
@@ -788,6 +901,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateBulkDeleteSeatsRequest(request);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var requestedSeatIds = request.SeatIds.Distinct().ToList();
+            var seatsBeforeDelete = await _context.Seats
+                .Where(s => s.ScreenId == screenId && requestedSeatIds.Contains(s.SeatId))
+                .ToListAsync();
+            var beforeSnapshot = seatsBeforeDelete.Select(BuildSeatSnapshot).ToList();
 
             using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -862,6 +980,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 {
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
+
+                    await _auditLogService.LogEntityChangeAsync(
+                        action: "STAFF_DELETE_SEAT_LAYOUT_BULK",
+                        tableName: "SeatLayout",
+                        recordId: screenId,
+                        beforeData: beforeSnapshot,
+                        afterData: new
+                        {
+                            DeletedSeatIds = beforeSnapshot.Select(s => s.SeatId).ToList()
+                        },
+                        metadata: new { partnerId, userId, successCount, failedCount });
                 }
                 else
                 {
@@ -939,6 +1068,74 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (errors.Any())
                 throw new ValidationException(errors);
+        }
+
+        private async Task<SeatLayoutSnapshot> BuildSeatLayoutSnapshotAsync(int screenId)
+        {
+            var seatMap = await _context.SeatMaps
+                .AsNoTracking()
+                .FirstOrDefaultAsync(sm => sm.ScreenId == screenId);
+
+            var seatEntities = await _context.Seats
+                .AsNoTracking()
+                .Where(s => s.ScreenId == screenId)
+                .ToListAsync();
+            var seats = seatEntities
+                .Select(BuildSeatSnapshot)
+                .ToList();
+
+            return new SeatLayoutSnapshot
+            {
+                ScreenId = screenId,
+                SeatMap = seatMap == null
+                    ? null
+                    : new SeatMapSnapshot
+                    {
+                        SeatMapId = seatMap.SeatMapId,
+                        TotalRows = seatMap.TotalRows,
+                        TotalColumns = seatMap.TotalColumns,
+                        UpdatedAt = seatMap.UpdatedAt
+                    },
+                Seats = seats
+            };
+        }
+
+        private static SeatSnapshot BuildSeatSnapshot(Seat seat)
+        {
+            return new SeatSnapshot
+            {
+                SeatId = seat.SeatId,
+                Row = seat.RowCode,
+                Column = seat.SeatNumber,
+                SeatName = seat.SeatName,
+                SeatTypeId = seat.SeatTypeId,
+                Status = seat.Status
+            };
+        }
+
+        private sealed class SeatLayoutSnapshot
+        {
+            public int ScreenId { get; set; }
+            public SeatMapSnapshot? SeatMap { get; set; }
+            public List<SeatSnapshot> Seats { get; set; } = new();
+        }
+
+        private sealed class SeatMapSnapshot
+        {
+            public int SeatMapId { get; set; }
+            public int TotalRows { get; set; }
+            public int TotalColumns { get; set; }
+            public DateTime? UpdatedAt { get; set; }
+        }
+
+        private sealed class SeatSnapshot
+        {
+            public int SeatId { get; set; }
+            public string? Row { get; set; }
+            public int Column { get; set; }
+            public string? SeatName { get; set; }
+            public int? SeatTypeId { get; set; }
+            public string Status { get; set; } = string.Empty;
         }
     }
 }

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics.Contracts;
 using System.Security.Claims;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -54,6 +55,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Create a new voucher
         /// </summary>
         [HttpPost]
+        [AuditAction("MANAGER_CREATE_VOUCHER", "Voucher", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<VoucherResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -230,6 +232,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPut("{id}")]
+        [AuditAction("MANAGER_UPDATE_VOUCHER", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<VoucherResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -285,6 +288,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpDelete("{id}")]
+        [AuditAction("MANAGER_DELETE_VOUCHER", "Voucher", recordIdRouteKey: "id", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -448,6 +452,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPost("{id}/send-to-all-users")]
+        [AuditAction("MANAGER_VOUCHER_SEND_ALL", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -503,6 +508,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPost("{id}/send-to-specific-users")]
+        [AuditAction("MANAGER_VOUCHER_SEND_SPECIFIC", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -558,6 +564,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPost("{id}/send-to-top-buyers")]
+        [AuditAction("MANAGER_VOUCHER_SEND_TOP_BUYERS", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -613,6 +620,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPost("{id}/send-to-top-spenders")]
+        [AuditAction("MANAGER_VOUCHER_SEND_TOP_SPENDERS", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]

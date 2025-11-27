@@ -20,13 +20,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
         private readonly IConfiguration _config;
+        private readonly IAuditLogService _auditLogService;
 
-        public AuthService(CinemaDbCoreContext context, IPasswordHasher<User> passwordHasher, IEmailService emailService, IConfiguration config)
+        public AuthService(
+            CinemaDbCoreContext context,
+            IPasswordHasher<User> passwordHasher,
+            IEmailService emailService,
+            IConfiguration config,
+            IAuditLogService auditLogService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _emailService = emailService;
             _config = config;
+            _auditLogService = auditLogService;
         }
 
         public async Task<User> RegisterAsync(RegisterRequest request)
@@ -91,6 +98,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_RESET_PASSWORD",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new { user.UserId });
+
             var token = Guid.NewGuid().ToString();
             var tokenBytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
 
@@ -142,6 +156,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.EmailVerificationTokens.Remove(verification);
             await _context.SaveChangesAsync();
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_VERIFY_EMAIL",
+                tableName: "User",
+                recordId: verification.UserId,
+                beforeData: null,
+                afterData: new
+                {
+                    verification.UserId,
+                    verification.User.Email,
+                    EmailConfirmed = true
+                });
             return true;
         }
 
@@ -183,6 +209,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await _context.SaveChangesAsync();
 
             await _emailService.SendVerificationEmailAsync(user.Email, newToken);
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_RESEND_VERIFICATION",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new
+                {
+                    user.UserId,
+                    user.Email
+                });
         }
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
@@ -268,7 +305,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     }
                 });
 
-            return await CreateJwtResponseAsync(user);
+            var response = await CreateJwtResponseAsync(user);
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_LOGIN_SUCCESS",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new
+                {
+                    user.UserId,
+                    user.Email,
+                    user.Username,
+                    user.UserType,
+                    response.ExpireAt
+                });
+
+            return response;
         }
 
         // ==================== NEW METHOD: VALIDATE PARTNER LOGIN ====================
@@ -555,6 +608,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             token.IsRevoked = true;
             await _context.SaveChangesAsync();
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_LOGOUT",
+                tableName: "User",
+                recordId: token.UserId,
+                beforeData: null,
+                afterData: new { token.UserId, refreshToken });
             return true;
         }
 
@@ -600,6 +660,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                        $"Mã có hiệu lực trong 10 phút.\n\n" +
                        $"Nếu bạn không yêu cầu khôi phục, vui lòng bỏ qua email này.";
             await _emailService.SendEmailAsync(user.Email, subject, body);
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_FORGOT_PASSWORD",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new { user.UserId, user.Email });
         }
 
         public async Task VerifyResetCodeAsync(VerifyResetCodeRequest request)
@@ -648,6 +715,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             record.VerifiedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_VERIFY_RESET_CODE",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new { user.UserId, request.Code });
         }
 
         public async Task ResetPasswordAsync(ResetPasswordRequest request)

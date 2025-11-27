@@ -30,6 +30,8 @@ public partial class Voucher
 
     public bool IsDeleted { get; set; } = false;
 
+    public bool IsRestricted { get; set; } = false; // false = Public (ai cũng dùng được), true = Restricted (chỉ user được gửi mới dùng được)
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

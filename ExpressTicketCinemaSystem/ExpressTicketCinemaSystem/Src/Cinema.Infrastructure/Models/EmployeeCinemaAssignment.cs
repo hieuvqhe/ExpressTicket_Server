@@ -21,7 +21,11 @@ public partial class EmployeeCinemaAssignment
     public virtual Employee Employee { get; set; } = null!;
 
     public virtual Cinema Cinema { get; set; } = null!;
+
+    public virtual User? AssignedByUser { get; set; }
 }
+
+
 
 
 

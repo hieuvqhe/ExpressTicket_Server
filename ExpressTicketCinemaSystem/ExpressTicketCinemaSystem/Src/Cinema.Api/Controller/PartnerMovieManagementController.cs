@@ -10,6 +10,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
 using Microsoft.Extensions.Logging;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -179,6 +180,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Add actor to movie submission (can select existing actor or create new one)
         /// </summary>
         [HttpPost("{submissionId}/actors")]
+        [AuditAction("PARTNER_SUBMISSION_ADD_ACTOR", "MovieSubmission", recordIdRouteKey: "submissionId", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SubmissionActorResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -304,6 +306,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Update actor in movie submission (role, information)
         /// </summary>
         [HttpPut("{submissionId}/actors/{submissionActorId}")]
+        [AuditAction("PARTNER_SUBMISSION_UPDATE_ACTOR", "MovieSubmission", recordIdRouteKey: "submissionActorId", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SubmissionActorResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -374,6 +377,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Remove actor from movie submission
         /// </summary>
         [HttpDelete("{submissionId}/actors/{submissionActorId}")]
+        [AuditAction("PARTNER_SUBMISSION_DELETE_ACTOR", "MovieSubmission", recordIdRouteKey: "submissionActorId", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -432,6 +436,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Create a new movie submission (Draft)
         /// </summary>
         [HttpPost]
+        [AuditAction("PARTNER_CREATE_MOVIE_SUBMISSION", "MovieSubmission", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<MovieSubmissionResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -650,6 +655,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Update movie submission (only when in Draft status)
         /// </summary>
         [HttpPut("{id}")]
+        [AuditAction("PARTNER_UPDATE_MOVIE_SUBMISSION", "MovieSubmission", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<MovieSubmissionResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -709,6 +715,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Submit movie submission (Draft → Pending)
         /// </summary>
         [HttpPost("{id}/submit")]
+        [AuditAction("PARTNER_SUBMIT_MOVIE_SUBMISSION", "MovieSubmission", recordIdRouteKey: "id", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<SubmitMovieSubmissionResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -774,6 +781,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Delete movie submission (Soft Delete - only in Draft state)
         /// </summary>
         [HttpDelete("{id}")]
+        [AuditAction("PARTNER_DELETE_MOVIE_SUBMISSION", "MovieSubmission", recordIdRouteKey: "id", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]

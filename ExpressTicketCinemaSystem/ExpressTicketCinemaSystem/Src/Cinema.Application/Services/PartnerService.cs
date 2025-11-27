@@ -24,19 +24,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IEmailService _emailService;
         private readonly IManagerService _managerService;
         private readonly IContractValidationService _contractValidationService;
+        private readonly IAuditLogService _auditLogService;
 
         public PartnerService(
             CinemaDbCoreContext context,
             IPasswordHasher<User> passwordHasher,
             IEmailService emailService,
             IManagerService managerService ,
-            IContractValidationService contractValidationService)
+            IContractValidationService contractValidationService,
+            IAuditLogService auditLogService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _emailService = emailService;
             _managerService = managerService;
             _contractValidationService = contractValidationService;
+            _auditLogService = auditLogService;
         }
         public async Task<PartnerRegisterResponse> RegisterPartnerAsync(PartnerRegisterRequest request)
         {
@@ -102,6 +105,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Partners.Add(partner);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_REGISTER",
+                tableName: "Partner",
+                recordId: partner.PartnerId,
+                beforeData: null,
+                afterData: BuildPartnerAuditSnapshot(partner),
+                metadata: new
+                {
+                    partner.UserId,
+                    partner.Email,
+                    partner.PartnerName
+                });
 
             await _emailService.SendPartnerRegistrationConfirmationAsync(
                 user.Email,
@@ -196,6 +211,29 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (errors.Any())
                 throw new ValidationException(errors); 
+        }
+
+        private static object BuildPartnerAuditSnapshot(Partner partner)
+        {
+            return new
+            {
+                partner.PartnerId,
+                partner.UserId,
+                partner.ManagerId,
+                partner.PartnerName,
+                partner.TaxCode,
+                partner.Address,
+                partner.Phone,
+                partner.Email,
+                partner.CommissionRate,
+                partner.Status,
+                partner.IsActive,
+                partner.ApprovedAt,
+                partner.ApprovedBy,
+                partner.RejectionReason,
+                partner.CreatedAt,
+                partner.UpdatedAt
+            };
         }
 
         private void ValidatePhoneNumber(string phone)
@@ -674,6 +712,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidatePartnerForApproval(partner);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildPartnerAuditSnapshot(partner);
 
             partner.Status = "approved";
             partner.ApprovedAt = DateTime.UtcNow;
@@ -689,6 +728,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_APPROVE_PARTNER",
+                tableName: "Partner",
+                recordId: partner.PartnerId,
+                beforeData: beforeSnapshot,
+                afterData: BuildPartnerAuditSnapshot(partner),
+                metadata: new { managerId = manager.ManagerId });
 
             await SendPartnerApprovalEmailAsync(partner, manager);
 
@@ -838,6 +884,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidatePartnerForRejection(partner);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildPartnerAuditSnapshot(partner);
 
             partner.Status = "rejected";
             partner.RejectionReason = request.RejectionReason;
@@ -852,6 +899,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_REJECT_PARTNER",
+                tableName: "Partner",
+                recordId: partner.PartnerId,
+                beforeData: beforeSnapshot,
+                afterData: BuildPartnerAuditSnapshot(partner),
+                metadata: new
+                {
+                    managerId = manager.ManagerId,
+                    request.RejectionReason
+                });
 
             await SendPartnerRejectionEmailAsync(partner, manager, request.RejectionReason);
 
@@ -1070,22 +1128,52 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new ValidationException("sortOrder", "SortOrder phải là asc hoặc desc.");
 
             // Get partner from userId
-            var partner = await _context.Partners
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            Partner? partner = null;
+            List<int> partnerCinemaIds = new List<int>();
 
-            if (partner == null)
-                throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
+            // Nếu là Partner, lấy trực tiếp
+            if (user?.UserType == "Partner")
+            {
+                partner = await _context.Partners
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
 
-            // Get list of cinema IDs belonging to this partner
-            var partnerCinemaIds = await _context.Cinemas
-                .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
-                .Select(c => c.CinemaId)
-                .ToListAsync();
+                if (partner == null)
+                    throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
+
+                // Get list of cinema IDs belonging to this partner
+                partnerCinemaIds = await _context.Cinemas
+                    .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
+                    .Select(c => c.CinemaId)
+                    .ToListAsync();
+            }
+            // Nếu là Staff, lấy từ Employee và chỉ lấy cinemas được phân quyền
+            else if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .Include(e => e.Partner)
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.IsActive);
+
+                if (employee == null || employee.Partner == null)
+                    throw new NotFoundException("Không tìm thấy thông tin nhân viên hoặc tài khoản chưa được kích hoạt.");
+
+                partner = employee.Partner;
+
+                // Chỉ lấy các rạp được phân quyền cho Staff
+                partnerCinemaIds = await _context.EmployeeCinemaAssignments
+                    .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                    .Select(eca => eca.CinemaId)
+                    .ToListAsync();
+            }
+            else
+            {
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
+            }
 
             if (!partnerCinemaIds.Any())
             {
-                // Partner has no cinemas
+                // Partner/Staff has no cinemas
                 return new PartnerBookingsResponse
                 {
                     Page = request.Page,
@@ -1096,11 +1184,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 };
             }
 
-            // If cinemaId is specified, verify it belongs to this partner
+            // If cinemaId is specified, verify it belongs to this partner/staff
             if (request.CinemaId.HasValue)
             {
                 if (!partnerCinemaIds.Contains(request.CinemaId.Value))
-                    throw new ValidationException("cinemaId", "Rạp này không thuộc về đối tác của bạn.");
+                    throw new ValidationException("cinemaId", "Rạp này không thuộc về đối tác của bạn hoặc bạn chưa được phân quyền.");
             }
 
             // Build query
@@ -1257,22 +1345,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         /// </summary>
         public async Task<PartnerBookingDetailResponse> GetPartnerBookingDetailAsync(int userId, int bookingId)
         {
-            // Get partner from userId
-            var partner = await _context.Partners
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
-
-            if (partner == null)
-                throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
-
-            // Get list of cinema IDs belonging to this partner
-            var partnerCinemaIds = await _context.Cinemas
-                .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
-                .Select(c => c.CinemaId)
-                .ToListAsync();
+            // Get partner and cinema IDs (filtered by EmployeeCinemaAssignment for Staff)
+            var (partner, partnerCinemaIds) = await GetPartnerAndCinemaIdsAsync(userId);
 
             if (!partnerCinemaIds.Any())
-                throw new NotFoundException("Đối tác chưa có rạp chiếu phim nào.");
+                throw new NotFoundException("Bạn chưa có rạp chiếu phim nào được phân quyền.");
 
             // Get booking with all related data
             var booking = await _context.Bookings
@@ -1295,7 +1372,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (booking == null)
                 throw new NotFoundException("Không tìm thấy đơn đặt vé với ID đã cho.");
 
-            // Verify that the booking belongs to one of partner's cinemas
+            // Verify that the booking belongs to one of partner's/staff's cinemas
             if (!partnerCinemaIds.Contains(booking.Showtime.CinemaId))
                 throw new NotFoundException("Không tìm thấy đơn đặt vé với ID đã cho.");
 
@@ -1405,31 +1482,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (!validGroupBy.Contains(request.GroupBy.ToLower()))
                 throw new ValidationException("groupBy", "GroupBy phải là một trong: day, week, month, year.");
 
-            // Get partner from userId
-            var partner = await _context.Partners
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
-
-            if (partner == null)
-                throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
-
-            // Get list of cinema IDs belonging to this partner
-            var partnerCinemaIds = await _context.Cinemas
-                .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
-                .Select(c => c.CinemaId)
-                .ToListAsync();
+            // Get partner and cinema IDs (filtered by EmployeeCinemaAssignment for Staff)
+            var (partner, partnerCinemaIds) = await GetPartnerAndCinemaIdsAsync(userId);
 
             if (!partnerCinemaIds.Any())
             {
-                // Partner has no cinemas - return empty statistics
+                // Partner/Staff has no cinemas - return empty statistics
                 return new PartnerBookingStatisticsResponse();
             }
 
-            // If cinemaId is specified, verify it belongs to this partner
+            // If cinemaId is specified, verify it belongs to this partner/staff
             if (request.CinemaId.HasValue)
             {
                 if (!partnerCinemaIds.Contains(request.CinemaId.Value))
-                    throw new ValidationException("cinemaId", "Rạp này không thuộc về đối tác của bạn.");
+                    throw new ValidationException("cinemaId", "Rạp này không thuộc về đối tác của bạn hoặc bạn chưa được phân quyền.");
             }
 
             // Set default date range if not provided
@@ -1668,7 +1734,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .AsNoTracking()
                 .Where(b => cinemaIdsToQuery.Contains(b.Showtime.CinemaId))
                 .Where(b => b.BookingTime >= fromDate && b.BookingTime <= toDate)
-                .Where(b => IsPaidBooking(b)) // Only count paid bookings
+                .Where(b => b.PaymentStatus == "PAID") // Only count paid bookings
                 .ToListAsync();
 
             var staffPerformanceList = new List<PartnerResponses.StaffPerformanceStat>();
@@ -1803,7 +1869,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .AsNoTracking()
                 .Where(b => cinemaIds.Contains(b.Showtime.CinemaId))
                 .Where(b => b.BookingTime >= startDate && b.BookingTime <= endDate)
-                .Where(b => IsPaidBooking(b))
+                .Where(b => b.PaymentStatus == "PAID")
                 .ToListAsync();
 
             // Calculate statistics for each cluster
@@ -2565,6 +2631,59 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 VoucherUsageRate = (decimal)voucherUsageRate,
                 MostUsedVouchers = mostUsedVouchers
             };
+        }
+
+        /// <summary>
+        /// Helper method để lấy Partner và danh sách Cinema IDs
+        /// - Partner: Lấy tất cả cinemas của partner
+        /// - Staff: Chỉ lấy cinemas được phân quyền qua EmployeeCinemaAssignment
+        /// </summary>
+        private async Task<(Partner partner, List<int> cinemaIds)> GetPartnerAndCinemaIdsAsync(int userId)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            Partner? partner = null;
+            List<int> cinemaIds = new List<int>();
+
+            // Nếu là Partner, lấy trực tiếp
+            if (user?.UserType == "Partner")
+            {
+                partner = await _context.Partners
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
+
+                if (partner == null)
+                    throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
+
+                // Get list of cinema IDs belonging to this partner
+                cinemaIds = await _context.Cinemas
+                    .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
+                    .Select(c => c.CinemaId)
+                    .ToListAsync();
+            }
+            // Nếu là Staff, lấy từ Employee và chỉ lấy cinemas được phân quyền
+            else if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .Include(e => e.Partner)
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.IsActive);
+
+                if (employee == null || employee.Partner == null)
+                    throw new NotFoundException("Không tìm thấy thông tin nhân viên hoặc tài khoản chưa được kích hoạt.");
+
+                partner = employee.Partner;
+
+                // Chỉ lấy các rạp được phân quyền cho Staff
+                cinemaIds = await _context.EmployeeCinemaAssignments
+                    .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                    .Select(eca => eca.CinemaId)
+                    .ToListAsync();
+            }
+            else
+            {
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
+            }
+
+            return (partner, cinemaIds);
         }
      }
  }

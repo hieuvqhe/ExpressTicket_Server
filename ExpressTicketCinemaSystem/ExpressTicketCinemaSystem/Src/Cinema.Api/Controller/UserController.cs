@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Auth.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -123,6 +124,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        [AuditAction("USER_CHANGE_PASSWORD", "User")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
         {
             try

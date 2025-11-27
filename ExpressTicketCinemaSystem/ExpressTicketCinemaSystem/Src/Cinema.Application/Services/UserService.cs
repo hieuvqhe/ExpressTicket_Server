@@ -21,14 +21,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IConfiguration _config;
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
+        private readonly IAuditLogService _auditLogService;
         private const int CodeExpiryMinutes = 10;
 
-        public UserService(CinemaDbCoreContext context, IConfiguration config, IEmailService emailService, IPasswordHasher<User> passwordHasher)
+        public UserService(
+            CinemaDbCoreContext context,
+            IConfiguration config,
+            IEmailService emailService,
+            IPasswordHasher<User> passwordHasher,
+            IAuditLogService auditLogService)
         {
             _context = context;
             _config = config;
             _emailService = emailService;
             _passwordHasher = passwordHasher;
+            _auditLogService = auditLogService;
         }
 
         public async Task<UserProfileResponse> GetProfileAsync(int userId)
@@ -116,8 +123,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (changed)
             {
-                _context.Users.Update(user);
-                await _context.SaveChangesAsync();
+            var beforeSnapshot = new { user.UserId, user.Password };
+
+            _context.Users.Update(user);
+            await _context.SaveChangesAsync();
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "USER_CHANGE_PASSWORD",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: beforeSnapshot,
+                afterData: new { user.UserId });
             }
 
             var defaultAvatar = _config["Defaults:AvatarUrl"] ??

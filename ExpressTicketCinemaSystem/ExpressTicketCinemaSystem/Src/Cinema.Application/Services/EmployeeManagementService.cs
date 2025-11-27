@@ -15,15 +15,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly CinemaDbCoreContext _context;
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
+        private readonly IAuditLogService _auditLogService;
 
         public EmployeeManagementService(
             CinemaDbCoreContext context,
             IPasswordHasher<User> passwordHasher,
-            IEmailService emailService)
+            IEmailService emailService,
+            IAuditLogService auditLogService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _emailService = emailService;
+            _auditLogService = auditLogService;
         }
 
         public async Task<EmployeeResponse> CreateEmployeeAsync(int partnerId, CreateEmployeeRequest request)
@@ -93,6 +96,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Employees.Add(employee);
             await _context.SaveChangesAsync();
+            employee.User = user;
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_CREATE_EMPLOYEE",
+                tableName: "Employee",
+                recordId: employee.EmployeeId,
+                beforeData: null,
+                afterData: BuildEmployeeSnapshot(employee),
+                metadata: new { partnerId });
 
             return new EmployeeResponse
             {
@@ -117,6 +128,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy nhân viên");
 
             var errors = new Dictionary<string, ValidationError>();
+            var beforeSnapshot = BuildEmployeeSnapshot(employee);
 
             if (!string.IsNullOrWhiteSpace(request.FullName))
             {
@@ -149,6 +161,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new ValidationException(errors);
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_UPDATE_EMPLOYEE",
+                tableName: "Employee",
+                recordId: employee.EmployeeId,
+                beforeData: beforeSnapshot,
+                afterData: BuildEmployeeSnapshot(employee),
+                metadata: new { partnerId });
 
             return new EmployeeResponse
             {
@@ -265,11 +284,45 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (employee == null)
                 throw new NotFoundException("Không tìm thấy nhân viên");
 
+            var beforeSnapshot = BuildEmployeeSnapshot(employee);
+
             // Soft delete: set IsActive = false
             employee.IsActive = false;
             employee.User.IsActive = false;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_DELETE_EMPLOYEE",
+                tableName: "Employee",
+                recordId: employee.EmployeeId,
+                beforeData: beforeSnapshot,
+                afterData: BuildEmployeeSnapshot(employee),
+                metadata: new { partnerId });
+        }
+
+        private static object BuildEmployeeSnapshot(Employee employee)
+        {
+            return new
+            {
+                employee.EmployeeId,
+                employee.PartnerId,
+                employee.UserId,
+                employee.FullName,
+                employee.RoleType,
+                employee.HireDate,
+                employee.IsActive,
+                User = employee.User == null
+                    ? null
+                    : new
+                    {
+                        employee.User.UserId,
+                        employee.User.Email,
+                        employee.User.Fullname,
+                        employee.User.Phone,
+                        employee.User.UserType,
+                        employee.User.IsActive
+                    }
+            };
         }
     }
 }

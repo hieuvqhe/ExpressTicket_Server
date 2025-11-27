@@ -239,6 +239,62 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             db.Bookings.Add(booking);
             await db.SaveChangesAsync(ct); // Save để lấy BookingId
 
+            // 5.5. Đánh dấu user đã sử dụng voucher (nếu có)
+            if (booking.VoucherId.HasValue && order.UserId.HasValue)
+            {
+                var userVoucher = await db.UserVouchers
+                    .FirstOrDefaultAsync(uv => uv.VoucherId == booking.VoucherId.Value && uv.UserId == order.UserId.Value, ct);
+
+                if (userVoucher == null)
+                {
+                    // Tạo mới record nếu chưa có
+                    userVoucher = new UserVoucher
+                    {
+                        VoucherId = booking.VoucherId.Value,
+                        UserId = order.UserId.Value,
+                        IsUsed = true,
+                        UsedAt = DateTime.UtcNow,
+                        BookingId = booking.BookingId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    db.UserVouchers.Add(userVoucher);
+                }
+                else
+                {
+                    // Cập nhật record nếu đã có (trường hợp hiếm, nhưng để an toàn)
+                    userVoucher.IsUsed = true;
+                    userVoucher.UsedAt = DateTime.UtcNow;
+                    userVoucher.BookingId = booking.BookingId;
+                }
+
+                // Tăng UsedCount của voucher
+                var voucher = await db.Vouchers
+                    .FirstOrDefaultAsync(v => v.VoucherId == booking.VoucherId.Value, ct);
+                if (voucher != null)
+                {
+                    voucher.UsedCount += 1;
+                    voucher.UpdatedAt = DateTime.UtcNow;
+                }
+
+                // ✅ Release voucher reservation (voucher đã được sử dụng thành công)
+                var reservation = await db.VoucherReservations
+                    .FirstOrDefaultAsync(r => r.SessionId == session.Id && r.VoucherId == booking.VoucherId.Value && r.ReleasedAt == null, ct);
+                if (reservation != null)
+                {
+                    reservation.ReleasedAt = DateTime.UtcNow;
+                }
+            }
+            else
+            {
+                // ✅ Release reservation nếu không có voucher (user đã xóa voucher trước khi checkout)
+                var reservation = await db.VoucherReservations
+                    .FirstOrDefaultAsync(r => r.SessionId == session.Id && r.ReleasedAt == null, ct);
+                if (reservation != null)
+                {
+                    reservation.ReleasedAt = DateTime.UtcNow;
+                }
+            }
+
             // 6. Tạo Tickets cho mỗi seat
             var showtime = await db.Showtimes
                 .Include(s => s.Screen)

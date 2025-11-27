@@ -20,10 +20,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class EmployeeCinemaAssignmentService : IEmployeeCinemaAssignmentService
     {
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
 
-        public EmployeeCinemaAssignmentService(CinemaDbCoreContext context)
+        public EmployeeCinemaAssignmentService(CinemaDbCoreContext context, IAuditLogService auditLogService)
         {
             _context = context;
+            _auditLogService = auditLogService;
         }
 
         public async Task AssignCinemaToEmployeeAsync(int partnerId, int employeeId, int cinemaId, int assignedByUserId)
@@ -76,6 +78,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
+            var beforeAssignments = await GetAssignmentsSnapshotAsync(employeeId);
+
             // Check if there's already an assignment for this employee-cinema pair (even if inactive)
             var existingAssignment = await _context.EmployeeCinemaAssignments
                 .FirstOrDefaultAsync(a => a.EmployeeId == employeeId && a.CinemaId == cinemaId);
@@ -108,6 +112,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             await _context.SaveChangesAsync();
+            var afterAssignments = await GetAssignmentsSnapshotAsync(employeeId);
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_ASSIGN_EMPLOYEE_CINEMA",
+                tableName: "EmployeeCinemaAssignment",
+                recordId: employeeId,
+                beforeData: beforeAssignments,
+                afterData: afterAssignments,
+                metadata: new { partnerId, cinemaId, assignedByUserId });
         }
 
         public async Task UnassignCinemaFromEmployeeAsync(int partnerId, int employeeId, int cinemaId)
@@ -129,10 +141,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy phân quyền này");
             }
 
+            var beforeAssignments = await GetAssignmentsSnapshotAsync(employeeId);
+
             assignment.IsActive = false;
             assignment.UnassignedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            var afterAssignments = await GetAssignmentsSnapshotAsync(employeeId);
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_REMOVE_EMPLOYEE_CINEMA",
+                tableName: "EmployeeCinemaAssignment",
+                recordId: employeeId,
+                beforeData: beforeAssignments,
+                afterData: afterAssignments,
+                metadata: new { partnerId, cinemaId });
         }
 
         public async Task<List<int>> GetAssignedCinemaIdsAsync(int employeeId)
@@ -155,6 +177,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Include(a => a.Cinema)
                 .Where(a => a.EmployeeId == employeeId && a.IsActive)
                 .Select(a => a.Cinema)
+                .ToListAsync();
+        }
+
+        private async Task<List<object>> GetAssignmentsSnapshotAsync(int employeeId)
+        {
+            return await _context.EmployeeCinemaAssignments
+                .Where(a => a.EmployeeId == employeeId)
+                .Select(a => (object)new
+                {
+                    a.AssignmentId,
+                    a.EmployeeId,
+                    a.CinemaId,
+                    a.IsActive,
+                    a.AssignedAt,
+                    a.AssignedBy,
+                    a.UnassignedAt
+                })
                 .ToListAsync();
         }
     }

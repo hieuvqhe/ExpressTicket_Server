@@ -16,6 +16,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Payment.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -51,6 +52,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// API tạo yêu cầu thanh toán PayOS cho một Order: sinh ra link thanh toán và mã QR để hiển thị cho người dùng.
         /// </summary>
         [HttpPost("create")]
+        [AuditAction("PAYMENT_CREATE", "Order", includeRequestBody: true)]
         public async Task<IActionResult> CreatePayment(
             [FromBody] CreatePayOSPaymentRequest request,
             CancellationToken ct)
@@ -102,6 +104,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// API dùng làm returnUrl cho PayOS: nhận kết quả thanh toán, cố gắng xử lý Order, sau đó redirect về trang FE tương ứng (success/return).
         /// </summary>
         [HttpGet("return")]
+        [AuditAction("PAYMENT_RETURN_HANDLER", "Order", includeRequestBody: false)]
         [AllowAnonymous]
         public async Task<IActionResult> HandleReturnUrl(
             [FromQuery] string? id, // PayOS payment link ID
@@ -579,6 +582,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// API để kiểm tra và cập nhật trạng thái thanh toán cho một Order ngay sau khi người dùng thanh toán xong trên PayOS.
         /// </summary>
         [HttpPost("check/{order_id}")]
+        [AuditAction("PAYMENT_CHECK_STATUS", "Order", recordIdRouteKey: "order_id")]
         public async Task<IActionResult> CheckPaymentStatus(
             [FromRoute] string order_id,
             CancellationToken ct = default)

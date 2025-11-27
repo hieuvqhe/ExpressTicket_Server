@@ -25,14 +25,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IManagerService _managerService;
         private readonly IAzureBlobService _azureBlobService;
         private readonly ILogger<ContractService> _logger;
+        private readonly IAuditLogService _auditLogService;
 
-        public ContractService(CinemaDbCoreContext context , IEmailService emailService , IManagerService managerService , IAzureBlobService azureBlobService, ILogger<ContractService> logger)
+        public ContractService(
+            CinemaDbCoreContext context,
+            IEmailService emailService,
+            IManagerService managerService,
+            IAzureBlobService azureBlobService,
+            ILogger<ContractService> logger,
+            IAuditLogService auditLogService)
         {
             _context = context;
             _emailService = emailService;
             _managerService = managerService;
             _azureBlobService = azureBlobService;
             _logger = logger;
+            _auditLogService = auditLogService;
         }
 
         public async Task<ContractResponse> CreateContractDraftAsync(int managerId, CreateContractRequest request)
@@ -77,6 +85,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Contracts.Add(contract);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_CREATE_CONTRACT",
+                tableName: "Contract",
+                recordId: contract.ContractId,
+                beforeData: null,
+                afterData: BuildContractAuditSnapshot(contract),
+                metadata: new
+                {
+                    request.ContractNumber,
+                    request.Title,
+                    request.ContractType
+                });
 
             // Lấy thông tin đầy đủ cho PDF generation
             var result = await GetContractWithFullDetailsAsync(contract.ContractId);
@@ -693,6 +713,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateContractForFinalization(contract);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildContractAuditSnapshot(contract);
 
             // Cập nhật thông tin hợp đồng
             // Cập nhật thông tin hợp đồng
@@ -726,6 +747,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_FINALIZE_CONTRACT",
+                tableName: "Contract",
+                recordId: contract.ContractId,
+                beforeData: beforeSnapshot,
+                afterData: BuildContractAuditSnapshot(contract),
+                metadata: new
+                {
+                    request.ManagerSignature
+                });
 
             // Lấy thông tin đầy đủ để trả về response
             var result = await GetContractWithFullDetailsAsync(contract.ContractId);
@@ -903,6 +934,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateContractForSignatureUpload(contract);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildContractAuditSnapshot(contract);
 
             // Thay thế PDF hợp đồng bằng PDF đã ký của partner
             // Manager sẽ xem PDF đã ký này thay vì PDF ban đầu
@@ -916,6 +948,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             contract.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_UPLOAD_SIGNATURE",
+                tableName: "Contract",
+                recordId: contract.ContractId,
+                beforeData: beforeSnapshot,
+                afterData: BuildContractAuditSnapshot(contract),
+                metadata: new { request.SignedContractPdfUrl });
 
             // Lấy thông tin đầy đủ để trả về response
             var result = await GetContractWithFullDetailsAsync(contract.ContractId);
@@ -1257,6 +1296,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateContractForUpdate(contract);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildContractAuditSnapshot(contract);
 
             // Cập nhật các field nếu có giá trị
             if (!string.IsNullOrWhiteSpace(request.ContractNumber) && request.ContractNumber != contract.ContractNumber)
@@ -1314,6 +1354,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             contract.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_UPDATE_CONTRACT",
+                tableName: "Contract",
+                recordId: contract.ContractId,
+                beforeData: beforeSnapshot,
+                afterData: BuildContractAuditSnapshot(contract));
 
             return await GetContractWithFullDetailsAsync(contract.ContractId);
         }
@@ -1350,6 +1396,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateContractForCancellation(contract);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildContractAuditSnapshot(contract);
 
             // Soft delete: cập nhật status thành cancelled
             contract.Status = "cancelled";
@@ -1358,6 +1405,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             contract.LockedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_DELETE_CONTRACT",
+                tableName: "Contract",
+                recordId: contract.ContractId,
+                beforeData: beforeSnapshot,
+                afterData: BuildContractAuditSnapshot(contract));
         }
 
         private void ValidateContractForUpdate(Contract contract)
@@ -1412,6 +1465,38 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Name = "CÔNG TY TNHH EXPRESS TICKET CINEMA SYSTEM",
                 Address = "123 Đường ABC, Quận 1, TP.HCM",
                 TaxCode = "0312345678"
+            };
+        }
+
+        private static object BuildContractAuditSnapshot(Contract contract)
+        {
+            return new
+            {
+                contract.ContractId,
+                contract.ContractNumber,
+                contract.Title,
+                contract.Description,
+                contract.ContractType,
+                contract.TermsAndConditions,
+                contract.Status,
+                contract.ManagerId,
+                contract.PartnerId,
+                contract.StartDate,
+                contract.EndDate,
+                contract.CommissionRate,
+                contract.MinimumRevenue,
+                contract.IsLocked,
+                contract.IsActive,
+                contract.ContractHash,
+                contract.PdfUrl,
+                contract.PartnerSignatureUrl,
+                contract.ManagerSignature,
+                contract.SignedAt,
+                contract.PartnerSignedAt,
+                contract.ManagerSignedAt,
+                contract.LockedAt,
+                contract.CreatedAt,
+                contract.UpdatedAt
             };
         }
 

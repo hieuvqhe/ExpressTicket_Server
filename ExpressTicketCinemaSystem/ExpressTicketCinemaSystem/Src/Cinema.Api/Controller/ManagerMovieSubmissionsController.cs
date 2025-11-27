@@ -5,6 +5,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -180,6 +181,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         // ------------------- APPROVE -------------------
         /// <summary>Duyệt submission (Pending → Approved). Tự động reject các Pending khác trùng tiêu đề.</summary>
         [HttpPut("{id:int}/approve")]
+        [AuditAction("MANAGER_APPROVE_MOVIE_SUBMISSION", "MovieSubmission", recordIdRouteKey: "id", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<MovieSubmissionResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -235,6 +237,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>Từ chối submission (Pending → Rejected) với lý do.</summary>
         [HttpPut("{id:int}/reject")]
+        [AuditAction("MANAGER_REJECT_MOVIE_SUBMISSION", "MovieSubmission", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<MovieSubmissionResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]

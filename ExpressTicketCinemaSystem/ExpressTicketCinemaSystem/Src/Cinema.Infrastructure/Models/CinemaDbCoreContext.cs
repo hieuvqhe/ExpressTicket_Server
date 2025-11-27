@@ -39,6 +39,8 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<EmployeeCinemaAssignment> EmployeeCinemaAssignments { get; set; }
 
+    public virtual DbSet<EmployeeCinemaPermission> EmployeeCinemaPermissions { get; set; }
+
     public virtual DbSet<GameShow> GameShows { get; set; }
 
     public virtual DbSet<Manager> Managers { get; set; }
@@ -59,6 +61,8 @@ public partial class CinemaDbCoreContext : DbContext
     public virtual DbSet<PasswordResetCode> PasswordResetCodes { get; set; }
 
     public virtual DbSet<Payment> Payments { get; set; }
+
+    public virtual DbSet<Permission> Permissions { get; set; }
 
     public virtual DbSet<RatingFilm> RatingFilms { get; set; }
 
@@ -93,6 +97,10 @@ public partial class CinemaDbCoreContext : DbContext
     public virtual DbSet<Voucher> Vouchers { get; set; }
 
     public virtual DbSet<VoucherEmailHistory> VoucherEmailHistories { get; set; }
+
+    public virtual DbSet<UserVoucher> UserVouchers { get; set; }
+
+    public virtual DbSet<VoucherReservation> VoucherReservations { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     { }
@@ -569,10 +577,108 @@ public partial class CinemaDbCoreContext : DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_EmployeeCinemaAssignment_Cinema");
 
+            entity.HasOne(d => d.AssignedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.AssignedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaAssignment_AssignedByUser");
+
             // Unique constraint: một employee không thể được gán trùng lặp cùng một cinema
             // Nhưng một employee có thể quản lý nhiều cinema khác nhau (1:N relationship)
             entity.HasIndex(e => new { e.EmployeeId, e.CinemaId })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<Permission>(entity =>
+        {
+            entity.HasKey(e => e.PermissionId).HasName("PK_Permissions");
+
+            entity.ToTable("Permissions");
+
+            entity.HasIndex(e => e.PermissionCode, "UQ_Permissions_Code").IsUnique();
+
+            entity.Property(e => e.PermissionId).HasColumnName("permission_id");
+            entity.Property(e => e.PermissionCode)
+                .HasMaxLength(100)
+                .IsUnicode(false)
+                .HasColumnName("permission_code");
+            entity.Property(e => e.PermissionName)
+                .HasMaxLength(255)
+                .IsUnicode(true)
+                .HasColumnName("permission_name");
+            entity.Property(e => e.ResourceType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("resource_type");
+            entity.Property(e => e.ActionType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("action_type");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .IsUnicode(true)
+                .HasColumnName("description");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<EmployeeCinemaPermission>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_EmployeeCinemaPermissions");
+
+            entity.ToTable("EmployeeCinemaPermissions");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
+            entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.PermissionId).HasColumnName("permission_id");
+            entity.Property(e => e.GrantedBy).HasColumnName("granted_by");
+            entity.Property(e => e.GrantedAt)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("granted_at");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.RevokedAt).HasColumnName("revoked_at");
+            entity.Property(e => e.RevokedBy).HasColumnName("revoked_by");
+
+            entity.HasOne(d => d.Employee).WithMany()
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_Employee");
+
+            entity.HasOne(d => d.Cinema).WithMany()
+                .HasForeignKey(d => d.CinemaId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_Cinema");
+
+            entity.HasOne(d => d.Permission).WithMany(p => p.EmployeeCinemaPermissions)
+                .HasForeignKey(d => d.PermissionId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_Permission");
+
+            entity.HasOne(d => d.GrantedByUser).WithMany()
+                .HasForeignKey(d => d.GrantedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_GrantedBy");
+
+            entity.HasOne(d => d.RevokedByUser).WithMany()
+                .HasForeignKey(d => d.RevokedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_RevokedBy");
+
+            // Index để tăng tốc truy vấn
+            entity.HasIndex(e => new { e.EmployeeId, e.CinemaId, e.PermissionId })
+                .HasDatabaseName("IX_EmployeeCinemaPermissions_Employee_Cinema_Permission")
+                .HasFilter("[is_active] = 1");
+
+            entity.HasIndex(e => e.EmployeeId)
+                .HasDatabaseName("IX_EmployeeCinemaPermissions_Employee_Active")
+                .HasFilter("[is_active] = 1");
         });
 
         modelBuilder.Entity<GameShow>(entity =>
@@ -1599,6 +1705,10 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("is_deleted")
                 .HasDefaultValue(false);
 
+            entity.Property(e => e.IsRestricted)
+                .HasColumnName("is_restricted")
+                .HasDefaultValue(false);
+
             entity.Property(e => e.CreatedAt)
                 .HasColumnName("created_at")
                 .HasDefaultValueSql("SYSUTCDATETIME()");
@@ -1649,6 +1759,98 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_VoucherEmailHistory_User");
+        });
+
+        modelBuilder.Entity<UserVoucher>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UserVoucher");
+
+            entity.ToTable("UserVoucher");
+
+            entity.HasIndex(e => new { e.VoucherId, e.UserId }, "IX_UserVoucher_Voucher_User")
+                .IsUnique();
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.IsUsed)
+                .HasColumnName("is_used")
+                .HasDefaultValue(false);
+            entity.Property(e => e.UsedAt)
+                .HasColumnName("used_at")
+                .IsRequired(false);
+            entity.Property(e => e.BookingId)
+                .HasColumnName("booking_id")
+                .IsRequired(false);
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+
+            // Foreign key constraints
+            entity.HasOne(d => d.Voucher)
+                .WithMany()
+                .HasForeignKey(d => d.VoucherId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UserVoucher_Voucher");
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UserVoucher_User");
+
+            entity.HasOne(d => d.Booking)
+                .WithMany()
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_UserVoucher_Booking");
+        });
+
+        modelBuilder.Entity<VoucherReservation>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_VoucherReservation");
+
+            entity.ToTable("VoucherReservation");
+
+            entity.HasIndex(e => e.VoucherId, "IX_VoucherReservation_Voucher_Active")
+                .IsUnique()
+                .HasFilter("[released_at] IS NULL");
+
+            entity.HasIndex(e => e.SessionId, "IX_VoucherReservation_Session");
+
+            entity.HasIndex(e => e.ExpiresAt, "IX_VoucherReservation_Expires")
+                .HasFilter("[released_at] IS NULL");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
+            entity.Property(e => e.SessionId).HasColumnName("session_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.ReservedAt)
+                .HasColumnName("reserved_at")
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.ReleasedAt)
+                .HasColumnName("released_at")
+                .IsRequired(false);
+
+            // Foreign key constraints
+            entity.HasOne(d => d.Voucher)
+                .WithMany()
+                .HasForeignKey(d => d.VoucherId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_VoucherReservation_Voucher");
+
+            entity.HasOne(d => d.Session)
+                .WithMany()
+                .HasForeignKey(d => d.SessionId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_VoucherReservation_BookingSession");
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VoucherReservation_User");
         });
 
         modelBuilder.Entity<Order>(entity =>

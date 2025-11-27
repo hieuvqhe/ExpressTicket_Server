@@ -37,3 +37,8 @@ public class AdminAuditLogDetailResponse
     public AdminAuditLogItemResponse Result { get; set; } = new();
 }
 
+
+
+
+
+

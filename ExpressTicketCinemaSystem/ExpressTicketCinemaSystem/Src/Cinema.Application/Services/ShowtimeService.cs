@@ -13,13 +13,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
     public interface IShowtimeService
     {
-        Task<PartnerShowtimeCreateResponse> CreatePartnerShowtimeAsync(int partnerId, PartnerShowtimeCreateRequest request);
-        Task<PartnerShowtimeCreateResponse> UpdatePartnerShowtimeAsync(int partnerId, int showtimeId, PartnerShowtimeCreateRequest request);
-        Task<PartnerShowtimeCreateResponse> DeletePartnerShowtimeAsync(int partnerId, int showtimeId);
-        Task<PartnerShowtimeDetailResponse> GetPartnerShowtimeByIdAsync(int partnerId, int showtimeId);
+        Task<PartnerShowtimeCreateResponse> CreatePartnerShowtimeAsync(int partnerId, PartnerShowtimeCreateRequest request, string auditAction = "PARTNER_CREATE_SHOWTIME");
+        Task<PartnerShowtimeCreateResponse> UpdatePartnerShowtimeAsync(int partnerId, int showtimeId, PartnerShowtimeCreateRequest request, string auditAction = "PARTNER_UPDATE_SHOWTIME");
+        Task<PartnerShowtimeCreateResponse> DeletePartnerShowtimeAsync(int partnerId, int showtimeId, string auditAction = "PARTNER_DELETE_SHOWTIME");
+        Task<PartnerShowtimeDetailResponse> GetPartnerShowtimeByIdAsync(int partnerId, int showtimeId, int userId);
         Task<PartnerShowtimeDetailResponse> GetShowtimeByIdPublicAsync(int showtimeId);
 
-        Task<PartnerShowtimeListResponse> GetPartnerShowtimesAsync(int partnerId, PartnerShowtimeQueryRequest request);
+        Task<PartnerShowtimeListResponse> GetPartnerShowtimesAsync(int partnerId, int userId, PartnerShowtimeQueryRequest request);
     }
 
     public class ShowtimeService : IShowtimeService
@@ -28,13 +28,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private static DateTime NowVN() => DateTime.UtcNow.AddHours(7);
         private static DateOnly TodayVN() => DateOnly.FromDateTime(NowVN());
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
+        private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
 
-        public ShowtimeService(CinemaDbCoreContext context)
+        public ShowtimeService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService)
         {
             _context = context;
+            _auditLogService = auditLogService;
+            _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
         }
 
-        public async Task<PartnerShowtimeCreateResponse> CreatePartnerShowtimeAsync(int partnerId, PartnerShowtimeCreateRequest request)
+        public async Task<PartnerShowtimeCreateResponse> CreatePartnerShowtimeAsync(int partnerId, PartnerShowtimeCreateRequest request, string auditAction = "PARTNER_CREATE_SHOWTIME")
         {
             // ==================== VALIDATION SECTION ====================
             await ValidatePartnerOwnsCinemaAndScreenAsync(partnerId, request.CinemaId, request.ScreenId);
@@ -63,6 +67,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Showtimes.Add(showtime);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: auditAction,
+                tableName: "Showtime",
+                recordId: showtime.ShowtimeId,
+                beforeData: null,
+                afterData: BuildShowtimeSnapshot(showtime),
+                metadata: new
+                {
+                    partnerId,
+                    request.CinemaId,
+                    request.ScreenId,
+                    request.MovieId
+                });
 
             return new PartnerShowtimeCreateResponse
             {
@@ -70,7 +87,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
-        public async Task<PartnerShowtimeCreateResponse> UpdatePartnerShowtimeAsync(int partnerId, int showtimeId, PartnerShowtimeCreateRequest request)
+        public async Task<PartnerShowtimeCreateResponse> UpdatePartnerShowtimeAsync(int partnerId, int showtimeId, PartnerShowtimeCreateRequest request, string auditAction = "PARTNER_UPDATE_SHOWTIME")
         {
             // ==================== VALIDATION SECTION ====================
             var existingShowtime = await ValidateAndGetShowtimeAsync(partnerId, showtimeId);
@@ -84,6 +101,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateShowtimeStatus(request.Status);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildShowtimeSnapshot(existingShowtime);
+
             existingShowtime.CinemaId = request.CinemaId;
             existingShowtime.ScreenId = request.ScreenId;
             existingShowtime.MovieId = request.MovieId;
@@ -96,6 +115,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             existingShowtime.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: auditAction,
+                tableName: "Showtime",
+                recordId: existingShowtime.ShowtimeId,
+                beforeData: beforeSnapshot,
+                afterData: BuildShowtimeSnapshot(existingShowtime),
+                metadata: new
+                {
+                    partnerId,
+                    request.CinemaId,
+                    request.ScreenId,
+                    request.MovieId
+                });
 
             return new PartnerShowtimeCreateResponse
             {
@@ -103,7 +135,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
-        public async Task<PartnerShowtimeCreateResponse> DeletePartnerShowtimeAsync(int partnerId, int showtimeId)
+        public async Task<PartnerShowtimeCreateResponse> DeletePartnerShowtimeAsync(int partnerId, int showtimeId, string auditAction = "PARTNER_DELETE_SHOWTIME")
         {
             // ==================== VALIDATION SECTION ====================
             var existingShowtime = await ValidateAndGetShowtimeAsync(partnerId, showtimeId);
@@ -118,16 +150,41 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await ValidateNoBookingsForShowtimeAsync(showtimeId);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildShowtimeSnapshot(existingShowtime);
+
             existingShowtime.Status = "disabled";
             existingShowtime.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: auditAction,
+                tableName: "Showtime",
+                recordId: existingShowtime.ShowtimeId,
+                beforeData: beforeSnapshot,
+                afterData: BuildShowtimeSnapshot(existingShowtime),
+                metadata: new { partnerId });
 
             return new PartnerShowtimeCreateResponse
             {
                 ShowtimeId = existingShowtime.ShowtimeId
             };
         }
+
+        private static object BuildShowtimeSnapshot(Showtime showtime) => new
+        {
+            showtime.ShowtimeId,
+            showtime.CinemaId,
+            showtime.ScreenId,
+            showtime.MovieId,
+            showtime.ShowDatetime,
+            showtime.EndTime,
+            showtime.BasePrice,
+            showtime.AvailableSeats,
+            showtime.FormatType,
+            showtime.Status,
+            showtime.CreatedAt,
+            showtime.UpdatedAt
+        };
 
         // ==================== VALIDATION METHODS ====================
 
@@ -309,8 +366,35 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return showtime;
         }
 
-        public async Task<PartnerShowtimeDetailResponse> GetPartnerShowtimeByIdAsync(int partnerId, int showtimeId)
+        public async Task<PartnerShowtimeDetailResponse> GetPartnerShowtimeByIdAsync(int partnerId, int showtimeId, int userId)
         {
+            // Nếu là Staff, kiểm tra có được phân quyền rạp của showtime này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    // Lấy cinemaId từ showtime
+                    var showtimeCinema = await _context.Showtimes
+                        .Include(s => s.Cinema)
+                        .Where(s => s.ShowtimeId == showtimeId)
+                        .Select(s => s.CinemaId)
+                        .FirstOrDefaultAsync();
+
+                    if (showtimeCinema > 0)
+                    {
+                        var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, showtimeCinema);
+                        if (!hasAccess)
+                        {
+                            throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                        }
+                    }
+                }
+            }
+
             var showtime = await _context.Showtimes
                 .Include(s => s.Movie)
                 .Include(s => s.Cinema)
@@ -429,7 +513,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return showtime;
         }
 
-        public async Task<PartnerShowtimeListResponse> GetPartnerShowtimesAsync(int partnerId, PartnerShowtimeQueryRequest request)
+        public async Task<PartnerShowtimeListResponse> GetPartnerShowtimesAsync(int partnerId, int userId, PartnerShowtimeQueryRequest request)
         {
             // Validate parameters
             ValidateQueryParameters(request);
@@ -442,6 +526,39 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Where(s => s.Cinema.PartnerId == partnerId &&
                            s.Status != "disabled" && // Loại bỏ các showtime đã bị disabled
                            (s.Status == "scheduled" || s.Status == "finished")); // Chỉ lấy scheduled và finished
+
+            // Nếu là Staff, chỉ lấy showtimes của các rạp được phân quyền
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    // Lấy danh sách cinemaIds được phân quyền cho Staff
+                    var assignedCinemaIds = await _context.EmployeeCinemaAssignments
+                        .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                        .Select(eca => eca.CinemaId)
+                        .ToListAsync();
+
+                    if (assignedCinemaIds.Count == 0)
+                    {
+                        // Staff chưa được phân quyền rạp nào
+                        return new PartnerShowtimeListResponse
+                        {
+                            Showtimes = new List<PartnerShowtimeListItem>(),
+                            Total = 0,
+                            Page = request.Page,
+                            Limit = request.Limit,
+                            TotalPages = 0
+                        };
+                    }
+
+                    // Filter chỉ lấy showtimes của các rạp được phân quyền
+                    baseQuery = baseQuery.Where(s => assignedCinemaIds.Contains(s.CinemaId));
+                }
+            }
 
             // Apply filters
             var filteredQuery = ApplyFilters(baseQuery, request);

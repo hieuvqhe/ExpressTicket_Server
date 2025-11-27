@@ -24,13 +24,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     {
         private readonly CinemaDbCoreContext _context;
         private readonly ILogger<PartnerMovieManagementService> _logger;
+        private readonly IAuditLogService _auditLogService;
 
         public PartnerMovieManagementService(
        CinemaDbCoreContext context,
-       ILogger<PartnerMovieManagementService> logger)
+       ILogger<PartnerMovieManagementService> logger,
+       IAuditLogService auditLogService)
         {
             _context = context;
             _logger = logger;
+            _auditLogService = auditLogService;
         }
         private void LogStage(string stage, object? payload = null)
         {
@@ -197,6 +200,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     try
                     {
                         await _context.SaveChangesAsync();
+                        await LogSubmissionActorChangeAsync(
+                            action: "PARTNER_SUBMISSION_ADD_ACTOR",
+                            actor: link,
+                            before: null,
+                            metadata: new { submissionId, partnerId, mode = "link_by_id" });
                         Console.WriteLine(Tag($"SUCCESS | linked system actor id={actor.ActorId}"));
                     }
                     catch (DbUpdateException ex)
@@ -255,6 +263,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     try
                     {
                         await _context.SaveChangesAsync();
+                        await LogSubmissionActorChangeAsync(
+                            action: "PARTNER_SUBMISSION_ADD_ACTOR",
+                            actor: link,
+                            before: null,
+                            metadata: new { submissionId, partnerId, mode = "link_by_name" });
                         Console.WriteLine(Tag($"SUCCESS | linked to system actor id={existingSystem.ActorId}"));
                     }
                     catch (DbUpdateException ex)
@@ -296,6 +309,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 try
                 {
                     await _context.SaveChangesAsync();
+                    await LogSubmissionActorChangeAsync(
+                        action: "PARTNER_SUBMISSION_ADD_ACTOR",
+                        actor: draft,
+                        before: null,
+                        metadata: new { submissionId, partnerId, mode = "draft_actor" });
                     Console.WriteLine(Tag($"SUCCESS | created DRAFT actor row id={draft.MovieSubmissionActorId} (actor_id=NULL)"));
                 }
                 catch (DbUpdateException ex)
@@ -352,6 +370,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 if (submissionActor == null)
                     throw new NotFoundException("Không tìm thấy diễn viên trong submission");
 
+                var beforeActorSnapshot = BuildSubmissionActorSnapshot(submissionActor);
+
                 if (string.IsNullOrWhiteSpace(request.Role))
                     throw new ValidationException("role", "Vai diễn là bắt buộc");
 
@@ -367,6 +387,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                     submissionActor.Role = request.Role.Trim();
                     await _context.SaveChangesAsync();
+                    await LogSubmissionActorChangeAsync(
+                        action: "PARTNER_SUBMISSION_UPDATE_ACTOR",
+                        actor: submissionActor,
+                        before: beforeActorSnapshot,
+                        metadata: new { submissionId, partnerId, mode = "system_actor" });
                     Console.WriteLine("[UpdateActor] updated role for system-linked actor");
                     return MapToSubmissionActorResponse(submissionActor);
                 }
@@ -427,6 +452,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 submissionActor.Role = request.Role.Trim();
 
                 await _context.SaveChangesAsync();
+                await LogSubmissionActorChangeAsync(
+                    action: "PARTNER_SUBMISSION_UPDATE_ACTOR",
+                    actor: submissionActor,
+                    before: beforeActorSnapshot,
+                    metadata: new { submissionId, partnerId, mode = "draft_actor" });
                 Console.WriteLine("[UpdateActor] draft actor updated OK");
                 return MapToSubmissionActorResponse(submissionActor);
             }
@@ -454,8 +484,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (submissionActor == null)
                 throw new NotFoundException("Không tìm thấy diễn viên trong submission");
 
+            var beforeSnapshot = BuildSubmissionActorSnapshot(submissionActor);
             _context.MovieSubmissionActors.Remove(submissionActor);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_SUBMISSION_DELETE_ACTOR",
+                tableName: "MovieSubmissionActor",
+                recordId: submissionActorId,
+                beforeData: beforeSnapshot,
+                afterData: new { MovieSubmissionActorId = submissionActorId, Deleted = true },
+                metadata: new { submissionId, partnerId });
         }
 
         // ==================== MOVIE SUBMISSION CRUD METHODS ====================
@@ -586,6 +624,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                 // 6) Commit
                 await tx.CommitAsync();
+                await LogSubmissionChangeAsync(
+                    action: "PARTNER_CREATE_MOVIE_SUBMISSION",
+                    submission: submission,
+                    before: null,
+                    metadata: new { partnerId, submission.MovieSubmissionId });
                 sw.Stop();
                 LogStage("SUCCESS", new { elapsedMs = sw.ElapsedMilliseconds, submissionId = result.MovieSubmissionId });
 
@@ -822,6 +865,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             try
             {
                 var submission = await ValidateSubmissionAccessAsync(submissionId, partnerId, allowRejected: true);
+                var beforeSnapshot = BuildSubmissionSnapshot(submission);
                 
                 // Chặn update nếu bị reject vì trùng phim (phim đã tồn tại, không thể sửa)
                 if (submission.Status == "Rejected" &&
@@ -873,6 +917,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 await _context.SaveChangesAsync();
                 await tx.CommitAsync();
 
+                await LogSubmissionChangeAsync(
+                    action: "PARTNER_UPDATE_MOVIE_SUBMISSION",
+                    submission: submission,
+                    before: beforeSnapshot,
+                    metadata: new { partnerId, submissionId });
+
                 return await GetMovieSubmissionResponseAsync(submissionId);
             }
             catch
@@ -898,6 +948,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         submissionId);
                     throw new ValidationException("status", "Phim này đã tồn tại trong hệ thống. Không thể nộp lại.");
                 }
+
+                var beforeSnapshot = BuildSubmissionSnapshot(submission);
 
                 // Chuẩn hoá tiêu đề khi cần so khớp Movie có sẵn
                 string key = NormalizeTitle(submission.Title);
@@ -941,6 +993,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 submission.UpdatedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
+                await _auditLogService.LogEntityChangeAsync(
+                    action: "PARTNER_SUBMIT_MOVIE_SUBMISSION",
+                    tableName: "MovieSubmission",
+                    recordId: submission.MovieSubmissionId,
+                    beforeData: beforeSnapshot,
+                    afterData: BuildSubmissionSnapshot(submission),
+                    metadata: new { partnerId, submissionId });
                 _logger.LogInformation("[SubmitSubmission] SUCCESS | submissionId={SubmissionId}", submissionId);
 
                 // Trả về thông tin cơ bản sau khi nộp thành công
@@ -965,6 +1024,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         public async Task DeleteMovieSubmissionAsync(int submissionId, int partnerId)
         {
             var submission = await ValidateSubmissionAccessAsync(submissionId, partnerId);
+            var beforeSnapshot = BuildSubmissionSnapshot(submission);
 
             // Soft delete - remove actors first
             var actors = _context.MovieSubmissionActors
@@ -974,6 +1034,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Then remove submission
             _context.MovieSubmissions.Remove(submission);
             await _context.SaveChangesAsync();
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_DELETE_MOVIE_SUBMISSION",
+                tableName: "MovieSubmission",
+                recordId: submission.MovieSubmissionId,
+                beforeData: beforeSnapshot,
+                afterData: new { submission.MovieSubmissionId, Deleted = true },
+                metadata: new { partnerId });
         }
 
         // ==================== PRIVATE HELPER METHODS ====================
@@ -1407,6 +1475,63 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 IsExistingActor = submissionActor.ActorId.HasValue
             };
         }
+
+        private static object BuildSubmissionSnapshot(MovieSubmission submission) => new
+        {
+            submission.MovieSubmissionId,
+            submission.PartnerId,
+            submission.Title,
+            submission.Genre,
+            submission.DurationMinutes,
+            submission.Director,
+            submission.Language,
+            submission.Country,
+            submission.PosterUrl,
+            submission.BannerUrl,
+            submission.Production,
+            submission.Description,
+            submission.PremiereDate,
+            submission.EndDate,
+            submission.TrailerUrl,
+            submission.CopyrightDocumentUrl,
+            submission.DistributionLicenseUrl,
+            submission.AdditionalNotes,
+            submission.Status,
+            submission.SubmittedAt,
+            submission.ReviewedAt,
+            submission.RejectionReason,
+            submission.MovieId,
+            submission.CreatedAt,
+            submission.UpdatedAt
+        };
+
+        private static object BuildSubmissionActorSnapshot(MovieSubmissionActor actor) => new
+        {
+            actor.MovieSubmissionActorId,
+            actor.MovieSubmissionId,
+            actor.ActorId,
+            actor.ActorName,
+            actor.ActorAvatarUrl,
+            actor.Role
+        };
+
+        private Task LogSubmissionChangeAsync(string action, MovieSubmission submission, object? before, object? metadata) =>
+            _auditLogService.LogEntityChangeAsync(
+                action: action,
+                tableName: "MovieSubmission",
+                recordId: submission.MovieSubmissionId,
+                beforeData: before,
+                afterData: BuildSubmissionSnapshot(submission),
+                metadata: metadata);
+
+        private Task LogSubmissionActorChangeAsync(string action, MovieSubmissionActor actor, object? before, object? metadata) =>
+            _auditLogService.LogEntityChangeAsync(
+                action: action,
+                tableName: "MovieSubmissionActor",
+                recordId: actor.MovieSubmissionActorId,
+                beforeData: before,
+                afterData: BuildSubmissionActorSnapshot(actor),
+                metadata: metadata);
 
         private IQueryable<Actor> ApplyActorSorting(IQueryable<Actor> query, string? sortBy, string? sortOrder)
         {

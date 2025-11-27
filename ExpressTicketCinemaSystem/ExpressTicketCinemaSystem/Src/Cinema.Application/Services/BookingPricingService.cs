@@ -53,6 +53,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private static string WritePricing(PricingBreakdown p)
             => JsonSerializer.Serialize(p);
 
+        private static int? GetUserId(ClaimsPrincipal? user)
+        {
+            if (user?.Identity?.IsAuthenticated != true) return null;
+            var idClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                       ?? user.FindFirst("sub")?.Value
+                       ?? user.FindFirst("user_id")?.Value;
+            return int.TryParse(idClaim, out var id) ? id : (int?)null;
+        }
+
         public async Task<ApplyCouponResponse> ApplyCouponAsync(Guid sessionId, ClaimsPrincipal user, ApplyCouponRequest req, CancellationToken ct = default)
         {
             if (user?.Identity?.IsAuthenticated != true)
@@ -72,7 +81,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var pricing = ReadPricing(sess.PricingJson);
             var currentTotalBeforeDiscount = pricing.SeatsSubtotal + pricing.CombosSubtotal + pricing.SurchargeSubtotal + pricing.Fees;
 
-            var vres = await _voucherService.ValidateVoucherForUserAsync(req.VoucherCode.Trim().ToUpper(), currentTotalBeforeDiscount);
+            var userId = GetUserId(user);
+            if (!userId.HasValue)
+            {
+                throw new UnauthorizedException("Bạn cần đăng nhập để áp dụng voucher");
+            }
+
+            // ✅ Reserve voucher cho session này (tránh race condition)
+            var vres = await _voucherService.ReserveVoucherForSessionAsync(
+                req.VoucherCode.Trim().ToUpper(), 
+                currentTotalBeforeDiscount, 
+                sessionId, 
+                userId.Value, 
+                sess.ExpiresAt);
+            
             if (!vres.IsValid)
                 throw new ValidationException("voucherCode", vres.Message);
 

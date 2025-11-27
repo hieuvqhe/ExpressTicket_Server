@@ -9,14 +9,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class ManagerMovieSubmissionService
     {
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
 
         // Các trạng thái hợp lệ cho màn manager (trừ Draft)
         private static readonly HashSet<string> NonDraftStatuses =
             new(StringComparer.OrdinalIgnoreCase) { "Pending", "Rejected", "Resubmitted", "Approved" };
 
-        public ManagerMovieSubmissionService(CinemaDbCoreContext context)
+        public ManagerMovieSubmissionService(CinemaDbCoreContext context, IAuditLogService auditLogService)
         {
             _context = context;
+            _auditLogService = auditLogService;
         }
 
         // GET all (non-draft)
@@ -231,6 +233,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (s.Status != "Pending") throw new ValidationException("status", "Chỉ duyệt được submission ở trạng thái Pending.");
             if (s.ReviewerId != managerId) /* nếu muốn ràng đúng manager */
                 throw new UnauthorizedException("Bạn không phải reviewer được phân công.");
+            var beforeSnapshot = BuildSubmissionSnapshot(s);
 
             string key = NormalizeTitle(s.Title);
 
@@ -344,6 +347,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await _context.SaveChangesAsync();
 
             await tx.CommitAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_APPROVE_MOVIE_SUBMISSION",
+                tableName: "MovieSubmission",
+                recordId: s.MovieSubmissionId,
+                beforeData: beforeSnapshot,
+                afterData: BuildSubmissionSnapshot(s),
+                metadata: new { managerId, s.MovieId });
 
             return await MapToMovieSubmissionResponseAsync(s);
         }
@@ -354,6 +364,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (s.Status != "Pending") throw new ValidationException("status", "Chỉ từ chối được submission ở trạng thái Pending.");
             if (s.ReviewerId != managerId)
                 throw new UnauthorizedException("Bạn không phải reviewer được phân công.");
+            var beforeSnapshot = BuildSubmissionSnapshot(s);
 
             s.Status = "Rejected";
             s.ReviewerId = managerId;
@@ -364,6 +375,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             s.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_REJECT_MOVIE_SUBMISSION",
+                tableName: "MovieSubmission",
+                recordId: s.MovieSubmissionId,
+                beforeData: beforeSnapshot,
+                afterData: BuildSubmissionSnapshot(s),
+                metadata: new { managerId });
             return await MapToMovieSubmissionResponseAsync(s);
         }
         private static string NormalizeTitle(string? title)
@@ -424,6 +442,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Actors = actors
             };
         }
+
+        private static object BuildSubmissionSnapshot(MovieSubmission submission) => new
+        {
+            submission.MovieSubmissionId,
+            submission.PartnerId,
+            submission.Title,
+            submission.Genre,
+            submission.DurationMinutes,
+            submission.Director,
+            submission.Language,
+            submission.Country,
+            submission.PosterUrl,
+            submission.Status,
+            submission.SubmittedAt,
+            submission.ReviewedAt,
+            submission.RejectionReason,
+            submission.MovieId,
+            submission.CreatedAt,
+            submission.UpdatedAt
+        };
 
     }
 }

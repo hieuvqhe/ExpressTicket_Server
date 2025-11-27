@@ -12,6 +12,7 @@
         public int UsedCount { get; set; }
         public string? Description { get; set; }
         public bool IsActive { get; set; }
+        public bool IsRestricted { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
 
@@ -31,6 +32,7 @@
         public int? UsageLimit { get; set; }
         public int UsedCount { get; set; }
         public bool IsActive { get; set; }
+        public bool IsRestricted { get; set; }
         public DateTime CreatedAt { get; set; }
         public string ManagerName { get; set; } = null!;
     }

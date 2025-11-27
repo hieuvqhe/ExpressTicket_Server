@@ -30,5 +30,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests
         public string? Description { get; set; }
 
         public bool IsActive { get; set; } = true;
+
+        /// <summary>
+        /// false = Public voucher (ai cũng dùng được, như voucher giáng sinh, top 1-2-3)
+        /// true = Restricted voucher (chỉ user được gửi email mới dùng được, như voucher cho khách hàng đặc biệt)
+        /// </summary>
+        public bool IsRestricted { get; set; } = false;
     }
 }

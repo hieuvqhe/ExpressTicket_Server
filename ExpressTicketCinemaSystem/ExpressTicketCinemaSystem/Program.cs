@@ -199,8 +199,6 @@ builder.Services.Configure<AzureBlobStorageSettings>(
 
 // DEPENDENCY INJECTION 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
@@ -209,6 +207,8 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<PartnerService>();
 builder.Services.AddScoped<EmployeeManagementService>();
 builder.Services.AddScoped<IEmployeeCinemaAssignmentService, EmployeeCinemaAssignmentService>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<ContractService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IManagerService, ManagerService>();
@@ -230,6 +230,8 @@ builder.Services.AddScoped<IBookingExtrasService, BookingExtrasService>();
 builder.Services.AddScoped<IBookingComboQueryService, BookingComboQueryService>();
 builder.Services.AddScoped<ISeatLockAppService, SeatLockAppService>();
 builder.Services.AddScoped<ICatalogQueryService, CatalogQueryService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 // SignalR
 builder.Services.AddSignalR(options =>

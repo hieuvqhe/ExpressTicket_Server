@@ -12,3 +12,8 @@ public interface ICurrentUserService
     ClaimsPrincipal? Principal { get; }
 }
 
+
+
+
+
+
