@@ -596,6 +596,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Include(b => b.Tickets)
                     .ThenInclude(t => t.Seat)
                         .ThenInclude(s => s.SeatType)
+                .Include(b => b.ServiceOrders)
+                    .ThenInclude(so => so.Service)
                 .Include(b => b.Voucher)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(b => b.BookingId == bookingId && b.CustomerId == customer.CustomerId);
@@ -603,6 +605,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // If booking not found or doesn't belong to this user
             if (booking == null)
                 throw new NotFoundException("Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn hàng này.");
+
+            // Get SeatTickets for check-in status
+            var seatTickets = await _context.SeatTickets
+                .Where(st => st.BookingId == bookingId)
+                .ToDictionaryAsync(st => st.TicketId, st => st);
+
+            // Calculate totals from Tickets and ServiceOrders
+            var ticketsTotal = booking.Tickets.Sum(t => t.Price);
+            var combosTotal = booking.ServiceOrders.Sum(so => so.UnitPrice * so.Quantity);
 
             // Map to response DTO
             var response = new UserOrderDetailResponse
@@ -613,6 +624,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     BookingCode = booking.BookingCode,
                     BookingTime = booking.BookingTime,
                     TotalAmount = booking.TotalAmount,
+                    TicketsTotal = ticketsTotal,
+                    CombosTotal = combosTotal,
                     Status = booking.Status,
                     State = booking.State,
                     PaymentStatus = booking.PaymentStatus,
@@ -656,19 +669,33 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     Phone = booking.Showtime.Cinema.Phone,
                     Email = booking.Showtime.Cinema.Email
                 },
-                Tickets = booking.Tickets.Select(t => new OrderDetailTicketDto
+                Tickets = booking.Tickets.Select(t => 
                 {
-                    TicketId = t.TicketId,
-                    Price = t.Price,
-                    Status = t.Status,
-                    Seat = new OrderDetailSeatDto
+                    var seatTicket = seatTickets.GetValueOrDefault(t.TicketId);
+                    return new OrderDetailTicketDto
                     {
-                        SeatId = t.Seat.SeatId,
-                        RowCode = t.Seat.RowCode,
-                        SeatNumber = t.Seat.SeatNumber,
-                        SeatName = t.Seat.SeatName ?? $"{t.Seat.RowCode}{t.Seat.SeatNumber}",
-                        SeatTypeName = t.Seat.SeatType?.Name
-                    }
+                        TicketId = t.TicketId,
+                        Price = t.Price,
+                        Status = t.Status,
+                        CheckInStatus = seatTicket?.CheckInStatus ?? "NOT_CHECKED_IN",
+                        CheckInTime = seatTicket?.CheckInTime,
+                        Seat = new OrderDetailSeatDto
+                        {
+                            SeatId = t.Seat.SeatId,
+                            RowCode = t.Seat.RowCode,
+                            SeatNumber = t.Seat.SeatNumber,
+                            SeatName = t.Seat.SeatName ?? $"{t.Seat.RowCode}{t.Seat.SeatNumber}",
+                            SeatTypeName = t.Seat.SeatType?.Name
+                        }
+                    };
+                }).ToList(),
+                Combos = booking.ServiceOrders.Select(so => new OrderDetailComboDto
+                {
+                    ServiceId = so.ServiceId,
+                    ServiceName = so.Service?.ServiceName ?? "Unknown",
+                    Quantity = so.Quantity,
+                    UnitPrice = so.UnitPrice,
+                    SubTotal = so.UnitPrice * so.Quantity
                 }).ToList(),
                 Voucher = booking.Voucher != null ? new OrderDetailVoucherDto
                 {
@@ -770,50 +797,62 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Take(request.PageSize)
                 .ToListAsync();
 
+            // Get SeatTickets for check-in status
+            var ticketIds = tickets.Select(t => t.TicketId).ToList();
+            var seatTicketsDict = await _context.SeatTickets
+                .Where(st => ticketIds.Contains(st.TicketId))
+                .ToDictionaryAsync(st => st.TicketId, st => st);
+
             // Map to response DTO
-            var items = tickets.Select(t => new UserTicketItemDto
+            var items = tickets.Select(t => 
             {
-                TicketId = t.TicketId,
-                Price = t.Price,
-                Status = t.Status,
-                Booking = new TicketBookingDto
+                var seatTicket = seatTicketsDict.GetValueOrDefault(t.TicketId);
+                return new UserTicketItemDto
                 {
-                    BookingId = t.Booking.BookingId,
-                    BookingCode = t.Booking.BookingCode,
-                    PaymentStatus = t.Booking.PaymentStatus
-                },
-                Movie = new TicketMovieDto
-                {
-                    MovieId = t.Showtime.Movie.MovieId,
-                    Title = t.Showtime.Movie.Title,
-                    DurationMinutes = t.Showtime.Movie.DurationMinutes,
-                    PosterUrl = t.Showtime.Movie.PosterUrl,
-                    Genre = t.Showtime.Movie.Genre
-                },
-                Cinema = new TicketCinemaDto
-                {
-                    CinemaId = t.Showtime.Cinema.CinemaId,
-                    CinemaName = t.Showtime.Cinema.CinemaName,
-                    Address = t.Showtime.Cinema.Address,
-                    City = t.Showtime.Cinema.City,
-                    District = t.Showtime.Cinema.District
-                },
-                Showtime = new TicketShowtimeDto
-                {
-                    ShowtimeId = t.Showtime.ShowtimeId,
-                    ShowDatetime = t.Showtime.ShowDatetime,
-                    EndTime = t.Showtime.EndTime,
-                    FormatType = t.Showtime.FormatType,
-                    Status = t.Showtime.Status
-                },
-                Seat = new TicketSeatDto
-                {
-                    SeatId = t.Seat.SeatId,
-                    RowCode = t.Seat.RowCode,
-                    SeatNumber = t.Seat.SeatNumber,
-                    SeatName = t.Seat.SeatName ?? $"{t.Seat.RowCode}{t.Seat.SeatNumber}",
-                    SeatTypeName = t.Seat.SeatType?.Name
-                }
+                    TicketId = t.TicketId,
+                    Price = t.Price,
+                    Status = t.Status,
+                    CheckInStatus = seatTicket?.CheckInStatus ?? "NOT_CHECKED_IN",
+                    CheckInTime = seatTicket?.CheckInTime,
+                    Booking = new TicketBookingDto
+                    {
+                        BookingId = t.Booking.BookingId,
+                        BookingCode = t.Booking.BookingCode,
+                        PaymentStatus = t.Booking.PaymentStatus
+                    },
+                    Movie = new TicketMovieDto
+                    {
+                        MovieId = t.Showtime.Movie.MovieId,
+                        Title = t.Showtime.Movie.Title,
+                        DurationMinutes = t.Showtime.Movie.DurationMinutes,
+                        PosterUrl = t.Showtime.Movie.PosterUrl,
+                        Genre = t.Showtime.Movie.Genre
+                    },
+                    Cinema = new TicketCinemaDto
+                    {
+                        CinemaId = t.Showtime.Cinema.CinemaId,
+                        CinemaName = t.Showtime.Cinema.CinemaName,
+                        Address = t.Showtime.Cinema.Address,
+                        City = t.Showtime.Cinema.City,
+                        District = t.Showtime.Cinema.District
+                    },
+                    Showtime = new TicketShowtimeDto
+                    {
+                        ShowtimeId = t.Showtime.ShowtimeId,
+                        ShowDatetime = t.Showtime.ShowDatetime,
+                        EndTime = t.Showtime.EndTime,
+                        FormatType = t.Showtime.FormatType,
+                        Status = t.Showtime.Status
+                    },
+                    Seat = new TicketSeatDto
+                    {
+                        SeatId = t.Seat.SeatId,
+                        RowCode = t.Seat.RowCode,
+                        SeatNumber = t.Seat.SeatNumber,
+                        SeatName = t.Seat.SeatName ?? $"{t.Seat.RowCode}{t.Seat.SeatNumber}",
+                        SeatTypeName = t.Seat.SeatType?.Name
+                    }
+                };
             }).ToList();
 
             var totalPages = (int)Math.Ceiling((double)totalItems / request.PageSize);

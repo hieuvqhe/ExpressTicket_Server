@@ -30,13 +30,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         public async Task AssignCinemaToEmployeeAsync(int partnerId, int employeeId, int cinemaId, int assignedByUserId)
         {
-            // Validate employee belongs to partner
+            // Validate employee belongs to partner and is either Staff or Cashier
             var employee = await _context.Employees
-                .FirstOrDefaultAsync(e => e.EmployeeId == employeeId && e.PartnerId == partnerId && e.RoleType == "Staff");
+                .FirstOrDefaultAsync(e => e.EmployeeId == employeeId && e.PartnerId == partnerId && (e.RoleType == "Staff" || e.RoleType == "Cashier"));
 
             if (employee == null)
             {
-                throw new NotFoundException("Không tìm thấy nhân viên Staff hoặc không thuộc quyền quản lý của bạn");
+                throw new NotFoundException("Không tìm thấy nhân viên Staff/Cashier hoặc không thuộc quyền quản lý của bạn");
             }
 
             // Validate employee is active
@@ -60,7 +60,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new ValidationException("cinemaId", "Chỉ có thể phân quyền rạp đang hoạt động cho nhân viên");
             }
 
-            // Validate: 1 rạp chỉ được quản lý bởi 1 staff (chỉ áp dụng cho RoleType = "Staff")
+            // Validate: 1 rạp chỉ được quản lý bởi 1 Staff (chỉ áp dụng cho RoleType = "Staff")
             if (employee.RoleType == "Staff")
             {
                 var existingActiveAssignment = await _context.EmployeeCinemaAssignments
@@ -75,6 +75,40 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 if (existingActiveAssignment != null)
                 {
                     throw new ValidationException("cinemaId", $"Rạp này đã được phân quyền cho nhân viên Staff khác (ID: {existingActiveAssignment.EmployeeId}). Một rạp chỉ có thể được quản lý bởi một Staff.");
+                }
+            }
+
+            // Validate: 1 rạp chỉ có 1 Cashier (chỉ áp dụng cho RoleType = "Cashier")
+            if (employee.RoleType == "Cashier")
+            {
+                // Kiểm tra rạp này đã có Cashier khác chưa
+                var existingActiveCashierAssignment = await _context.EmployeeCinemaAssignments
+                    .Include(a => a.Employee)
+                    .FirstOrDefaultAsync(a => 
+                        a.CinemaId == cinemaId 
+                        && a.IsActive 
+                        && a.Employee.RoleType == "Cashier"
+                        && a.EmployeeId != employeeId
+                        && a.Employee.IsActive);
+
+                if (existingActiveCashierAssignment != null)
+                {
+                    throw new ValidationException("cinemaId", $"Rạp này đã được phân quyền cho thu ngân khác (ID: {existingActiveCashierAssignment.EmployeeId}). Mỗi rạp chỉ có thể có một thu ngân.");
+                }
+
+                // Kiểm tra Cashier này đã có rạp khác chưa (1 Cashier chỉ có 1 rạp)
+                var existingCashierOtherCinema = await _context.EmployeeCinemaAssignments
+                    .Include(a => a.Employee)
+                    .FirstOrDefaultAsync(a => 
+                        a.EmployeeId == employeeId
+                        && a.CinemaId != cinemaId
+                        && a.IsActive 
+                        && a.Employee.RoleType == "Cashier"
+                        && a.Employee.IsActive);
+
+                if (existingCashierOtherCinema != null)
+                {
+                    throw new ValidationException("employeeId", $"Thu ngân này đã được phân quyền cho rạp khác (ID: {existingCashierOtherCinema.CinemaId}). Mỗi thu ngân chỉ có thể được phân quyền cho một rạp.");
                 }
             }
 
@@ -98,7 +132,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
             else
             {
-                // Create new assignment - một staff có thể quản lý nhiều cinema
+                // Create new assignment - một staff có thể quản lý nhiều cinema, nhưng cashier chỉ có 1 cinema
                 var assignment = new EmployeeCinemaAssignment
                 {
                     EmployeeId = employeeId,

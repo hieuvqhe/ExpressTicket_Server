@@ -104,6 +104,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                                 seatLocks.Count, order.OrderId);
                         }
 
+                        // ✅ 4. Release voucher reservations cho session này
+                        var voucherReservations = await db.VoucherReservations
+                            .Where(r => r.SessionId == order.BookingSessionId && r.ReleasedAt == null)
+                            .ToListAsync(ct);
+
+                        if (voucherReservations.Any())
+                        {
+                            foreach (var reservation in voucherReservations)
+                            {
+                                reservation.ReleasedAt = now;
+                            }
+                            _logger.LogInformation("Đã release {Count} voucher reservations cho Order {OrderId}",
+                                voucherReservations.Count, order.OrderId);
+                        }
+
                         await db.SaveChangesAsync(ct);
                         await transaction.CommitAsync(ct);
 

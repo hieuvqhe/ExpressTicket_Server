@@ -130,27 +130,50 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         private async Task ValidatePartnerAccessAsync(int partnerId, int userId)
         {
-            // Kiểm tra user có role Partner không
+            // Kiểm tra user có role Partner hoặc Staff không
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.UserId == userId && u.UserType == "Partner");
+                .FirstOrDefaultAsync(u => u.UserId == userId && (u.UserType == "Partner" || u.UserType == "Staff" || u.UserType == "Marketing" || u.UserType == "Cashier"));
 
             if (user == null)
             {
-                throw new UnauthorizedException( "Chỉ tài khoản Partner mới được sử dụng chức năng này");
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
             }
 
-            // Kiểm tra partner thuộc về user này và approved
-            var partner = await _context.Partners
-                .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.UserId == userId && p.Status == "approved");
-
-            if (partner == null)
+            // Nếu là Partner, kiểm tra partner thuộc về user này
+            if (user.UserType == "Partner")
             {
-                throw new UnauthorizedException( "Partner không tồn tại hoặc không thuộc quyền quản lý của bạn");
+                var partner = await _context.Partners
+                    .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.UserId == userId && p.Status == "approved");
+
+                if (partner == null)
+                {
+                    throw new UnauthorizedException("Partner không tồn tại hoặc không thuộc quyền quản lý của bạn");
+                }
+
+                if (!partner.IsActive)
+                {
+                    throw new UnauthorizedException("Tài khoản partner đã bị vô hiệu hóa");
+                }
             }
-
-            if (!partner.IsActive)
+            else if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
             {
-                throw new UnauthorizedException( "Tài khoản partner đã bị vô hiệu hóa");
+                // Nếu là Staff, kiểm tra employee thuộc về partner này
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee == null)
+                {
+                    throw new UnauthorizedException("Nhân viên không thuộc Partner này");
+                }
+
+                // Kiểm tra partner có tồn tại và active không
+                var partner = await _context.Partners
+                    .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.Status == "approved");
+
+                if (partner == null || !partner.IsActive)
+                {
+                    throw new UnauthorizedException("Partner không tồn tại hoặc đã bị vô hiệu hóa");
+                }
             }
         }
 

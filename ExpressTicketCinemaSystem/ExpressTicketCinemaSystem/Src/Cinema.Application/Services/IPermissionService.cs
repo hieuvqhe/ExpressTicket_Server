@@ -47,5 +47,10 @@ public interface IPermissionService
     /// Lấy Employee ID từ User ID
     /// </summary>
     Task<int?> GetEmployeeIdByUserIdAsync(int userId);
+
+    /// <summary>
+    /// Kiểm tra Employee có quyền ở ít nhất 1 rạp được assign không (dùng cho GET ALL)
+    /// </summary>
+    Task<bool> HasAnyPermissionInAssignedCinemasAsync(int employeeId, params string[] permissionCodes);
 }
 

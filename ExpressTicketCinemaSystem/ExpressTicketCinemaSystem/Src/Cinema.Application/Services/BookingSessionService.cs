@@ -39,6 +39,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly CinemaDbCoreContext _db;
         private readonly InfraRT.IShowtimeSeatEventPublisher _eventPublisher;
         private readonly ILogger<BookingSessionService> _logger;
+        private readonly IVoucherService _voucherService;
 
         private static readonly TimeSpan SessionTtl = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan SeatLockTtl = TimeSpan.FromMinutes(3);
@@ -46,11 +47,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         public BookingSessionService(
             CinemaDbCoreContext db,
             InfraRT.IShowtimeSeatEventPublisher eventPublisher,
-            ILogger<BookingSessionService> logger)
+            ILogger<BookingSessionService> logger,
+            IVoucherService voucherService)
         {
             _db = db;
             _eventPublisher = eventPublisher;
             _logger = logger;
+            _voucherService = voucherService;
         }
 
         private static int? GetUserId(ClaimsPrincipal? user)
@@ -280,6 +283,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
                 await _db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
+
+                // ✅ Release voucher reservation khi cancel session
+                await _voucherService.ReleaseVoucherReservationAsync(bookingSessionId);
                 
                 // Publish SignalR events
                 await PublishSeatEventsAsync(locks.Select(lk => new InfraRT.SeatEvent

@@ -43,6 +43,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               "bookingCode": "BK20251116ABC123",
                               "bookingTime": "2025-11-16T20:15:00",
                               "totalAmount": 250000,
+                              "ticketsTotal": 255000,
+                              "combosTotal": 79000,
                               "status": "PAID",
                               "state": "COMPLETED",
                               "paymentStatus": "PAID",
@@ -87,7 +89,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 1001,
                                 "price": 85000,
-                                "status": "ACTIVE",
+                                "status": "CHECKED_IN",
+                                "checkInStatus": "CHECKED_IN",
+                                "checkInTime": "2025-11-20T19:25:00",
                                 "seat": {
                                   "seatId": 101,
                                   "rowCode": "D",
@@ -99,7 +103,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 1002,
                                 "price": 85000,
-                                "status": "ACTIVE",
+                                "status": "CHECKED_IN",
+                                "checkInStatus": "CHECKED_IN",
+                                "checkInTime": "2025-11-20T19:26:00",
                                 "seat": {
                                   "seatId": 102,
                                   "rowCode": "D",
@@ -111,7 +117,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 1003,
                                 "price": 80000,
-                                "status": "ACTIVE",
+                                "status": "VALID",
+                                "checkInStatus": "NOT_CHECKED_IN",
+                                "checkInTime": null,
                                 "seat": {
                                   "seatId": 103,
                                   "rowCode": "D",
@@ -119,6 +127,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                                   "seatName": "D9",
                                   "seatTypeName": "Standard"
                                 }
+                              }
+                            ],
+                            "combos": [
+                              {
+                                "serviceId": 1,
+                                "serviceName": "Combo Bắp + Nước",
+                                "quantity": 2,
+                                "unitPrice": 79000,
+                                "subTotal": 158000
                               }
                             ],
                             "voucher": {
@@ -147,6 +164,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               "bookingCode": "BK20251117XYZ456",
                               "bookingTime": "2025-11-17T15:30:00",
                               "totalAmount": 350000,
+                              "ticketsTotal": 350000,
+                              "combosTotal": 0,
                               "status": "PAID",
                               "state": "COMPLETED",
                               "paymentStatus": "PAID",
@@ -191,7 +210,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 1010,
                                 "price": 175000,
-                                "status": "ACTIVE",
+                                "status": "CHECKED_IN",
+                                "checkInStatus": "CHECKED_IN",
+                                "checkInTime": "2025-11-18T20:55:00",
                                 "seat": {
                                   "seatId": 201,
                                   "rowCode": "G",
@@ -203,7 +224,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 1011,
                                 "price": 175000,
-                                "status": "ACTIVE",
+                                "status": "CHECKED_IN",
+                                "checkInStatus": "CHECKED_IN",
+                                "checkInTime": "2025-11-18T20:56:00",
                                 "seat": {
                                   "seatId": 202,
                                   "rowCode": "G",
@@ -213,6 +236,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                                 }
                               }
                             ],
+                            "combos": [],
                             "voucher": null
                           }
                         }
@@ -220,7 +244,116 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                         )
                     });
 
-                    // Example 3: Pending payment (no tickets yet)
+                    // Example 3: Order with combos and partial check-in
+                    content.Examples.Add("Success - With Combos and Partial Check-in", new OpenApiExample
+                    {
+                        Summary = "Đơn hàng có combo và một phần vé đã check-in",
+                        Value = new OpenApiString(
+                        """
+                        {
+                          "message": "Lấy chi tiết đơn hàng thành công.",
+                          "result": {
+                            "booking": {
+                              "bookingId": 126,
+                              "bookingCode": "BK20251118GHI789",
+                              "bookingTime": "2025-11-18T10:20:00",
+                              "totalAmount": 413000,
+                              "ticketsTotal": 250000,
+                              "combosTotal": 163000,
+                              "status": "PARTIAL_CHECKED_IN",
+                              "state": "COMPLETED",
+                              "paymentStatus": "PAID",
+                              "paymentProvider": "PAYOS",
+                              "paymentTxId": "payos_tx_987654321",
+                              "voucherId": null,
+                              "orderCode": "ORD20251118004",
+                              "sessionId": "d4e5f6a7-b8c9-0123-def4-234567890123",
+                              "createdAt": "2025-11-18T10:19:00",
+                              "updatedAt": "2025-11-18T10:20:30"
+                            },
+                            "showtime": {
+                              "showtimeId": 1004,
+                              "showDatetime": "2025-11-22T20:00:00",
+                              "endTime": "2025-11-22T22:30:00",
+                              "status": "ACTIVE",
+                              "basePrice": 100000,
+                              "formatType": "3D"
+                            },
+                            "movie": {
+                              "movieId": 20,
+                              "title": "Interstellar 2",
+                              "genre": "Sci-Fi, Drama, Adventure",
+                              "durationMinutes": 180,
+                              "language": "English",
+                              "director": "Christopher Nolan",
+                              "country": "USA",
+                              "posterUrl": "https://example.com/posters/interstellar2.jpg",
+                              "bannerUrl": "https://example.com/banners/interstellar2-wide.jpg",
+                              "description": "A new journey through space and time."
+                            },
+                            "cinema": {
+                              "cinemaId": 6,
+                              "cinemaName": "CGV Landmark 81",
+                              "address": "208 Nguyễn Hữu Cảnh, Bình Thạnh",
+                              "city": "TP. Hồ Chí Minh",
+                              "district": "Bình Thạnh",
+                              "phone": "0286 293 8888",
+                              "email": "landmark@cgv.vn"
+                            },
+                            "tickets": [
+                              {
+                                "ticketId": 1020,
+                                "price": 125000,
+                                "status": "CHECKED_IN",
+                                "checkInStatus": "CHECKED_IN",
+                                "checkInTime": "2025-11-22T19:55:00",
+                                "seat": {
+                                  "seatId": 301,
+                                  "rowCode": "F",
+                                  "seatNumber": 5,
+                                  "seatName": "F5",
+                                  "seatTypeName": "Standard"
+                                }
+                              },
+                              {
+                                "ticketId": 1021,
+                                "price": 125000,
+                                "status": "VALID",
+                                "checkInStatus": "NOT_CHECKED_IN",
+                                "checkInTime": null,
+                                "seat": {
+                                  "seatId": 302,
+                                  "rowCode": "F",
+                                  "seatNumber": 6,
+                                  "seatName": "F6",
+                                  "seatTypeName": "Standard"
+                                }
+                              }
+                            ],
+                            "combos": [
+                              {
+                                "serviceId": 1,
+                                "serviceName": "Combo Bắp + Nước",
+                                "quantity": 1,
+                                "unitPrice": 79000,
+                                "subTotal": 79000
+                              },
+                              {
+                                "serviceId": 2,
+                                "serviceName": "Combo Bắp + Nước + Hotdog",
+                                "quantity": 1,
+                                "unitPrice": 84000,
+                                "subTotal": 84000
+                              }
+                            ],
+                            "voucher": null
+                          }
+                        }
+                        """
+                        )
+                    });
+
+                    // Example 4: Pending payment (no tickets yet)
                     content.Examples.Add("Pending Payment", new OpenApiExample
                     {
                         Summary = "Đơn hàng chưa thanh toán (chưa có vé)",
@@ -234,6 +367,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               "bookingCode": "BK20251117DEF789",
                               "bookingTime": "2025-11-17T16:45:00",
                               "totalAmount": 180000,
+                              "ticketsTotal": 0,
+                              "combosTotal": 0,
                               "status": "PENDING",
                               "state": "PENDING_PAYMENT",
                               "paymentStatus": "PENDING",
@@ -275,6 +410,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               "email": "nowzone@lottecinema.vn"
                             },
                             "tickets": [],
+                            "combos": [],
                             "voucher": null
                           }
                         }

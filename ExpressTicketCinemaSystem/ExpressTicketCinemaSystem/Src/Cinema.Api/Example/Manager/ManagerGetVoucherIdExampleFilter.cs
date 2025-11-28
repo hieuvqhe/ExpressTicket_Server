@@ -41,6 +41,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                             "usedCount": 0,
                             "description": "Giảm 15% cho mùa hè 2025",
                             "isActive": true,
+                            "isRestricted": false,
                             "createdAt": "2024-01-15T10:00:00Z",
                             "updatedAt": null,
                             "managerId": 1,

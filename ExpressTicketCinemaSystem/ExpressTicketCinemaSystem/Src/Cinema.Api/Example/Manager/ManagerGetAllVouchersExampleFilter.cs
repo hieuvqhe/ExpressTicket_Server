@@ -42,6 +42,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                                 "usageLimit": 1000,
                                 "usedCount": 0,
                                 "isActive": true,
+                                "isRestricted": false,
                                 "createdAt": "2024-01-15T10:00:00Z",
                                 "managerName": "Trần Văn B"
                               },
@@ -55,6 +56,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                                 "usageLimit": 500,
                                 "usedCount": 45,
                                 "isActive": true,
+                                "isRestricted": true,
                                 "createdAt": "2024-01-10T08:30:00Z",
                                 "managerName": "Trần Văn B"
                               }

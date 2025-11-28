@@ -26,3 +26,6 @@ public partial class VoucherReservation
     public virtual User User { get; set; } = null!;
 }
 
+
+
+

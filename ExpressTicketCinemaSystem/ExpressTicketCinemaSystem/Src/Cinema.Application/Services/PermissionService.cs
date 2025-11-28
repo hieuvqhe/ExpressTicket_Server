@@ -87,6 +87,32 @@ public class PermissionService : IPermissionService
         return permissionCodes.All(pc => grantedPermissions.Contains(pc));
     }
 
+    public async Task<bool> HasAnyPermissionInAssignedCinemasAsync(int employeeId, params string[] permissionCodes)
+    {
+        if (permissionCodes == null || permissionCodes.Length == 0)
+            return false;
+
+        // Lấy danh sách rạp được assign cho employee
+        var assignedCinemaIds = await _context.EmployeeCinemaAssignments
+            .Where(eca => eca.EmployeeId == employeeId && eca.IsActive)
+            .Select(eca => eca.CinemaId)
+            .ToListAsync();
+
+        if (assignedCinemaIds.Count == 0)
+            return false; // Employee chưa được assign rạp nào
+
+        // Kiểm tra xem có quyền ở ít nhất 1 rạp được assign không
+        foreach (var cinemaId in assignedCinemaIds)
+        {
+            if (await HasAnyPermissionAsync(employeeId, cinemaId, permissionCodes))
+            {
+                return true; // Có quyền ở ít nhất 1 rạp
+            }
+        }
+
+        return false; // Không có quyền ở rạp nào
+    }
+
     public async Task<PermissionActionResponse> GrantPermissionsAsync(int partnerId, int employeeId, GrantPermissionRequest request)
     {
         // Validate employee belongs to partner

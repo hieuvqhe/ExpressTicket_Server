@@ -80,6 +80,8 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<SeatType> SeatTypes { get; set; }
 
+    public virtual DbSet<SeatTicket> SeatTickets { get; set; }
+
     public virtual DbSet<Service> Services { get; set; }
 
     public virtual DbSet<ServiceOrder> ServiceOrders { get; set; }
@@ -1583,6 +1585,72 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.ShowtimeId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Ticket_Showtime");
+        });
+
+        modelBuilder.Entity<SeatTicket>(entity =>
+        {
+            entity.HasKey(e => e.SeatTicketId).HasName("PK__SeatTicket__D596F96BFAA74F8D");
+
+            entity.ToTable("SeatTicket");
+
+            entity.HasIndex(e => new { e.TicketId }, "IX_SeatTicket_TicketId");
+            entity.HasIndex(e => new { e.BookingId, e.SeatId }, "IX_SeatTicket_Booking_Seat");
+            entity.HasIndex(e => new { e.OrderCode, e.SeatId }, "IX_SeatTicket_OrderCode_Seat");
+
+            entity.Property(e => e.SeatTicketId).HasColumnName("seat_ticket_id");
+            entity.Property(e => e.TicketId).HasColumnName("ticket_id");
+            entity.Property(e => e.BookingId).HasColumnName("booking_id");
+            entity.Property(e => e.SeatId).HasColumnName("seat_id");
+            entity.Property(e => e.ShowtimeId).HasColumnName("showtime_id");
+            entity.Property(e => e.OrderCode)
+                .HasMaxLength(100)
+                .IsUnicode(false)
+                .HasColumnName("order_code");
+            entity.Property(e => e.CheckInStatus)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("check_in_status");
+            entity.Property(e => e.CheckInTime)
+                .HasPrecision(3)
+                .HasColumnName("check_in_time");
+            entity.Property(e => e.CheckedInBy).HasColumnName("checked_in_by");
+            entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.Ticket).WithMany()
+                .HasForeignKey(d => d.TicketId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Ticket");
+
+            entity.HasOne(d => d.Booking).WithMany()
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Booking");
+
+            entity.HasOne(d => d.Seat).WithMany()
+                .HasForeignKey(d => d.SeatId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Seat");
+
+            entity.HasOne(d => d.Showtime).WithMany()
+                .HasForeignKey(d => d.ShowtimeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Showtime");
+
+            entity.HasOne(d => d.Cinema).WithMany()
+                .HasForeignKey(d => d.CinemaId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Cinema");
+
+            entity.HasOne(d => d.CheckedInByEmployee).WithMany()
+                .HasForeignKey(d => d.CheckedInBy)
+                .HasConstraintName("FK_SeatTicket_Employee");
         });
 
         modelBuilder.Entity<User>(entity =>

@@ -704,7 +704,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         [HttpPut("/partners/cinemas/{cinema_id}")]
         [AuditAction("PARTNER_UPDATE_CINEMA", "Cinema", recordIdRouteKey: "cinema_id", includeRequestBody: true)]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("CINEMA_UPDATE")]
         [ProducesResponseType(typeof(SuccessResponse<CinemaResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -778,7 +779,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// </summary>
         [HttpDelete("/partners/cinemas/{cinema_id}")]
         [AuditAction("PARTNER_DELETE_CINEMA", "Cinema", recordIdRouteKey: "cinema_id", includeRequestBody: false)]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("CINEMA_DELETE")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -841,7 +843,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Get screen by ID for partner (View-only)
         /// </summary>
         [HttpGet("/partners/screens/{screen_id}")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SCREEN_READ")]
         [ProducesResponseType(typeof(SuccessResponse<ScreenResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -889,7 +892,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Get screens for partner's cinema with filtering and pagination
         /// </summary>
         [HttpGet("/partners/cinema/{cinema_id}/screens")]
-        [Authorize(Roles = "Partner")]
+        [Authorize(Roles = "Partner,Staff")]
+        [RequirePermission("SCREEN_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PaginatedScreensResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -3315,7 +3319,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         // ==================== EMPLOYEE CINEMA ASSIGNMENT ====================
 
         /// <summary>
-        /// Gán cinema cho Staff (phân quyền quản lý cụm rạp)
+        /// Gán cinema cho Staff/Cashier (phân quyền quản lý cụm rạp). Mỗi rạp chỉ có thể có 1 Staff hoặc 1 Cashier.
         /// </summary>
         [HttpPost("/partners/employees/cinema-assignments")]
         [AuditAction("PARTNER_ASSIGN_EMPLOYEE_CINEMA", "EmployeeCinemaAssignment", includeRequestBody: true)]
@@ -3340,6 +3344,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 var partnerId = await GetCurrentPartnerId();
                 var userId = GetCurrentUserId();
                 await _contractValidationService.ValidatePartnerHasActiveContractAsync(partnerId);
+
+                // Kiểm tra nếu là Cashier thì chỉ cho phép gán 1 rạp
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.EmployeeId == request.EmployeeId && e.PartnerId == partnerId);
+                
+                if (employee == null)
+                {
+                    return NotFound(new ErrorResponse { Message = "Không tìm thấy nhân viên" });
+                }
+
+                if (employee.RoleType == "Cashier" && request.CinemaIds.Count > 1)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Thu ngân chỉ có thể được phân quyền cho một rạp. Vui lòng chỉ chọn một rạp."
+                    });
+                }
 
                 // Loại bỏ duplicate cinemaIds để tránh gán trùng
                 var uniqueCinemaIds = request.CinemaIds.Distinct().ToList();
@@ -3390,7 +3411,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         /// <summary>
-        /// Hủy phân quyền cinema cho Staff
+        /// Hủy phân quyền cinema cho Staff/Cashier
         /// </summary>
         [HttpDelete("/partners/employees/cinema-assignments")]
         [AuditAction("PARTNER_REMOVE_EMPLOYEE_CINEMA", "EmployeeCinemaAssignment", includeRequestBody: true)]
@@ -3464,7 +3485,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         /// <summary>
-        /// Lấy danh sách cinema được phân quyền cho một Staff
+        /// Lấy danh sách cinema được phân quyền cho một Staff/Cashier
         /// </summary>
         [HttpGet("/partners/employees/{employeeId}/cinema-assignments")]
         [Authorize(Roles = "Partner")]

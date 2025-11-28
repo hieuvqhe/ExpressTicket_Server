@@ -10,6 +10,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Responses
         public OrderDetailMovieDto Movie { get; set; } = null!;
         public OrderDetailCinemaDto Cinema { get; set; } = null!;
         public List<OrderDetailTicketDto> Tickets { get; set; } = new List<OrderDetailTicketDto>();
+        public List<OrderDetailComboDto> Combos { get; set; } = new List<OrderDetailComboDto>();
         public OrderDetailVoucherDto? Voucher { get; set; }
     }
 
@@ -22,6 +23,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Responses
         public string BookingCode { get; set; } = null!;
         public DateTime BookingTime { get; set; }
         public decimal TotalAmount { get; set; }
+        public decimal TicketsTotal { get; set; } // Tổng tiền vé từ Ticket.Price
+        public decimal CombosTotal { get; set; } // Tổng tiền combo từ ServiceOrder
         public string Status { get; set; } = null!;
         public string State { get; set; } = null!;
         public string? PaymentStatus { get; set; }
@@ -86,6 +89,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Responses
         public int TicketId { get; set; }
         public decimal Price { get; set; }
         public string Status { get; set; } = null!;
+        public string CheckInStatus { get; set; } = "NOT_CHECKED_IN"; // PENDING, CHECKED_IN, NO_SHOW
+        public DateTime? CheckInTime { get; set; }
         public OrderDetailSeatDto Seat { get; set; } = null!;
     }
 
@@ -99,6 +104,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Responses
         public int SeatNumber { get; set; }
         public string SeatName { get; set; } = null!;
         public string? SeatTypeName { get; set; }
+    }
+
+    /// <summary>
+    /// Combo/Service information in order
+    /// </summary>
+    public class OrderDetailComboDto
+    {
+        public int ServiceId { get; set; }
+        public string ServiceName { get; set; } = null!;
+        public int Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal SubTotal { get; set; } // Quantity * UnitPrice
     }
 
     /// <summary>

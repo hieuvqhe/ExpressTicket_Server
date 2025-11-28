@@ -20,6 +20,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Responses
         public int TicketId { get; set; }
         public decimal Price { get; set; }
         public string Status { get; set; } = null!;
+        public string CheckInStatus { get; set; } = "NOT_CHECKED_IN"; // PENDING, CHECKED_IN, NO_SHOW
+        public DateTime? CheckInTime { get; set; }
         
         public TicketBookingDto Booking { get; set; } = null!;
         public TicketMovieDto Movie { get; set; } = null!;

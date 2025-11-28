@@ -1045,13 +1045,34 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 };
             }
 
-            // ✅ THÊM MỚI: Kiểm tra user đã sử dụng voucher này chưa
-            if (userId.HasValue)
+            // ✅ THÊM MỚI: Kiểm tra voucher có phải Restricted không
+            if (voucher.IsRestricted)
             {
+                // Restricted voucher: Chỉ user được gửi email mới dùng được
+                if (!userId.HasValue)
+                {
+                    return new VoucherValidationResponse
+                    {
+                        IsValid = false,
+                        Message = "Bạn cần đăng nhập để sử dụng voucher này",
+                        DiscountAmount = 0
+                    };
+                }
+
                 var userVoucher = await _context.UserVouchers
                     .FirstOrDefaultAsync(uv => uv.VoucherId == voucher.VoucherId && uv.UserId == userId.Value);
 
-                if (userVoucher != null && userVoucher.IsUsed)
+                if (userVoucher == null)
+                {
+                    return new VoucherValidationResponse
+                    {
+                        IsValid = false,
+                        Message = "Bạn không có quyền sử dụng voucher này. Voucher này chỉ dành cho khách hàng được chọn.",
+                        DiscountAmount = 0
+                    };
+                }
+
+                if (userVoucher.IsUsed)
                 {
                     return new VoucherValidationResponse
                     {
@@ -1059,6 +1080,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         Message = "Bạn đã sử dụng voucher này rồi. Mỗi tài khoản chỉ được sử dụng voucher 1 lần.",
                         DiscountAmount = 0
                     };
+                }
+            }
+            else
+            {
+                // Public voucher: Ai cũng dùng được, chỉ cần check user đã dùng chưa
+                if (userId.HasValue)
+                {
+                    var userVoucher = await _context.UserVouchers
+                        .FirstOrDefaultAsync(uv => uv.VoucherId == voucher.VoucherId && uv.UserId == userId.Value);
+
+                    if (userVoucher != null && userVoucher.IsUsed)
+                    {
+                        return new VoucherValidationResponse
+                        {
+                            IsValid = false,
+                            Message = "Bạn đã sử dụng voucher này rồi. Mỗi tài khoản chỉ được sử dụng voucher 1 lần.",
+                            DiscountAmount = 0
+                        };
+                    }
                 }
             }
 

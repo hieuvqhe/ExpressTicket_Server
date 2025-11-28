@@ -33,7 +33,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                           "validTo": "2025-09-30",
                           "usageLimit": 1500,
                           "description": "Giảm 20% cho mùa hè 2025 - Ưu đãi đặc biệt",
-                          "isActive": true
+                          "isActive": true,
+                          "isRestricted": false
                         }
                         """
                         )
@@ -66,6 +67,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                             "usedCount": 0,
                             "description": "Giảm 20% cho mùa hè 2025 - Ưu đãi đặc biệt",
                             "isActive": true,
+                            "isRestricted": false,
                             "createdAt": "2024-01-15T10:00:00Z",
                             "updatedAt": "2024-01-16T14:30:00Z",
                             "managerId": 1,

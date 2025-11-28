@@ -23,12 +23,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly CinemaDbCoreContext _context;
         private readonly IContractValidationService _contractValidation;
         private readonly IAuditLogService _auditLogService;
+        private readonly IPermissionService _permissionService;
 
-        public ComboService(CinemaDbCoreContext context, IContractValidationService contractValidation, IAuditLogService auditLogService)
+        public ComboService(CinemaDbCoreContext context, IContractValidationService contractValidation, IAuditLogService auditLogService, IPermissionService permissionService)
         {
             _context = context;
             _contractValidation = contractValidation;
             _auditLogService = auditLogService;
+            _permissionService = permissionService;
         }
 
         // ====== CREATE ======
@@ -67,7 +69,55 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         // ====== GET BY ID ======
         public async Task<ServiceResponse> GetByIdAsync(int partnerId, int userId, int serviceId)
         {
-            await ValidatePartnerAccessAsync(partnerId, userId);
+            // Validate access - Partner hoặc Staff đều được
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Partner")
+            {
+                await ValidatePartnerAccessAsync(partnerId, userId);
+            }
+            else if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                // Staff: Kiểm tra có quyền SERVICE_READ không
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee == null)
+                {
+                    throw new UnauthorizedException("Không tìm thấy thông tin nhân viên hoặc tài khoản chưa được kích hoạt");
+                }
+
+                // Lấy danh sách cinemaIds được phân quyền cho Staff
+                var assignedCinemaIds = await _context.EmployeeCinemaAssignments
+                    .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                    .Select(eca => eca.CinemaId)
+                    .ToListAsync();
+
+                if (assignedCinemaIds.Count == 0)
+                {
+                    throw new UnauthorizedException("Bạn chưa được phân quyền rạp nào. Vui lòng liên hệ Partner để được phân quyền.");
+                }
+
+                // Kiểm tra quyền SERVICE_READ - Staff phải có quyền READ mới được GET BY ID
+                // Kiểm tra ở ít nhất 1 rạp được assign
+                bool hasReadPermission = false;
+                foreach (var cinemaId in assignedCinemaIds)
+                {
+                    if (await _permissionService.HasPermissionAsync(employee.EmployeeId, cinemaId, "SERVICE_READ"))
+                    {
+                        hasReadPermission = true;
+                        break;
+                    }
+                }
+
+                if (!hasReadPermission)
+                {
+                    throw new UnauthorizedException("Bạn không có quyền xem chi tiết combo/dịch vụ. Vui lòng liên hệ Partner để được cấp quyền SERVICE_READ.");
+                }
+            }
+            else
+            {
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
+            }
 
             var svc = await _context.Services
                 .FirstOrDefaultAsync(x => x.ServiceId == serviceId && x.PartnerId == partnerId);
@@ -81,9 +131,59 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         // ====== LIST ======
         public async Task<PaginatedServicesResponse> GetListAsync(int partnerId, int userId, GetServicesQuery q)
         {
-            await ValidatePartnerAccessAsync(partnerId, userId);
+            // Validate access - Partner hoặc Staff đều được
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Partner")
+            {
+                await ValidatePartnerAccessAsync(partnerId, userId);
+            }
+            else if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                // Staff: Kiểm tra có quyền SERVICE_READ không
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee == null)
+                {
+                    throw new UnauthorizedException("Không tìm thấy thông tin nhân viên hoặc tài khoản chưa được kích hoạt");
+                }
+
+                // Lấy danh sách cinemaIds được phân quyền cho Staff
+                var assignedCinemaIds = await _context.EmployeeCinemaAssignments
+                    .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                    .Select(eca => eca.CinemaId)
+                    .ToListAsync();
+
+                if (assignedCinemaIds.Count == 0)
+                {
+                    throw new UnauthorizedException("Bạn chưa được phân quyền rạp nào. Vui lòng liên hệ Partner để được phân quyền.");
+                }
+
+                // Kiểm tra quyền SERVICE_READ - Staff phải có quyền READ mới được GET ALL
+                // Kiểm tra ở ít nhất 1 rạp được assign
+                bool hasReadPermission = false;
+                foreach (var cinemaId in assignedCinemaIds)
+                {
+                    if (await _permissionService.HasPermissionAsync(employee.EmployeeId, cinemaId, "SERVICE_READ"))
+                    {
+                        hasReadPermission = true;
+                        break;
+                    }
+                }
+
+                if (!hasReadPermission)
+                {
+                    throw new UnauthorizedException("Bạn không có quyền xem danh sách combo/dịch vụ. Vui lòng liên hệ Partner để được cấp quyền SERVICE_READ.");
+                }
+            }
+            else
+            {
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
+            }
+
             ValidateListQuery(q);
 
+            // Combo/Service là chung cho tất cả rạp, không cần filter theo rạp
             var query = _context.Services.Where(x => x.PartnerId == partnerId).AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(q.Search))

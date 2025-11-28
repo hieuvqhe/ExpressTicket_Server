@@ -26,3 +26,6 @@ public partial class UserVoucher
     public virtual Booking? Booking { get; set; }
 }
 
+
+
+

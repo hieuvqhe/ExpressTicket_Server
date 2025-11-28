@@ -17,12 +17,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly CinemaDbCoreContext _context;
         private readonly IAuditLogService _auditLogService;
         private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
+        private readonly IPermissionService _permissionService;
 
-        public CinemaService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService)
+        public CinemaService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService, IPermissionService permissionService)
         {
             _context = context;
             _auditLogService = auditLogService;
             _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
+            _permissionService = permissionService;
         }
 
         public async Task<CinemaResponse> CreateCinemaAsync(CreateCinemaRequest request, int partnerId, int userId)
@@ -117,7 +119,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Where(c => c.PartnerId == partnerId)
                 .AsQueryable();
 
-            // Nếu là Staff, chỉ lấy các rạp được phân quyền
+            // Nếu là Staff, kiểm tra quyền READ và chỉ lấy các rạp được phân quyền VÀ có quyền READ
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
             {
@@ -135,21 +137,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     if (assignedCinemaIds.Count == 0)
                     {
                         // Staff chưa được phân quyền rạp nào
-                        return new PaginatedCinemasResponse
-                        {
-                            Cinemas = new List<CinemaResponse>(),
-                            Pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
-                            {
-                                CurrentPage = page,
-                                PageSize = limit,
-                                TotalCount = 0,
-                                TotalPages = 0
-                            }
-                        };
+                        throw new UnauthorizedException("Bạn chưa được phân quyền rạp nào. Vui lòng liên hệ Partner để được phân quyền.");
                     }
 
-                    // Filter chỉ lấy các rạp được phân quyền
-                    query = query.Where(c => assignedCinemaIds.Contains(c.CinemaId));
+                    // Kiểm tra quyền CINEMA_READ cho từng rạp - chỉ lấy các rạp có quyền READ
+                    var cinemasWithReadPermission = new List<int>();
+                    foreach (var cinemaId in assignedCinemaIds)
+                    {
+                        if (await _permissionService.HasPermissionAsync(employee.EmployeeId, cinemaId, "CINEMA_READ"))
+                        {
+                            cinemasWithReadPermission.Add(cinemaId);
+                        }
+                    }
+
+                    if (cinemasWithReadPermission.Count == 0)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền xem danh sách rạp. Vui lòng liên hệ Partner để được cấp quyền CINEMA_READ.");
+                    }
+
+                    // Filter chỉ lấy các rạp được phân quyền VÀ có quyền READ
+                    query = query.Where(c => cinemasWithReadPermission.Contains(c.CinemaId));
                 }
             }
 

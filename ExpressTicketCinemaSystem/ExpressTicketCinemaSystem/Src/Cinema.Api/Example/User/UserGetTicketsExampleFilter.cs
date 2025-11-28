@@ -46,7 +46,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 1001,
                                 "price": 85000,
-                                "status": "ACTIVE",
+                                "status": "CHECKED_IN",
+                                "checkInStatus": "CHECKED_IN",
+                                "checkInTime": "2025-11-20T19:25:00",
                                 "booking": {
                                   "bookingId": 123,
                                   "bookingCode": "BK20251116ABC123",
@@ -84,7 +86,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 1002,
                                 "price": 85000,
-                                "status": "ACTIVE",
+                                "status": "VALID",
+                                "checkInStatus": "NOT_CHECKED_IN",
+                                "checkInTime": null,
                                 "booking": {
                                   "bookingId": 123,
                                   "bookingCode": "BK20251116ABC123",
@@ -122,7 +126,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 1010,
                                 "price": 175000,
-                                "status": "ACTIVE",
+                                "status": "VALID",
+                                "checkInStatus": "NOT_CHECKED_IN",
+                                "checkInTime": null,
                                 "booking": {
                                   "bookingId": 124,
                                   "bookingCode": "BK20251117XYZ456",
@@ -181,7 +187,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 901,
                                 "price": 80000,
-                                "status": "USED",
+                                "status": "CHECKED_IN",
+                                "checkInStatus": "CHECKED_IN",
+                                "checkInTime": "2025-11-10T17:55:00",
                                 "booking": {
                                   "bookingId": 110,
                                   "bookingCode": "BK20251110ABC111",
@@ -219,7 +227,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.User
                               {
                                 "ticketId": 902,
                                 "price": 80000,
-                                "status": "USED",
+                                "status": "CHECKED_IN",
+                                "checkInStatus": "CHECKED_IN",
+                                "checkInTime": "2025-11-10T17:56:00",
                                 "booking": {
                                   "bookingId": 110,
                                   "bookingCode": "BK20251110ABC111",

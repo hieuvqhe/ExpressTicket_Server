@@ -30,12 +30,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly CinemaDbCoreContext _context;
         private readonly IAuditLogService _auditLogService;
         private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
+        private readonly IPermissionService _permissionService;
 
-        public ShowtimeService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService)
+        public ShowtimeService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService, IPermissionService permissionService)
         {
             _context = context;
             _auditLogService = auditLogService;
             _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
+            _permissionService = permissionService;
         }
 
         public async Task<PartnerShowtimeCreateResponse> CreatePartnerShowtimeAsync(int partnerId, PartnerShowtimeCreateRequest request, string auditAction = "PARTNER_CREATE_SHOWTIME")
@@ -527,7 +529,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                            s.Status != "disabled" && // Loại bỏ các showtime đã bị disabled
                            (s.Status == "scheduled" || s.Status == "finished")); // Chỉ lấy scheduled và finished
 
-            // Nếu là Staff, chỉ lấy showtimes của các rạp được phân quyền
+            // Nếu là Staff, kiểm tra quyền READ và chỉ lấy showtimes của các rạp được phân quyền VÀ có quyền READ
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
             {
@@ -545,18 +547,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     if (assignedCinemaIds.Count == 0)
                     {
                         // Staff chưa được phân quyền rạp nào
-                        return new PartnerShowtimeListResponse
-                        {
-                            Showtimes = new List<PartnerShowtimeListItem>(),
-                            Total = 0,
-                            Page = request.Page,
-                            Limit = request.Limit,
-                            TotalPages = 0
-                        };
+                        throw new UnauthorizedException("Bạn chưa được phân quyền rạp nào. Vui lòng liên hệ Partner để được phân quyền.");
                     }
 
-                    // Filter chỉ lấy showtimes của các rạp được phân quyền
-                    baseQuery = baseQuery.Where(s => assignedCinemaIds.Contains(s.CinemaId));
+                    // Kiểm tra quyền SHOWTIME_READ cho từng rạp - chỉ lấy các rạp có quyền READ
+                    var cinemasWithReadPermission = new List<int>();
+                    foreach (var cinemaId in assignedCinemaIds)
+                    {
+                        if (await _permissionService.HasPermissionAsync(employee.EmployeeId, cinemaId, "SHOWTIME_READ"))
+                        {
+                            cinemasWithReadPermission.Add(cinemaId);
+                        }
+                    }
+
+                    if (cinemasWithReadPermission.Count == 0)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền xem danh sách suất chiếu. Vui lòng liên hệ Partner để được cấp quyền SHOWTIME_READ.");
+                    }
+
+                    // Filter chỉ lấy showtimes của các rạp được phân quyền VÀ có quyền READ
+                    baseQuery = baseQuery.Where(s => cinemasWithReadPermission.Contains(s.CinemaId));
                 }
             }
 

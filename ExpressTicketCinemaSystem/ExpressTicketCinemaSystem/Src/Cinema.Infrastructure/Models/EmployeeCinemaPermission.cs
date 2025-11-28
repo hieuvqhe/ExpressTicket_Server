@@ -36,3 +36,6 @@ public partial class EmployeeCinemaPermission
 
 
 
+
+
+
