@@ -61,6 +61,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var db = scope.ServiceProvider.GetRequiredService<CinemaDbCoreContext>();
             var payOSService = scope.ServiceProvider.GetRequiredService<IPayOSService>();
             var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            var vipService = scope.ServiceProvider.GetRequiredService<IVIPService>();
 
             // Lấy tất cả Order đang PENDING và có PayOsOrderCode
             var pendingOrders = await db.Orders
@@ -105,7 +106,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         };
 
                         // Gọi logic xử lý payment (giống như webhook)
-                        await ProcessSuccessfulPaymentAsync(order, webhookRequest, db, emailService, ct);
+                        await ProcessSuccessfulPaymentAsync(order, webhookRequest, db, emailService, vipService, ct);
                     }
                     else if (payOSStatus.Status == "CANCELLED" || payOSStatus.Status == "EXPIRED")
                     {
@@ -139,6 +140,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             PayOSWebhookRequest request,
             CinemaDbCoreContext db,
             IEmailService emailService,
+            IVIPService vipService,
             CancellationToken ct)
         {
             // Logic này giống hệt trong PaymentController.ProcessSuccessfulPaymentAsync
@@ -398,7 +400,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 "Payment processed successfully - OrderId: {OrderId}, BookingId: {BookingId}, Tickets: {TicketCount}, ServiceOrders: {ServiceOrderCount}",
                 order.OrderId, booking.BookingId, seats.Count, comboGroups.Count);
 
-            // 13. Gửi email vé cho khách hàng
+            // 14. Gửi email vé cho khách hàng
             try
             {
                 if (customerId.HasValue && customerId.Value > 0)

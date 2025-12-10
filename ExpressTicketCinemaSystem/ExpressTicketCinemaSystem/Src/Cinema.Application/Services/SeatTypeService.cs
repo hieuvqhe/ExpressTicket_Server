@@ -350,6 +350,55 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy loại ghế với ID này hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Kiểm tra: Nếu đã có showtime sử dụng loại ghế này thì không được sửa bất kỳ thông tin nào
+            var seatsWithThisType = await _context.Seats
+                .Where(s => s.SeatTypeId == seatTypeId)
+                .Select(s => s.ScreenId)
+                .Distinct()
+                .ToListAsync();
+
+            if (seatsWithThisType.Any())
+            {
+                var hasShowtimes = await _context.Showtimes
+                    .AnyAsync(st => seatsWithThisType.Contains(st.ScreenId));
+
+                if (hasShowtimes)
+                {
+                    throw new ValidationException(new Dictionary<string, ValidationError>
+                    {
+                        ["showtimes"] = new ValidationError
+                        {
+                            Msg = "Không thể cập nhật thông tin loại ghế khi đã có suất chiếu sử dụng loại ghế này",
+                            Path = "id"
+                        }
+                    });
+                }
+            }
+
+            // Kiểm tra: Nếu đã có vé được bán cho ghế có loại ghế này thì không được sửa tên
+            var seatIdsWithThisType = await _context.Seats
+                .Where(s => s.SeatTypeId == seatTypeId)
+                .Select(s => s.SeatId)
+                .ToListAsync();
+
+            if (seatIdsWithThisType.Any())
+            {
+                var hasSoldTickets = await _context.Tickets
+                    .AnyAsync(t => seatIdsWithThisType.Contains(t.SeatId) && (t.Status == "VALID" || t.Status == "USED"));
+
+                if (hasSoldTickets && seatType.Name.Trim().ToLower() != request.Name.Trim().ToLower())
+                {
+                    throw new ValidationException(new Dictionary<string, ValidationError>
+                    {
+                        ["name"] = new ValidationError
+                        {
+                            Msg = "Không thể thay đổi tên loại ghế khi đã có vé được bán cho ghế thuộc loại này",
+                            Path = "name"
+                        }
+                    });
+                }
+            }
+
             // Validate nếu đang có ghế sử dụng thì không thể disable
             if (!request.Status && seatType.Status)
             {

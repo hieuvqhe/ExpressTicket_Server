@@ -11,3 +11,17 @@ public interface IPartnerStatisticsService
     Task<List<CheckInStatsResponse>> GetCheckInStatsByCinemaAsync(int cinemaId, int partnerId, DateTime? startDate, DateTime? endDate);
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

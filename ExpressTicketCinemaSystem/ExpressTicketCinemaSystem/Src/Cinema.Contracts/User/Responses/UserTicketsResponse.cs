@@ -23,6 +23,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.User.Responses
         public string CheckInStatus { get; set; } = "NOT_CHECKED_IN"; // PENDING, CHECKED_IN, NO_SHOW
         public DateTime? CheckInTime { get; set; }
         
+        /// <summary>
+        /// QR code for ticket: Format is SeatName + BookingCode (e.g., "A6BK202511281407418972")
+        /// </summary>
+        public string TicketQR { get; set; } = null!;
+        
         public TicketBookingDto Booking { get; set; } = null!;
         public TicketMovieDto Movie { get; set; } = null!;
         public TicketCinemaDto Cinema { get; set; } = null!;

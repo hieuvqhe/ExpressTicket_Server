@@ -18,3 +18,17 @@ public class ChannelStat
     public decimal NoShowRate { get; set; } // Percentage
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -245,6 +245,76 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách booking với phân trang
+        /// </summary>
+        [HttpGet("bookings")]
+        [ProducesResponseType(typeof(SuccessResponse<CashierBookingsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetBookings(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? status = null,
+            [FromQuery] string? paymentStatus = null,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] string? bookingCode = null,
+            [FromQuery] string? orderCode = null,
+            [FromQuery] int? showtimeId = null,
+            [FromQuery] string sortBy = "booking_time",
+            [FromQuery] string sortOrder = "desc")
+        {
+            try
+            {
+                var (employeeId, cinemaId) = await GetCashierInfoAsync();
+                var result = await _cashierService.GetBookingsAsync(
+                    employeeId, 
+                    cinemaId, 
+                    page, 
+                    pageSize, 
+                    status, 
+                    paymentStatus, 
+                    fromDate, 
+                    toDate, 
+                    bookingCode, 
+                    orderCode, 
+                    showtimeId, 
+                    sortBy, 
+                    sortOrder);
+
+                return Ok(new SuccessResponse<CashierBookingsResponse>
+                {
+                    Message = "Lấy danh sách booking thành công",
+                    Result = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                var firstErrorMessage = ex.Errors.Values.FirstOrDefault()?.Msg ?? "Lỗi xác thực dữ liệu";
+                return BadRequest(new ValidationErrorResponse
+                {
+                    Message = firstErrorMessage,
+                    Errors = ex.Errors
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = ex.Message
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy danh sách booking."
+                });
+            }
+        }
+
+        /// <summary>
         /// Lấy chi tiết booking cho hậu kiểm
         /// </summary>
         [HttpGet("bookings/{bookingId}/details")]
@@ -283,6 +353,58 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 });
             }
         }
+
+        /// <summary>
+        /// Lấy thông tin rạp mà cashier đang phụ trách
+        /// </summary>
+        [HttpGet("my-cinema")]
+        [ProducesResponseType(typeof(SuccessResponse<CashierCinemaResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetMyCinema()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.RoleType == "Cashier" && e.IsActive);
+
+                if (employee == null)
+                {
+                    return Unauthorized(new ValidationErrorResponse
+                    {
+                        Message = "Không tìm thấy thu ngân hoặc thu ngân không hoạt động"
+                    });
+                }
+
+                var result = await _cashierService.GetMyCinemaAsync(employee.EmployeeId);
+
+                return Ok(new SuccessResponse<CashierCinemaResponse>
+                {
+                    Message = "Lấy thông tin rạp thành công",
+                    Result = result
+                });
+            }
+            catch (UnauthorizedException ex)
+            {
+                return Unauthorized(new ValidationErrorResponse
+                {
+                    Message = ex.Message
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống khi lấy thông tin rạp."
+                });
+            }
+        }
     }
 }
+
+
+
+
 

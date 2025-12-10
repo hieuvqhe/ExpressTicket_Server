@@ -807,6 +807,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var items = tickets.Select(t => 
             {
                 var seatTicket = seatTicketsDict.GetValueOrDefault(t.TicketId);
+                var seatName = t.Seat.SeatName ?? $"{t.Seat.RowCode}{t.Seat.SeatNumber}";
+                var ticketQR = $"{seatName}{t.Booking.BookingCode}";
+                
                 return new UserTicketItemDto
                 {
                     TicketId = t.TicketId,
@@ -814,6 +817,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     Status = t.Status,
                     CheckInStatus = seatTicket?.CheckInStatus ?? "NOT_CHECKED_IN",
                     CheckInTime = seatTicket?.CheckInTime,
+                    TicketQR = ticketQR,
                     Booking = new TicketBookingDto
                     {
                         BookingId = t.Booking.BookingId,
@@ -849,7 +853,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         SeatId = t.Seat.SeatId,
                         RowCode = t.Seat.RowCode,
                         SeatNumber = t.Seat.SeatNumber,
-                        SeatName = t.Seat.SeatName ?? $"{t.Seat.RowCode}{t.Seat.SeatNumber}",
+                        SeatName = seatName,
                         SeatTypeName = t.Seat.SeatType?.Name
                     }
                 };

@@ -155,6 +155,38 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var screen = await _context.Screens
                 .FirstOrDefaultAsync(s => s.ScreenId == screenId);
 
+            // Kiểm tra: Nếu đã có showtime tồn tại thì không được sửa bất kỳ thông tin nào
+            var hasShowtimes = await _context.Showtimes
+                .AnyAsync(s => s.ScreenId == screenId);
+
+            if (hasShowtimes)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["showtimes"] = new ValidationError
+                    {
+                        Msg = "Không thể cập nhật thông tin phòng khi đã có suất chiếu được tạo",
+                        Path = "screenId"
+                    }
+                });
+            }
+
+            // Kiểm tra: Nếu đã có vé được bán thì không được sửa tên phòng
+            var hasSoldTickets = await _context.Tickets
+                .AnyAsync(t => t.Showtime.ScreenId == screenId && (t.Status == "VALID" || t.Status == "USED"));
+
+            if (hasSoldTickets && screen.ScreenName.Trim().ToLower() != request.ScreenName.Trim().ToLower())
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["screenName"] = new ValidationError
+                    {
+                        Msg = "Không thể thay đổi tên phòng khi đã có vé được bán",
+                        Path = "screenName"
+                    }
+                });
+            }
+
             // Validate không thể deactivate nếu đã có seat layout
             if (!request.IsActive && screen.IsActive)
             {
@@ -179,6 +211,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             screen.ScreenType = request.ScreenType.Trim().ToLower();
             screen.SoundSystem = request.SoundSystem?.Trim();
             screen.Capacity = request.Capacity;
+            screen.SeatRows = request.SeatRows;
+            screen.SeatColumns = request.SeatColumns;
             screen.IsActive = request.IsActive;
             screen.UpdatedDate = DateTime.UtcNow;
 
@@ -411,6 +445,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (request.Capacity <= 0)
                 errors["capacity"] = new ValidationError { Msg = "Sức chứa phải lớn hơn 0", Path = "capacity" };
+
+            if (request.SeatRows <= 0)
+                errors["seatRows"] = new ValidationError { Msg = "Số hàng ghế phải lớn hơn 0", Path = "seatRows" };
+            else if (request.SeatRows > 50)
+                errors["seatRows"] = new ValidationError { Msg = "Số hàng ghế không được vượt quá 50", Path = "seatRows" };
+
+            if (request.SeatColumns <= 0)
+                errors["seatColumns"] = new ValidationError { Msg = "Số cột ghế phải lớn hơn 0", Path = "seatColumns" };
+            else if (request.SeatColumns > 30)
+                errors["seatColumns"] = new ValidationError { Msg = "Số cột ghế không được vượt quá 30", Path = "seatColumns" };
 
             if (errors.Any())
                 throw new ValidationException(errors);

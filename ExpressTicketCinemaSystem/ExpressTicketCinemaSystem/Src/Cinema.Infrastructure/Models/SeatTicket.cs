@@ -41,3 +41,17 @@ public partial class SeatTicket
     public virtual Employee? CheckedInByEmployee { get; set; }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

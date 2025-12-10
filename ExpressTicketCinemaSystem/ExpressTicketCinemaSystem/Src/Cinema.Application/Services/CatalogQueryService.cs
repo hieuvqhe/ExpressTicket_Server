@@ -95,13 +95,28 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Screen = new { s.Screen.ScreenId, s.Screen.ScreenName, s.Screen.ScreenType, s.Screen.SoundSystem, s.Screen.Capacity }
             }).ToListAsync(ct);
 
-            // 4) Brands khả dụng cho ngày đó
-            var brands = raw.Select(x => x.Cinema.Code?.Split('_').FirstOrDefault() ?? "")
+            // 4) Brands khả dụng cho ngày đó - tự động lấy logo từ rạp cùng brand
+            var brandCodes = raw.Select(x => x.Cinema.Code?.Split('_').FirstOrDefault() ?? "")
                             .Where(b => !string.IsNullOrEmpty(b))
                             .Distinct()
                             .OrderBy(b => b)
-                            .Select(b => new BrandItem { Code = b, Name = b, LogoUrl = null })
                             .ToList();
+
+            var brands = brandCodes.Select(brandCode =>
+            {
+                // Tìm rạp đầu tiên có cùng brand code và có logo URL
+                var cinemaWithLogo = raw
+                    .Where(x => x.Cinema.Code?.StartsWith(brandCode + "_") == true && !string.IsNullOrWhiteSpace(x.Cinema.LogoUrl))
+                    .Select(x => x.Cinema.LogoUrl)
+                    .FirstOrDefault();
+
+                return new BrandItem 
+                { 
+                    Code = brandCode, 
+                    Name = brandCode, 
+                    LogoUrl = cinemaWithLogo 
+                };
+            }).ToList();
 
             // 5) Group theo rạp → phòng → showtimes
             var cinemaGroups = raw.GroupBy(x => x.Cinema).ToList();
@@ -359,13 +374,28 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }).ToListAsync(ct);
 
-            // 6) Get available brands
-            var brands = raw.Select(x => x.Cinema.Code?.Split('_').FirstOrDefault() ?? "")
+            // 6) Get available brands - tự động lấy logo từ rạp cùng brand
+            var brandCodes = raw.Select(x => x.Cinema.Code?.Split('_').FirstOrDefault() ?? "")
                             .Where(b => !string.IsNullOrEmpty(b))
                             .Distinct()
                             .OrderBy(b => b)
-                            .Select(b => new BrandItem { Code = b, Name = b, LogoUrl = null })
                             .ToList();
+
+            var brands = brandCodes.Select(brandCode =>
+            {
+                // Tìm rạp đầu tiên có cùng brand code và có logo URL
+                var cinemaWithLogo = raw
+                    .Where(x => x.Cinema.Code?.StartsWith(brandCode + "_") == true && !string.IsNullOrWhiteSpace(x.Cinema.LogoUrl))
+                    .Select(x => x.Cinema.LogoUrl)
+                    .FirstOrDefault();
+
+                return new BrandItem 
+                { 
+                    Code = brandCode, 
+                    Name = brandCode, 
+                    LogoUrl = cinemaWithLogo 
+                };
+            }).ToList();
 
             // 7) Group by Cinema → Movie → Screen
             var cinemaGroups = raw.GroupBy(x => x.Cinema).ToList();

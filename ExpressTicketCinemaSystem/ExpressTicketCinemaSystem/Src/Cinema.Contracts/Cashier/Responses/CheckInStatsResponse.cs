@@ -14,3 +14,17 @@ public class CheckInStatsResponse
     public int OccupancySold { get; set; } // Số ghế đã bán
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -28,3 +28,17 @@ public class CheckInTimeRange
     public decimal Percentage { get; set; }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

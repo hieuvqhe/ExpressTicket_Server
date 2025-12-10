@@ -8,3 +8,17 @@ public class ScanTicketRequest
     public string QrCode { get; set; } = null!;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

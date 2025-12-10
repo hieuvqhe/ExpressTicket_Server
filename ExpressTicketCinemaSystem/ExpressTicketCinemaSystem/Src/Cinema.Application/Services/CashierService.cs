@@ -3,6 +3,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Cashier.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Cashier.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -42,23 +43,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new UnauthorizedException("Thu ngân không có quyền quét vé tại rạp này");
             }
 
-            // Parse QR code: Format is "A1ORD21384" where "A1" is SeatName and "ORD21384" is OrderCode
-            // Note: SeatName is the full name of the seat (e.g., "A1"), not RowCode + SeatNumber
-            // A seat named "A1" might be in RowCode="A" but SeatNumber=2 (if seat 1 is "Z0")
-            var (seatName, orderCode) = ParseQrCode(qrCode);
+            // Parse QR code: Format is "A6BK202511281407418972" where "A6" is SeatName and "BK202511281407418972" is BookingCode
+            // Note: SeatName is the full name of the seat (e.g., "A6"), not RowCode + SeatNumber
+            // A seat named "A6" might be in RowCode="A" but SeatNumber=7 (if seat 1 is "Z0")
+            var (seatName, bookingCode) = ParseQrCode(qrCode);
 
-            if (string.IsNullOrEmpty(seatName) || string.IsNullOrEmpty(orderCode))
+            if (string.IsNullOrEmpty(seatName) || string.IsNullOrEmpty(bookingCode))
             {
                 return new ScanTicketResponse
                 {
                     Success = false,
-                    Message = "QR code không hợp lệ. Format phải là: [SeatName][OrderCode] (ví dụ: A1ORD21384)",
+                    Message = "QR code không hợp lệ. Format phải là: [SeatName][BookingCode] (ví dụ: A6BK202511281407418972)",
                     TicketInfo = null,
                     BookingStatus = null
                 };
             }
 
-            // Find ticket by SeatName (the full name stored in Seat.SeatName) and OrderCode
+            // Find ticket by SeatName (the full name stored in Seat.SeatName) and BookingCode
             var ticket = await _context.Tickets
                 .Include(t => t.Seat)
                 .Include(t => t.Booking)
@@ -71,7 +72,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(b => b.Customer)
                 .FirstOrDefaultAsync(t => 
                     t.Seat.SeatName == seatName
-                    && (t.Booking.OrderCode == orderCode || t.Booking.BookingCode == orderCode)
+                    && t.Booking.BookingCode == bookingCode
                     && t.Booking.Showtime.CinemaId == cinemaId);
 
             if (ticket == null)
@@ -102,12 +103,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var now = DateTime.UtcNow;
             var timeDiff = (now - showtime.ShowDatetime).TotalMinutes;
             
-            if (timeDiff < -60) // Too early (more than 1 hour before)
+            // TEST: Allow scanning within 3 days before/after showtime
+            // 3 days = 3 * 24 * 60 = 4320 minutes
+            if (timeDiff < -4320) // Too early (more than 3 days before)
             {
                 return new ScanTicketResponse
                 {
                     Success = false,
                     Message = "Chưa đến thời gian quét vé. Vui lòng quét lại sau.",
+                    TicketInfo = null,
+                    BookingStatus = null
+                };
+            }
+            
+            // TEST: Allow scanning up to 3 days after showtime
+            if (timeDiff > 4320) // Too late (more than 3 days after)
+            {
+                return new ScanTicketResponse
+                {
+                    Success = false,
+                    Message = "Đã quá thời gian quét vé (quá 3 ngày sau khi phim bắt đầu).",
                     TicketInfo = null,
                     BookingStatus = null
                 };
@@ -212,56 +227,56 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 Success = true,
                 Message = "Quét vé thành công!",
-                TicketInfo = new TicketScanInfo
-                {
-                    TicketId = ticket.TicketId,
-                    SeatId = ticket.SeatId,
-                    SeatName = $"{ticket.Seat.RowCode}{ticket.Seat.SeatNumber}",
-                    OrderCode = ticket.Booking.OrderCode ?? "",
-                    BookingId = ticket.BookingId,
-                    BookingCode = ticket.Booking.BookingCode,
-                    ShowtimeId = ticket.ShowtimeId,
-                    ShowtimeStart = showtime.ShowDatetime,
-                    MovieName = showtime.Movie.Title ?? "",
-                    CinemaName = showtime.Cinema.CinemaName ?? "",
-                    CheckInTime = now,
-                    IsAlreadyCheckedIn = false
-                },
+                    TicketInfo = new TicketScanInfo
+                    {
+                        TicketId = ticket.TicketId,
+                        SeatId = ticket.SeatId,
+                        SeatName = ticket.Seat.SeatName ?? $"{ticket.Seat.RowCode}{ticket.Seat.SeatNumber}",
+                        OrderCode = ticket.Booking.OrderCode ?? "",
+                        BookingId = ticket.BookingId,
+                        BookingCode = ticket.Booking.BookingCode,
+                        ShowtimeId = ticket.ShowtimeId,
+                        ShowtimeStart = showtime.ShowDatetime,
+                        MovieName = showtime.Movie.Title ?? "",
+                        CinemaName = showtime.Cinema.CinemaName ?? "",
+                        CheckInTime = now,
+                        IsAlreadyCheckedIn = false
+                    },
                 BookingStatus = await GetBookingCheckInStatusAsync(ticket.BookingId)
             };
         }
 
         /// <summary>
-        /// Parse QR code format: "A1ORD21384" -> (seatName: "A1", orderCode: "ORD21384")
-        /// QR code format: [SeatName][OrderCode] where SeatName is like "A1", "B12", "AA5" and OrderCode starts with "ORD"
+        /// Parse QR code format: "A6BK202511281407418972" -> (seatName: "A6", bookingCode: "BK202511281407418972")
+        /// QR code format: [SeatName][BookingCode] where SeatName is like "A6", "B12", "AA5" and BookingCode starts with "BK"
         /// </summary>
-        private (string seatName, string orderCode) ParseQrCode(string qrCode)
+        private (string seatName, string bookingCode) ParseQrCode(string qrCode)
         {
             if (string.IsNullOrWhiteSpace(qrCode))
             {
                 return ("", "");
             }
 
-            // Try to find "ORD" in the string (case-insensitive) - OrderCode usually starts with "ORD"
-            var ordIndex = qrCode.IndexOf("ORD", StringComparison.OrdinalIgnoreCase);
+            // Try to find "BK" in the string (case-insensitive) - BookingCode usually starts with "BK"
+            var bkIndex = qrCode.IndexOf("BK", StringComparison.OrdinalIgnoreCase);
             
-            if (ordIndex > 0)
+            if (bkIndex > 0)
             {
-                // Found ORD, split at that position
-                var seatName = qrCode.Substring(0, ordIndex).Trim();
-                var orderCode = qrCode.Substring(ordIndex).Trim();
+                // Found BK, split at that position
+                var seatName = qrCode.Substring(0, bkIndex).Trim();
+                var bookingCode = qrCode.Substring(bkIndex).Trim();
                 
-                // Validate: seatName should have at least 1 letter and 1 digit
-                // orderCode should start with "ORD" (case-insensitive)
+                // Validate: seatName should have at least 1 character
+                // bookingCode should start with "BK" (case-insensitive)
                 if (!string.IsNullOrEmpty(seatName) && 
-                    !string.IsNullOrEmpty(orderCode) &&
-                    orderCode.StartsWith("ORD", StringComparison.OrdinalIgnoreCase))
+                    !string.IsNullOrEmpty(bookingCode) &&
+                    bookingCode.StartsWith("BK", StringComparison.OrdinalIgnoreCase))
                 {
-                    return (seatName, orderCode);
+                    return (seatName, bookingCode);
                 }
             }
 
-            // If no "ORD" found or format invalid, return empty
+            // If no "BK" found or format invalid, return empty
             return ("", "");
         }
 
@@ -623,6 +638,182 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             };
         }
 
+        public async Task<CashierBookingsResponse> GetBookingsAsync(
+            int cashierEmployeeId, 
+            int cinemaId, 
+            int page = 1, 
+            int pageSize = 20, 
+            string? status = null, 
+            string? paymentStatus = null, 
+            DateTime? fromDate = null, 
+            DateTime? toDate = null, 
+            string? bookingCode = null, 
+            string? orderCode = null, 
+            int? showtimeId = null, 
+            string sortBy = "booking_time", 
+            string sortOrder = "desc")
+        {
+            // Validate cashier access
+            await ValidateCashierAccessAsync(cashierEmployeeId, cinemaId);
+
+            // Validate pagination
+            if (page < 1)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["page"] = new ValidationError
+                    {
+                        Msg = "Page phải lớn hơn hoặc bằng 1.",
+                        Path = "page",
+                        Location = "query"
+                    }
+                });
+            }
+
+            if (pageSize < 1 || pageSize > 100)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["pageSize"] = new ValidationError
+                    {
+                        Msg = "PageSize phải trong khoảng 1-100.",
+                        Path = "pageSize",
+                        Location = "query"
+                    }
+                });
+            }
+
+            // Build query - chỉ lấy booking của rạp này
+            var query = _context.Bookings
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Cinema)
+                .Include(b => b.Customer)
+                    .ThenInclude(c => c.User)
+                .Include(b => b.Tickets)
+                .Where(b => b.Showtime.CinemaId == cinemaId)
+                .AsQueryable();
+
+            // Apply filters
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query = query.Where(b => b.Status == status);
+            }
+
+            if (!string.IsNullOrWhiteSpace(paymentStatus))
+            {
+                query = query.Where(b => b.PaymentStatus == paymentStatus);
+            }
+
+            if (fromDate.HasValue)
+            {
+                query = query.Where(b => b.BookingTime >= fromDate.Value);
+            }
+
+            if (toDate.HasValue)
+            {
+                query = query.Where(b => b.BookingTime <= toDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(bookingCode))
+            {
+                query = query.Where(b => b.BookingCode.Contains(bookingCode));
+            }
+
+            if (!string.IsNullOrWhiteSpace(orderCode))
+            {
+                query = query.Where(b => b.OrderCode != null && b.OrderCode.Contains(orderCode));
+            }
+
+            if (showtimeId.HasValue)
+            {
+                query = query.Where(b => b.ShowtimeId == showtimeId.Value);
+            }
+
+            // Apply sorting
+            query = sortBy.ToLower() switch
+            {
+                "booking_time" => sortOrder.ToLower() == "asc" 
+                    ? query.OrderBy(b => b.BookingTime)
+                    : query.OrderByDescending(b => b.BookingTime),
+                "total_amount" => sortOrder.ToLower() == "asc"
+                    ? query.OrderBy(b => b.TotalAmount)
+                    : query.OrderByDescending(b => b.TotalAmount),
+                "booking_code" => sortOrder.ToLower() == "asc"
+                    ? query.OrderBy(b => b.BookingCode)
+                    : query.OrderByDescending(b => b.BookingCode),
+                _ => query.OrderByDescending(b => b.BookingTime)
+            };
+
+            // Get total count
+            var totalItems = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
+
+            // Apply pagination
+            var bookings = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            // Map to DTOs
+            var items = new List<CashierBookingItemDto>();
+            foreach (var booking in bookings)
+            {
+                // Count tickets and check-in status
+                var tickets = booking.Tickets.ToList();
+                var ticketCount = tickets.Count;
+                var checkedInTickets = tickets.Count(t => t.Status == "CHECKED_IN");
+                var notCheckedInTickets = ticketCount - checkedInTickets;
+
+                items.Add(new CashierBookingItemDto
+                {
+                    BookingId = booking.BookingId,
+                    BookingCode = booking.BookingCode,
+                    OrderCode = booking.OrderCode,
+                    BookingTime = booking.BookingTime,
+                    TotalAmount = booking.TotalAmount,
+                    Status = booking.Status,
+                    PaymentStatus = booking.PaymentStatus,
+                    PaymentProvider = booking.PaymentProvider,
+                    TicketCount = ticketCount,
+                    CheckedInTicketCount = checkedInTickets,
+                    NotCheckedInTicketCount = notCheckedInTickets,
+                    Showtime = new CashierBookingShowtimeDto
+                    {
+                        ShowtimeId = booking.ShowtimeId,
+                        ShowDatetime = booking.Showtime.ShowDatetime,
+                        EndTime = booking.Showtime.EndTime,
+                        FormatType = booking.Showtime.FormatType,
+                        Status = booking.Showtime.Status ?? ""
+                    },
+                    Movie = new CashierBookingMovieDto
+                    {
+                        MovieId = booking.Showtime.Movie.MovieId,
+                        Title = booking.Showtime.Movie.Title ?? "",
+                        DurationMinutes = booking.Showtime.Movie.DurationMinutes,
+                        PosterUrl = booking.Showtime.Movie.PosterUrl
+                    },
+                    Customer = new CashierBookingCustomerDto
+                    {
+                        CustomerId = booking.CustomerId,
+                        FullName = booking.Customer.User.Fullname,
+                        Email = booking.Customer.User.Email,
+                        Phone = booking.Customer.User.Phone
+                    }
+                });
+            }
+
+            return new CashierBookingsResponse
+            {
+                Page = page,
+                PageSize = pageSize,
+                TotalItems = totalItems,
+                TotalPages = totalPages,
+                Items = items
+            };
+        }
+
         private async Task ValidateCashierAccessAsync(int cashierEmployeeId, int cinemaId)
         {
             var cashier = await _context.Employees
@@ -660,6 +851,48 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 "cash" => "Counter",
                 "partner" => "Partner",
                 _ => "Other"
+            };
+        }
+
+        public async Task<CashierCinemaResponse> GetMyCinemaAsync(int cashierEmployeeId)
+        {
+            var employee = await _context.Employees
+                .Include(e => e.CinemaAssignments)
+                    .ThenInclude(a => a.Cinema)
+                .FirstOrDefaultAsync(e => e.EmployeeId == cashierEmployeeId 
+                    && e.RoleType == "Cashier" 
+                    && e.IsActive);
+
+            if (employee == null)
+            {
+                throw new UnauthorizedException("Không tìm thấy thu ngân hoặc thu ngân không hoạt động");
+            }
+
+            var assignment = employee.CinemaAssignments.FirstOrDefault(a => a.IsActive);
+            if (assignment == null || assignment.Cinema == null)
+            {
+                throw new UnauthorizedException("Thu ngân chưa được phân quyền rạp nào");
+            }
+
+            var cinema = assignment.Cinema;
+
+            return new CashierCinemaResponse
+            {
+                CinemaId = cinema.CinemaId,
+                CinemaName = cinema.CinemaName ?? string.Empty,
+                Address = cinema.Address ?? string.Empty,
+                Phone = cinema.Phone,
+                Code = cinema.Code ?? string.Empty,
+                City = cinema.City ?? string.Empty,
+                District = cinema.District ?? string.Empty,
+                Latitude = cinema.Latitude,
+                Longitude = cinema.Longitude,
+                Email = cinema.Email,
+                IsActive = cinema.IsActive ?? false,
+                LogoUrl = cinema.LogoUrl,
+                AssignedAt = assignment.AssignedAt,
+                EmployeeId = employee.EmployeeId,
+                EmployeeName = employee.FullName
             };
         }
     }

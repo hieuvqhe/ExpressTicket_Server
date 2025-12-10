@@ -5,6 +5,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Helpers;
 using static ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests.CreateMovieRequest;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
@@ -1131,7 +1132,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 UserAvatar = r.UserAvatar,
                 RatingStar = r.RatingStar,
                 Comment = r.Comment,
-                RatingAt = r.RatingAt,
+                RatingAt = DateTimeHelper.ToVietnamTime(r.RatingAt), // Chuyển sang giờ VN
                 ImageUrls = !string.IsNullOrEmpty(r.ImageUrls) 
                     ? r.ImageUrls.Split(';', StringSplitOptions.RemoveEmptyEntries).ToList() 
                     : new List<string>()
@@ -1220,7 +1221,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     UserAvatar = review.User.AvatarUrl,
                     RatingStar = review.RatingStar,
                     Comment = review.Comment ?? "",
-                    RatingAt = review.RatingAt,
+                    RatingAt = DateTimeHelper.ToVietnamTime(review.RatingAt), // Chuyển sang giờ VN
                     ImageUrls = !string.IsNullOrEmpty(review.ImageUrls) 
                         ? review.ImageUrls.Split(';').ToList() 
                         : new List<string>()

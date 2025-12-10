@@ -129,6 +129,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var beforeSnapshot = await BuildSeatLayoutSnapshotAsync(screenId);
             var hasExistingLayout = beforeSnapshot.SeatMap != null || beforeSnapshot.Seats.Count > 0;
 
+            // Kiểm tra: Nếu đã có layout và đang update, không cho phép nếu có showtime nào
+            if (hasExistingLayout)
+            {
+                await ValidateNoShowtimesForScreenAsync(screenId);
+            }
+
             using var transaction = await _context.Database.BeginTransactionAsync();
 
             try
@@ -270,6 +276,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await ValidateScreenAccessAsync(screenId, partnerId, userId);
             ValidateUpdateSeatRequest(request);
 
+            // Kiểm tra: Không cho phép update ghế nếu screen đã có showtime
+            await ValidateNoShowtimesForScreenAsync(screenId);
+
             // ==================== BUSINESS LOGIC SECTION ====================
 
             var seat = await _context.Seats
@@ -327,6 +336,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // ==================== VALIDATION SECTION ====================
             await ValidateScreenAccessAsync(screenId, partnerId, userId);
             ValidateBulkUpdateSeatsRequest(request);
+
+            // Kiểm tra: Không cho phép bulk update ghế nếu screen đã có showtime
+            await ValidateNoShowtimesForScreenAsync(screenId);
 
             // ==================== BUSINESS LOGIC SECTION ====================
             var targetSeatIds = request.SeatUpdates
@@ -1028,6 +1040,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     ["showtimes"] = new ValidationError
                     {
                         Msg = "Không thể xóa ghế khi đã có lịch chiếu được tạo",
+                        Path = "screenId"
+                    }
+                });
+            }
+        }
+
+        private async Task ValidateNoShowtimesForScreenAsync(int screenId)
+        {
+            // ✅ CHECK: Không cho phép cập nhật/thay đổi sơ đồ ghế nếu đã có showtime
+            var hasShowtimes = await _context.Showtimes
+                .AnyAsync(st => st.ScreenId == screenId);
+
+            if (hasShowtimes)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["showtimes"] = new ValidationError
+                    {
+                        Msg = "Không thể cập nhật hoặc thay đổi sơ đồ ghế khi đã có suất chiếu được tạo",
                         Path = "screenId"
                     }
                 });

@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -25,6 +26,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IManagerService _managerService;
         private readonly IContractValidationService _contractValidationService;
         private readonly IAuditLogService _auditLogService;
+        private readonly ILogger<PartnerService> _logger;
 
         public PartnerService(
             CinemaDbCoreContext context,
@@ -32,7 +34,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             IEmailService emailService,
             IManagerService managerService ,
             IContractValidationService contractValidationService,
-            IAuditLogService auditLogService)
+            IAuditLogService auditLogService,
+            ILogger<PartnerService> logger)
         {
             _context = context;
             _passwordHasher = passwordHasher;
@@ -40,6 +43,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _managerService = managerService;
             _contractValidationService = contractValidationService;
             _auditLogService = auditLogService;
+            _logger = logger;
         }
         public async Task<PartnerRegisterResponse> RegisterPartnerAsync(PartnerRegisterRequest request)
         {
@@ -118,11 +122,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     partner.PartnerName
                 });
 
-            await _emailService.SendPartnerRegistrationConfirmationAsync(
-                user.Email,
-                user.Fullname,
-                partner.PartnerName
-            );
+            // Gửi email không chặn - nếu lỗi thì chỉ log, không làm fail đăng ký
+            try
+            {
+                await _emailService.SendPartnerRegistrationConfirmationAsync(
+                    user.Email,
+                    user.Fullname,
+                    partner.PartnerName
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không thể gửi email xác nhận đăng ký đối tác. Email: {Email}, PartnerId: {PartnerId}", 
+                    user.Email, partner.PartnerId);
+                // Không throw exception - đăng ký vẫn thành công dù email lỗi
+            }
 
             return new PartnerRegisterResponse
             {

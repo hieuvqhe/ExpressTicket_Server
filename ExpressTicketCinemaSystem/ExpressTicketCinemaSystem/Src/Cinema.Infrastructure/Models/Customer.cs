@@ -20,4 +20,8 @@ public partial class Customer
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
     public virtual User User { get; set; } = null!;
+
+    public virtual VIPMember? VIPMember { get; set; }
+
+    public virtual ICollection<PointHistory> PointHistories { get; set; } = new List<PointHistory>();
 }

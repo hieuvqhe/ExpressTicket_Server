@@ -1,5 +1,4 @@
 ﻿using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
-using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
@@ -8,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
+using System.Security.Claims;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Auth;
@@ -20,6 +20,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Serialization;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Booking;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Catalog;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Cashier;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime;
 using Microsoft.AspNetCore.SignalR;
@@ -165,6 +166,7 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<UserGetOrdersExampleFilter>();
     options.OperationFilter<UserGetOrderDetailExampleFilter>();
     options.OperationFilter<UserGetTicketsExampleFilter>();
+    options.OperationFilter<CashierGetBookingsExampleFilter>();
     options.OperationFilter<CreateMovieReviewExampleFilter>();
     options.OperationFilter<UpdateMovieReviewExampleFilter>();
     options.OperationFilter<DeleteMovieReviewExampleFilter>();
@@ -253,6 +255,7 @@ builder.Services.AddSingleton<
 builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
 builder.Services.AddHostedService<BookingSessionCleanupService>(); 
 builder.Services.AddScoped<IVoucherService, VoucherService>();
+builder.Services.AddScoped<IVIPService, VIPService>();
 builder.Services.AddHttpClient(); // For PayOS HTTP calls
 builder.Services.AddScoped<IPayOSService, PayOSService>();
 builder.Services.AddHostedService<PaymentPollingService>(); 
@@ -274,7 +277,9 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
         ),
-        ClockSkew = TimeSpan.Zero
+        ClockSkew = TimeSpan.Zero,
+        RoleClaimType = ClaimTypes.Role,
+        NameClaimType = ClaimTypes.NameIdentifier
     };
     options.Events = new JwtBearerEvents
     {

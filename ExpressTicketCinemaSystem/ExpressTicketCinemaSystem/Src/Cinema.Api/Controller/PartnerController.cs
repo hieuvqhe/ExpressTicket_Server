@@ -21,6 +21,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Permission.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Permission.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Staff.Responses;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -44,8 +45,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
         private readonly IPermissionService _permissionService;
         private readonly IStaffService _staffService;
+        private readonly ILogger<PartnersController> _logger;
 
-        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, IScreenService screenService, ISeatTypeService seatTypeService, ISeatLayoutService seatLayoutService, CinemaDbCoreContext context, IContractValidationService contractValidationService, ICinemaService cinemaService, IShowtimeService showtimeService, IComboService comboService, EmployeeManagementService employeeManagementService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService, IPermissionService permissionService, IStaffService staffService)
+        public PartnersController(PartnerService partnerService, ContractService contractService, IAzureBlobService azureBlobService, IScreenService screenService, ISeatTypeService seatTypeService, ISeatLayoutService seatLayoutService, CinemaDbCoreContext context, IContractValidationService contractValidationService, ICinemaService cinemaService, IShowtimeService showtimeService, IComboService comboService, EmployeeManagementService employeeManagementService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService, IPermissionService permissionService, IStaffService staffService, ILogger<PartnersController> logger)
         {
             _partnerService = partnerService;
             _contractService = contractService;
@@ -62,6 +64,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
             _permissionService = permissionService;
             _staffService = staffService;
+            _logger = logger;
         }
         private int GetCurrentUserId()
         {
@@ -200,6 +203,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Lỗi khi đăng ký đối tác. Email: {Email}, PartnerName: {PartnerName}", 
+                    request?.Email, request?.PartnerName);
                 return StatusCode(500, new ErrorResponse
                 {
                     Message = "Đã xảy ra lỗi hệ thống trong quá trình đăng ký đối tác.",

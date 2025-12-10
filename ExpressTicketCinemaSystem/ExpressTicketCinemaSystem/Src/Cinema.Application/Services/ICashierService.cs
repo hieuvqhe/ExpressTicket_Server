@@ -10,5 +10,11 @@ public interface ICashierService
     Task<ChannelStatsResponse> GetChannelStatsAsync(int showtimeId, int cashierEmployeeId, int cinemaId);
     Task<CustomerBehaviorResponse> GetCustomerBehaviorAsync(int showtimeId, int cashierEmployeeId, int cinemaId);
     Task<BookingDetailsResponse> GetBookingDetailsAsync(int bookingId, int cashierEmployeeId, int cinemaId);
+    Task<CashierBookingsResponse> GetBookingsAsync(int cashierEmployeeId, int cinemaId, int page = 1, int pageSize = 20, string? status = null, string? paymentStatus = null, DateTime? fromDate = null, DateTime? toDate = null, string? bookingCode = null, string? orderCode = null, int? showtimeId = null, string sortBy = "booking_time", string sortOrder = "desc");
+    Task<CashierCinemaResponse> GetMyCinemaAsync(int cashierEmployeeId);
 }
+
+
+
+
 

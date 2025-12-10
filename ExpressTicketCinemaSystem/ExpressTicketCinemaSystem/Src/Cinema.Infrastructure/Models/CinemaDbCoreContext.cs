@@ -104,6 +104,16 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<VoucherReservation> VoucherReservations { get; set; }
 
+    public virtual DbSet<VIPLevel> VIPLevels { get; set; }
+
+    public virtual DbSet<VIPBenefit> VIPBenefits { get; set; }
+
+    public virtual DbSet<VIPMember> VIPMembers { get; set; }
+
+    public virtual DbSet<PointHistory> PointHistories { get; set; }
+
+    public virtual DbSet<VIPBenefitClaim> VIPBenefitClaims { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     { }
 
@@ -2020,6 +2030,193 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.BookingId)
                 .OnDelete(DeleteBehavior.NoAction)
                 .HasConstraintName("FK_Order_Booking");
+        });
+
+        // VIP System Entities
+        modelBuilder.Entity<VIPLevel>(entity =>
+        {
+            entity.HasKey(e => e.VipLevelId).HasName("PK_VIPLevel");
+
+            entity.ToTable("VIPLevel");
+
+            entity.Property(e => e.VipLevelId).HasColumnName("vip_level_id");
+            entity.Property(e => e.LevelName)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("level_name");
+            entity.Property(e => e.LevelDisplayName)
+                .HasMaxLength(100)
+                .HasColumnName("level_display_name");
+            entity.Property(e => e.MinPointsRequired).HasColumnName("min_points_required");
+            entity.Property(e => e.PointEarningRate)
+                .HasColumnType("decimal(5,2)")
+                .HasColumnName("point_earning_rate");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+        });
+
+        modelBuilder.Entity<VIPBenefit>(entity =>
+        {
+            entity.HasKey(e => e.BenefitId).HasName("PK_VIPBenefit");
+
+            entity.ToTable("VIPBenefit");
+
+            entity.Property(e => e.BenefitId).HasColumnName("benefit_id");
+            entity.Property(e => e.VipLevelId).HasColumnName("vip_level_id");
+            entity.Property(e => e.BenefitType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("benefit_type");
+            entity.Property(e => e.BenefitName)
+                .HasMaxLength(200)
+                .HasColumnName("benefit_name");
+            entity.Property(e => e.BenefitDescription)
+                .HasMaxLength(500)
+                .HasColumnName("benefit_description");
+            entity.Property(e => e.BenefitValue)
+                .HasColumnType("decimal(10,2)")
+                .HasColumnName("benefit_value");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.VIPLevel).WithMany(p => p.VIPBenefits)
+                .HasForeignKey(d => d.VipLevelId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPBenefit_VIPLevel");
+        });
+
+        modelBuilder.Entity<VIPMember>(entity =>
+        {
+            entity.HasKey(e => e.VipMemberId).HasName("PK_VIPMember");
+
+            entity.ToTable("VIPMember");
+
+            entity.HasIndex(e => e.CustomerId, "UQ_VIPMember_Customer").IsUnique();
+
+            entity.Property(e => e.VipMemberId).HasColumnName("vip_member_id");
+            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
+            entity.Property(e => e.CurrentVipLevelId).HasColumnName("current_vip_level_id");
+            entity.Property(e => e.TotalPoints).HasColumnName("total_points");
+            entity.Property(e => e.GrowthValue).HasColumnName("growth_value");
+            entity.Property(e => e.LastUpgradeDate)
+                .HasPrecision(3)
+                .HasColumnName("last_upgrade_date");
+            entity.Property(e => e.BirthdayBonusClaimedYear).HasColumnName("birthday_bonus_claimed_year");
+            entity.Property(e => e.MonthlyFreeTicketClaimedMonth).HasColumnName("monthly_free_ticket_claimed_month");
+            entity.Property(e => e.MonthlyFreeComboClaimedMonth).HasColumnName("monthly_free_combo_claimed_month");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.Customer).WithOne(p => p.VIPMember)
+                .HasForeignKey<VIPMember>(d => d.CustomerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPMember_Customer");
+
+            entity.HasOne(d => d.CurrentVIPLevel).WithMany(p => p.VIPMembers)
+                .HasForeignKey(d => d.CurrentVipLevelId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPMember_VIPLevel");
+        });
+
+        modelBuilder.Entity<PointHistory>(entity =>
+        {
+            entity.HasKey(e => e.PointHistoryId).HasName("PK_PointHistory");
+
+            entity.ToTable("PointHistory");
+
+            entity.Property(e => e.PointHistoryId).HasColumnName("point_history_id");
+            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
+            entity.Property(e => e.OrderId)
+                .HasMaxLength(100)
+                .HasColumnName("order_id");
+            entity.Property(e => e.TransactionType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("transaction_type");
+            entity.Property(e => e.Points).HasColumnName("points");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .HasColumnName("description");
+            entity.Property(e => e.VipLevelId).HasColumnName("vip_level_id");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+
+            entity.HasOne(d => d.Customer).WithMany(p => p.PointHistories)
+                .HasForeignKey(d => d.CustomerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_PointHistory_Customer");
+
+            entity.HasOne(d => d.VIPLevel).WithMany(p => p.PointHistories)
+                .HasForeignKey(d => d.VipLevelId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_PointHistory_VIPLevel");
+        });
+
+        modelBuilder.Entity<VIPBenefitClaim>(entity =>
+        {
+            entity.HasKey(e => e.BenefitClaimId).HasName("PK_VIPBenefitClaim");
+
+            entity.ToTable("VIPBenefitClaim");
+
+            entity.Property(e => e.BenefitClaimId).HasColumnName("benefit_claim_id");
+            entity.Property(e => e.VipMemberId).HasColumnName("vip_member_id");
+            entity.Property(e => e.BenefitId).HasColumnName("benefit_id");
+            entity.Property(e => e.ClaimType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("claim_type");
+            entity.Property(e => e.ClaimValue)
+                .HasColumnType("decimal(10,2)")
+                .HasColumnName("claim_value");
+            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("status");
+            entity.Property(e => e.ClaimedAt)
+                .HasPrecision(3)
+                .HasColumnName("claimed_at");
+            entity.Property(e => e.ExpiresAt)
+                .HasPrecision(3)
+                .HasColumnName("expires_at");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+
+            entity.HasOne(d => d.VIPMember).WithMany(p => p.VIPBenefitClaims)
+                .HasForeignKey(d => d.VipMemberId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPBenefitClaim_VIPMember");
+
+            entity.HasOne(d => d.VIPBenefit).WithMany(p => p.VIPBenefitClaims)
+                .HasForeignKey(d => d.BenefitId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPBenefitClaim_VIPBenefit");
+
+            entity.HasOne(d => d.Voucher).WithMany()
+                .HasForeignKey(d => d.VoucherId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_VIPBenefitClaim_Voucher");
         });
 
         OnModelCreatingPartial(modelBuilder);

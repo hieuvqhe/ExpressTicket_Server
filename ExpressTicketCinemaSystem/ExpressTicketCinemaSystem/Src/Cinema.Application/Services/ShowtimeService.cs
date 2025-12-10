@@ -94,6 +94,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // ==================== VALIDATION SECTION ====================
             var existingShowtime = await ValidateAndGetShowtimeAsync(partnerId, showtimeId);
 
+            // Kiểm tra xem có vé nào đã được bán (VALID hoặc USED) không - không cho phép update
+            var hasSoldTickets = await _context.Tickets
+                .AnyAsync(t => t.ShowtimeId == showtimeId && (t.Status == "VALID" || t.Status == "USED"));
+
+            if (hasSoldTickets)
+            {
+                throw new ConflictException("showtime",
+                    "Không thể cập nhật suất chiếu vì đã có vé được bán. Chỉ có thể cập nhật các suất chiếu chưa có vé được bán.");
+            }
+
             await ValidatePartnerOwnsCinemaAndScreenAsync(partnerId, request.CinemaId, request.ScreenId);
             await ValidateMovieCreatableWindowAsync(request.MovieId); // Yêu cầu 1
             ValidateShowtimeDateTime(request.StartTime, request.EndTime);
@@ -270,7 +280,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
         }
 
-        // YÊU CẦU 4: Validate không có booking nào cho showtime khi soft delete
+        // YÊU CẦU 4: Validate không có booking hoặc ticket nào cho showtime khi soft delete
         private async Task ValidateNoBookingsForShowtimeAsync(int showtimeId)
         {
             var hasBookings = await _context.Bookings
@@ -280,6 +290,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 throw new ConflictException("showtime",
                     "Không thể xóa suất chiếu vì đã có người đặt vé. Chỉ có thể xóa các suất chiếu chưa có người đặt.");
+            }
+
+            // Kiểm tra xem có ticket nào đã được bán (VALID hoặc USED) không
+            var hasSoldTickets = await _context.Tickets
+                .AnyAsync(t => t.ShowtimeId == showtimeId && (t.Status == "VALID" || t.Status == "USED"));
+
+            if (hasSoldTickets)
+            {
+                throw new ConflictException("showtime",
+                    "Không thể xóa suất chiếu vì đã có vé được bán. Chỉ có thể xóa các suất chiếu chưa có vé được bán.");
             }
         }
 

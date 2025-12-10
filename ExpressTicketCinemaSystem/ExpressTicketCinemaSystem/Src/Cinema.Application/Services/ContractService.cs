@@ -356,8 +356,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         {
             var errors = new Dictionary<string, ValidationError>();
 
-            if (startDate < DateTime.UtcNow.Date)
-                errors["startDate"] = new ValidationError { Msg = "Ngày bắt đầu không thể trong quá khứ", Path = "startDate" };
+            // Đã xóa validation: cho phép ngày bắt đầu hợp đồng có thể là ngày quá khứ
 
             if (endDate <= startDate)
                 errors["endDate"] = new ValidationError { Msg = "Ngày kết thúc phải sau ngày bắt đầu", Path = "endDate" };

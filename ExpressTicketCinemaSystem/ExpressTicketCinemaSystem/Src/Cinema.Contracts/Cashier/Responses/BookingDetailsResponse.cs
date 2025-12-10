@@ -56,3 +56,17 @@ public class BookingCheckInSummary
     public string BookingCheckInStatus { get; set; } = null!; // CONFIRMED, PARTIAL_CHECKED_IN, FULLY_CHECKED_IN
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

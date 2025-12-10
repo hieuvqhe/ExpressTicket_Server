@@ -264,6 +264,38 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             await ValidateCinemaBusinessRulesForUpdateAsync(cinemaId, request, partnerId);
 
+            // Kiểm tra: Nếu đã có showtime tồn tại thì không được sửa bất kỳ thông tin nào
+            var hasShowtimes = await _context.Showtimes
+                .AnyAsync(s => s.CinemaId == cinemaId);
+
+            if (hasShowtimes)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["showtimes"] = new ValidationError
+                    {
+                        Msg = "Không thể cập nhật thông tin rạp khi đã có suất chiếu được tạo",
+                        Path = "cinemaId"
+                    }
+                });
+            }
+
+            // Kiểm tra: Nếu đã có vé được bán thì không được sửa tên rạp
+            var hasSoldTickets = await _context.Tickets
+                .AnyAsync(t => t.Showtime.CinemaId == cinemaId && (t.Status == "VALID" || t.Status == "USED"));
+
+            if (hasSoldTickets && cinema.CinemaName.Trim().ToLower() != request.CinemaName.Trim().ToLower())
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["cinemaName"] = new ValidationError
+                    {
+                        Msg = "Không thể thay đổi tên rạp khi đã có vé được bán",
+                        Path = "cinemaName"
+                    }
+                });
+            }
+
             // Validate không thể deactivate nếu còn phòng active
             if (!request.IsActive && cinema.IsActive == true)
             {
@@ -851,10 +883,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 {
                     return numberPart.StartsWith("1900") && Regex.IsMatch(numberPart, @"^1900[0-9]{4}$");
                 }
-                // Nếu 9 số: kiểm tra đầu số hợp lệ
+                // Nếu 9 số: kiểm tra đầu số hợp lệ (bao gồm 46 cho VinaPhone)
                 else if (numberPart.Length == 9)
                 {
-                    return Regex.IsMatch(numberPart, @"^(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                    return Regex.IsMatch(numberPart, @"^(3[2-9]|4[6]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
                 }
                 else
                 {
@@ -864,10 +896,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Nếu bắt đầu bằng 0
             else if (cleanPhone.StartsWith("0"))
             {
-                // Phải có đúng 10 số và đầu số hợp lệ
+                // Phải có đúng 10 số và đầu số hợp lệ (bao gồm 046 cho VinaPhone)
                 if (cleanPhone.Length == 10)
                 {
-                    return Regex.IsMatch(cleanPhone, @"^0(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                    return Regex.IsMatch(cleanPhone, @"^0(3[2-9]|4[6]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
                 }
                 else
                 {
@@ -884,10 +916,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 {
                     return numberPart.StartsWith("1900") && Regex.IsMatch(numberPart, @"^1900[0-9]{4}$");
                 }
-                // Nếu 9 số: kiểm tra đầu số hợp lệ
+                // Nếu 9 số: kiểm tra đầu số hợp lệ (bao gồm 46 cho VinaPhone)
                 else if (numberPart.Length == 9)
                 {
-                    return Regex.IsMatch(numberPart, @"^(3[2-9]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                    return Regex.IsMatch(numberPart, @"^(3[2-9]|4[6]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
                 }
                 else
                 {

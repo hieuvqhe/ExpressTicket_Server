@@ -30,19 +30,22 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         private readonly IConfiguration _configuration;
         private readonly ILogger<PaymentController> _logger;
         private readonly IEmailService _emailService;
+        private readonly IVIPService _vipService;
 
         public PaymentController(
             IPayOSService payOSService,
             CinemaDbCoreContext db,
             IConfiguration configuration,
             ILogger<PaymentController> logger,
-            IEmailService emailService)
+            IEmailService emailService,
+            IVIPService vipService)
         {
             _payOSService = payOSService;
             _db = db;
             _configuration = configuration;
             _logger = logger;
             _emailService = emailService;
+            _vipService = vipService;
         }
 
         // ============================================================
@@ -471,11 +474,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             // 12. Save all changes
             await _db.SaveChangesAsync(ct);
 
+            // 13. Tích điểm VIP cho customer (nếu có)
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                try
+                {
+                    await _vipService.AwardPointsForOrderAsync(customerId.Value, order.OrderId, order.Amount, ct);
+                    _logger.LogInformation("Đã tích điểm VIP cho Customer {CustomerId} từ Order {OrderId}", customerId.Value, order.OrderId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Lỗi khi tích điểm VIP cho Customer {CustomerId} từ Order {OrderId}", customerId.Value, order.OrderId);
+                    // Không throw exception để không ảnh hưởng đến payment processing
+                }
+            }
+
             _logger.LogInformation(
                 "Payment processed successfully - OrderId: {OrderId}, BookingId: {BookingId}, Tickets: {TicketCount}, ServiceOrders: {ServiceOrderCount}",
                 order.OrderId, booking.BookingId, seats.Count, comboGroups.Count);
 
-            // 13. Gửi email vé cho khách hàng
+            // 14. Gửi email vé cho khách hàng
             try
             {
                 if (customerId.HasValue && customerId.Value > 0)

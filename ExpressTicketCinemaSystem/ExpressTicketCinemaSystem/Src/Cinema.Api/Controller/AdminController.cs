@@ -3,6 +3,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Request;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -51,7 +52,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                         Action = log.Action,
                         TableName = log.TableName,
                         RecordId = log.RecordId,
-                        Timestamp = log.Timestamp,
+                        Timestamp = DateTimeHelper.ToVietnamTime(log.Timestamp), // Chuyển sang giờ VN
                         Before = DeserializePayload(log.BeforeData),
                         After = DeserializePayload(log.AfterData),
                         Metadata = DeserializePayload(log.Metadata),
@@ -101,7 +102,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     Action = log.Action,
                     TableName = log.TableName,
                     RecordId = log.RecordId,
-                    Timestamp = log.Timestamp,
+                    Timestamp = DateTimeHelper.ToVietnamTime(log.Timestamp), // Chuyển sang giờ VN
                     Before = DeserializePayload(log.BeforeData),
                     After = DeserializePayload(log.AfterData),
                     Metadata = DeserializePayload(log.Metadata),
