@@ -123,7 +123,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                                 "businessRegistrationCertificateUrl": "https://example.com/docs/business-registration.jpg",
                                 "taxRegistrationCertificateUrl": "https://example.com/docs/tax-registration.jpg",
                                 "identityCardUrl": "https://example.com/docs/id-card.jpg",
-                                "theaterPhotosUrl": "https://example.com/docs/theater-photos.jpg"
+                                "theaterPhotosUrl": "https://example.com/docs/theater-photos.jpg",
+                                "additionalDocumentsUrl": "https://example.com/docs/additional-docs.jpg",
+                                "managerStaffId": null,
+                                "managerStaffName": null,
+                                "managerStaffEmail": null,
+                                "isAssignedToStaff": false
                               },
                               {
                                 "partnerId": 2,
@@ -143,7 +148,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager
                                 "businessRegistrationCertificateUrl": "https://example.com/docs/business-registration-2.jpg",
                                 "taxRegistrationCertificateUrl": "https://example.com/docs/tax-registration-2.jpg",
                                 "identityCardUrl": "https://example.com/docs/id-card-2.jpg",
-                                "theaterPhotosUrl": "https://example.com/docs/theater-photos-2.jpg"
+                                "theaterPhotosUrl": "https://example.com/docs/theater-photos-2.jpg",
+                                "additionalDocumentsUrl": "https://example.com/docs/additional-docs-2.jpg",
+                                "managerStaffId": 1,
+                                "managerStaffName": "Nguyễn Văn Staff",
+                                "managerStaffEmail": "staff@example.com",
+                                "isAssignedToStaff": true
                               }
                             ],
                             "pagination": {

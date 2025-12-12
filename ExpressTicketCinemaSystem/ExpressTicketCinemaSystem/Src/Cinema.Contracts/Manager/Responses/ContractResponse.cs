@@ -22,12 +22,18 @@
         public bool IsLocked { get; set; }
         public string ContractHash { get; set; } = string.Empty;
 
+        // Contract PDF URL (original PDF from manager, replaced by signed PDF from partner)
+        public string? PdfUrl { get; set; }
+
         // Signature information
         public string? PartnerSignatureUrl { get; set; }
         public string? ManagerSignature { get; set; }
         public DateTime? SignedAt { get; set; }
         public DateTime? PartnerSignedAt { get; set; }
         public DateTime? ManagerSignedAt { get; set; }
+        public int? ManagerStaffId { get; set; }
+        public string? ManagerStaffSignature { get; set; }
+        public DateTime? ManagerStaffSignedAt { get; set; }
         public DateTime? LockedAt { get; set; }
 
         // Audit fields
@@ -51,5 +57,10 @@
         public string ManagerPosition { get; set; } = string.Empty;
         public string ManagerEmail { get; set; } = string.Empty;
         public string CreatedByName { get; set; } = string.Empty;
+
+        // ManagerStaff information (if contract was created/signed by ManagerStaff)
+        public string? ManagerStaffName { get; set; }
+        public string? ManagerStaffEmail { get; set; }
+        public bool HasManagerStaffSignedTemporarily { get; set; }
     }
 }

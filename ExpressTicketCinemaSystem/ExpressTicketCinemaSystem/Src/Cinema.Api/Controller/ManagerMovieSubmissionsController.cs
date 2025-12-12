@@ -5,24 +5,28 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
     [ApiController]
     [Route("api/manager/movie-submissions")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Roles = "Manager,ManagerStaff")]
     [Produces("application/json")]
     public class ManagerMovieSubmissionsController : ControllerBase
     {
         private readonly ManagerMovieSubmissionService _service;
         private readonly IManagerService _managerService;
+        private readonly IManagerStaffPermissionService _managerStaffPermissionService;
 
         public ManagerMovieSubmissionsController(
             ManagerMovieSubmissionService service,
-            IManagerService managerService)
+            IManagerService managerService,
+            IManagerStaffPermissionService managerStaffPermissionService)
         {
             _service = service;
             _managerService = managerService;
+            _managerStaffPermissionService = managerStaffPermissionService;
         }
 
         private int GetCurrentUserId()
@@ -44,8 +48,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         // ------------------- GET ALL (non-draft) -------------------
-        /// <summary>Lấy tất cả submissions KHÔNG phải Draft (Pending/Rejected/Resubmitted/Approved)</summary>
+        /// <summary>
+        /// Lấy tất cả submissions KHÔNG phải Draft (Pending/Rejected/Resubmitted/Approved)
+        /// Manager: Can view all submissions
+        /// ManagerStaff: Can only view submissions from partners they have MOVIE_SUBMISSION_READ permission
+        /// </summary>
         [HttpGet]
+        [RequireManagerStaffPermission("MOVIE_SUBMISSION_READ")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
@@ -59,10 +68,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                // xác thực manager (nếu token hỏng sẽ ném 401)
-                _ = await GetCurrentManagerIdAsync();
+                var userId = GetCurrentUserId();
+                var managerId = await GetCurrentManagerIdAsync();
+                var managerStaffId = await _managerService.GetManagerStaffIdByUserIdAsync(userId);
 
-                var result = await _service.GetAllNonDraftSubmissionsAsync(page, limit, status, search, sortBy, sortOrder);
+                var result = await _service.GetAllNonDraftSubmissionsAsync(page, limit, status, search, sortBy, sortOrder, managerStaffId);
                 return Ok(new SuccessResponse<object>
                 {
                     Message = "Lấy danh sách submissions (non-draft) thành công",
@@ -87,8 +97,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         // ------------------- GET BY ID (non-draft) -------------------
-        /// <summary>Lấy chi tiết submission KHÔNG phải Draft</summary>
+        /// <summary>
+        /// Lấy chi tiết submission KHÔNG phải Draft
+        /// Manager: Can view any submission
+        /// ManagerStaff: Can only view submissions from partners they have MOVIE_SUBMISSION_READ permission
+        /// </summary>
         [HttpGet("{id:int}")]
+        [RequireManagerStaffPermission("MOVIE_SUBMISSION_READ")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -98,9 +113,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                _ = await GetCurrentManagerIdAsync();
+                var userId = GetCurrentUserId();
+                var managerId = await GetCurrentManagerIdAsync();
+                var managerStaffId = await _managerService.GetManagerStaffIdByUserIdAsync(userId);
 
-                var result = await _service.GetNonDraftSubmissionByIdAsync(id);
+                var result = await _service.GetNonDraftSubmissionByIdAsync(id, managerStaffId);
                 return Ok(new SuccessResponse<object>
                 {
                     Message = "Lấy thông tin submission thành công",
@@ -137,8 +154,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         // ------------------- GET PENDING -------------------
-        /// <summary>Lấy danh sách submissions Pending</summary>
+        /// <summary>
+        /// Lấy danh sách submissions Pending
+        /// Manager: Can view all pending submissions
+        /// ManagerStaff: Can only view pending submissions from partners they have MOVIE_SUBMISSION_READ permission
+        /// </summary>
         [HttpGet("pending")]
+        [RequireManagerStaffPermission("MOVIE_SUBMISSION_READ")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
@@ -151,9 +173,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
-                _ = await GetCurrentManagerIdAsync();
+                var userId = GetCurrentUserId();
+                var managerId = await GetCurrentManagerIdAsync();
+                var managerStaffId = await _managerService.GetManagerStaffIdByUserIdAsync(userId);
 
-                var result = await _service.GetPendingSubmissionsAsync(page, limit, search, sortBy, sortOrder);
+                var result = await _service.GetPendingSubmissionsAsync(page, limit, search, sortBy, sortOrder, managerStaffId);
                 return Ok(new SuccessResponse<object>
                 {
                     Message = "Lấy danh sách submissions Pending thành công",
@@ -178,8 +202,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         // ------------------- APPROVE -------------------
-        /// <summary>Duyệt submission (Pending → Approved). Tự động reject các Pending khác trùng tiêu đề.</summary>
+        /// <summary>
+        /// Duyệt submission (Pending → Approved). Tự động reject các Pending khác trùng tiêu đề.
+        /// Manager: Can approve any submission
+        /// ManagerStaff: Can only approve submissions from partners they have MOVIE_SUBMISSION_APPROVE permission
+        /// </summary>
         [HttpPut("{id:int}/approve")]
+        [RequireManagerStaffPermission("MOVIE_SUBMISSION_APPROVE")]
+        [AuditAction("MANAGER_APPROVE_MOVIE_SUBMISSION", "MovieSubmission", recordIdRouteKey: "id", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<MovieSubmissionResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -189,9 +219,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
+                var userId = GetCurrentUserId();
                 var managerId = await GetCurrentManagerIdAsync();
+                var managerStaffId = await _managerService.GetManagerStaffIdByUserIdAsync(userId);
 
-                var result = await _service.ApproveSubmissionAsync(id, managerId);
+                var result = await _service.ApproveSubmissionAsync(id, managerId, managerStaffId);
                 return Ok(new SuccessResponse<MovieSubmissionResponse>
                 {
                     Message = "Duyệt submission thành công",
@@ -233,8 +265,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             public string? Reason { get; set; }
         }
 
-        /// <summary>Từ chối submission (Pending → Rejected) với lý do.</summary>
+        /// <summary>
+        /// Từ chối submission (Pending → Rejected) với lý do.
+        /// Manager: Can reject any submission
+        /// ManagerStaff: Can only reject submissions from partners they have MOVIE_SUBMISSION_REJECT permission
+        /// </summary>
         [HttpPut("{id:int}/reject")]
+        [RequireManagerStaffPermission("MOVIE_SUBMISSION_REJECT")]
+        [AuditAction("MANAGER_REJECT_MOVIE_SUBMISSION", "MovieSubmission", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<MovieSubmissionResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -244,10 +282,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         {
             try
             {
+                var userId = GetCurrentUserId();
                 var managerId = await GetCurrentManagerIdAsync();
+                var managerStaffId = await _managerService.GetManagerStaffIdByUserIdAsync(userId);
 
                 var reason = request?.Reason ?? string.Empty;
-                var result = await _service.RejectSubmissionAsync(id, managerId, reason);
+                var result = await _service.RejectSubmissionAsync(id, managerId, reason, managerStaffId);
 
                 return Ok(new SuccessResponse<MovieSubmissionResponse>
                 {

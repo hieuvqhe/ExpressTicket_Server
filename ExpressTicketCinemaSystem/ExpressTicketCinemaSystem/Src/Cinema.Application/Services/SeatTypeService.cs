@@ -6,6 +6,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using System.Text.RegularExpressions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+using Microsoft.Data.SqlClient;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -21,10 +22,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class SeatTypeService : ISeatTypeService
     {
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
 
-        public SeatTypeService(CinemaDbCoreContext context)
+        public SeatTypeService(CinemaDbCoreContext context, IAuditLogService auditLogService)
         {
             _context = context;
+            _auditLogService = auditLogService;
         }
 
         public async Task<PaginatedSeatTypesResponse> GetSeatTypesAsync(GetSeatTypesRequest request, int partnerId, int userId)
@@ -68,7 +71,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .ToListAsync();
 
             // Pagination metadata
-            var pagination = new PaginationMetadata
+            var pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
             {
                 CurrentPage = request.Page,
                 PageSize = request.Limit,
@@ -127,27 +130,50 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
         private async Task ValidatePartnerAccessAsync(int partnerId, int userId)
         {
-            // Kiểm tra user có role Partner không
+            // Kiểm tra user có role Partner hoặc Staff không
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.UserId == userId && u.UserType == "Partner");
+                .FirstOrDefaultAsync(u => u.UserId == userId && (u.UserType == "Partner" || u.UserType == "Staff" || u.UserType == "Marketing" || u.UserType == "Cashier"));
 
             if (user == null)
             {
-                throw new UnauthorizedException( "Chỉ tài khoản Partner mới được sử dụng chức năng này");
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
             }
 
-            // Kiểm tra partner thuộc về user này và approved
-            var partner = await _context.Partners
-                .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.UserId == userId && p.Status == "approved");
-
-            if (partner == null)
+            // Nếu là Partner, kiểm tra partner thuộc về user này
+            if (user.UserType == "Partner")
             {
-                throw new UnauthorizedException( "Partner không tồn tại hoặc không thuộc quyền quản lý của bạn");
+                var partner = await _context.Partners
+                    .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.UserId == userId && p.Status == "approved");
+
+                if (partner == null)
+                {
+                    throw new UnauthorizedException("Partner không tồn tại hoặc không thuộc quyền quản lý của bạn");
+                }
+
+                if (!partner.IsActive)
+                {
+                    throw new UnauthorizedException("Tài khoản partner đã bị vô hiệu hóa");
+                }
             }
-
-            if (!partner.IsActive)
+            else if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
             {
-                throw new UnauthorizedException( "Tài khoản partner đã bị vô hiệu hóa");
+                // Nếu là Staff, kiểm tra employee thuộc về partner này
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee == null)
+                {
+                    throw new UnauthorizedException("Nhân viên không thuộc Partner này");
+                }
+
+                // Kiểm tra partner có tồn tại và active không
+                var partner = await _context.Partners
+                    .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.Status == "approved");
+
+                if (partner == null || !partner.IsActive)
+                {
+                    throw new UnauthorizedException("Partner không tồn tại hoặc đã bị vô hiệu hóa");
+                }
             }
         }
 
@@ -250,7 +276,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // ==================== VALIDATION SECTION ====================
             ValidateCreateSeatTypeRequest(request);
             await ValidatePartnerAccessAsync(partnerId, userId);
-            await ValidateSeatTypeCodeUniqueAsync(request.Code, partnerId);
+            await ValidateSeatTypeCodeUniqueAsync(request.Code);
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
@@ -267,8 +293,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 UpdatedAt = DateTime.UtcNow
             };
 
-            _context.SeatTypes.Add(seatType);
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.SeatTypes.Add(seatType);
+                await _context.SaveChangesAsync();
+                await _auditLogService.LogEntityChangeAsync(
+                    action: "STAFF_CREATE_SEAT_TYPE",
+                    tableName: "SeatType",
+                    recordId: seatType.Id,
+                    beforeData: null,
+                    afterData: BuildSeatTypeSnapshot(seatType),
+                    metadata: new { partnerId, userId });
+            }
+            catch (DbUpdateException dbEx) when (IsUniqueConstraintViolation(dbEx))
+            {
+                // Trường hợp race condition: 2 request song song vượt qua validate
+                throw new ConflictException("code", "Mã loại ghế đã tồn tại trong hệ thống");
+            }
 
             return new SeatTypeActionResponse
             {
@@ -309,6 +350,55 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy loại ghế với ID này hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Kiểm tra: Nếu đã có showtime sử dụng loại ghế này thì không được sửa bất kỳ thông tin nào
+            var seatsWithThisType = await _context.Seats
+                .Where(s => s.SeatTypeId == seatTypeId)
+                .Select(s => s.ScreenId)
+                .Distinct()
+                .ToListAsync();
+
+            if (seatsWithThisType.Any())
+            {
+                var hasShowtimes = await _context.Showtimes
+                    .AnyAsync(st => seatsWithThisType.Contains(st.ScreenId));
+
+                if (hasShowtimes)
+                {
+                    throw new ValidationException(new Dictionary<string, ValidationError>
+                    {
+                        ["showtimes"] = new ValidationError
+                        {
+                            Msg = "Không thể cập nhật thông tin loại ghế khi đã có suất chiếu sử dụng loại ghế này",
+                            Path = "id"
+                        }
+                    });
+                }
+            }
+
+            // Kiểm tra: Nếu đã có vé được bán cho ghế có loại ghế này thì không được sửa tên
+            var seatIdsWithThisType = await _context.Seats
+                .Where(s => s.SeatTypeId == seatTypeId)
+                .Select(s => s.SeatId)
+                .ToListAsync();
+
+            if (seatIdsWithThisType.Any())
+            {
+                var hasSoldTickets = await _context.Tickets
+                    .AnyAsync(t => seatIdsWithThisType.Contains(t.SeatId) && (t.Status == "VALID" || t.Status == "USED"));
+
+                if (hasSoldTickets && seatType.Name.Trim().ToLower() != request.Name.Trim().ToLower())
+                {
+                    throw new ValidationException(new Dictionary<string, ValidationError>
+                    {
+                        ["name"] = new ValidationError
+                        {
+                            Msg = "Không thể thay đổi tên loại ghế khi đã có vé được bán cho ghế thuộc loại này",
+                            Path = "name"
+                        }
+                    });
+                }
+            }
+
             // Validate nếu đang có ghế sử dụng thì không thể disable
             if (!request.Status && seatType.Status)
             {
@@ -324,6 +414,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
+            var beforeSnapshot = BuildSeatTypeSnapshot(seatType);
+
             seatType.Name = request.Name.Trim();
             seatType.Surcharge = request.Surcharge;
             seatType.Color = request.Color;
@@ -332,6 +424,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             seatType.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_UPDATE_SEAT_TYPE",
+                tableName: "SeatType",
+                recordId: seatType.Id,
+                beforeData: beforeSnapshot,
+                afterData: BuildSeatTypeSnapshot(seatType),
+                metadata: new { partnerId, userId });
 
             return new SeatTypeActionResponse
             {
@@ -384,10 +483,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             // SOFT DELETE - Chỉ cập nhật status
+            var beforeSnapshot = BuildSeatTypeSnapshot(seatType);
             seatType.Status = false;
             seatType.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "STAFF_DELETE_SEAT_TYPE",
+                tableName: "SeatType",
+                recordId: seatType.Id,
+                beforeData: beforeSnapshot,
+                afterData: BuildSeatTypeSnapshot(seatType),
+                metadata: new { partnerId, userId });
 
             return new SeatTypeActionResponse
             {
@@ -403,6 +510,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Message = "Xóa loại ghế thành công"
             };
         }
+
+        private static object BuildSeatTypeSnapshot(SeatType seatType) => new
+        {
+            seatType.Id,
+            seatType.PartnerId,
+            seatType.Code,
+            seatType.Name,
+            seatType.Surcharge,
+            seatType.Color,
+            seatType.Description,
+            seatType.Status,
+            seatType.CreatedAt,
+            seatType.UpdatedAt
+        };
 
         private void ValidateCreateSeatTypeRequest(CreateSeatTypeRequest request)
         {
@@ -463,15 +584,21 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new ValidationException(errors);
         }
 
-        private async Task ValidateSeatTypeCodeUniqueAsync(string code, int partnerId)
+        private async Task ValidateSeatTypeCodeUniqueAsync(string code)
         {
-            var existingSeatType = await _context.SeatTypes
-                .FirstOrDefaultAsync(st => st.PartnerId == partnerId && st.Code.ToUpper() == code.Trim().ToUpper());
+            var normalized = code.Trim().ToUpperInvariant();
 
-            if (existingSeatType != null)
-            {
-                throw new ConflictException("code", "Mã loại ghế đã tồn tại trong hệ thống của bạn");
-            }
+            var exists = await _context.SeatTypes
+                .AnyAsync(st => st.Code.ToUpper() == normalized);
+
+            if (exists)
+                throw new ConflictException("code", "Mã loại ghế đã tồn tại trong hệ thống");
+        }
+        private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+        {
+            if (ex.InnerException is SqlException sqlEx)
+                return sqlEx.Number == 2627 || sqlEx.Number == 2601; // 2627: PK/Unique, 2601: Unique index
+            return false;
         }
     }
 }

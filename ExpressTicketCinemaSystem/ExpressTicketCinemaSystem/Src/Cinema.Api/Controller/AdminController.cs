@@ -2,9 +2,12 @@
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Request;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Text.Json;
 using static ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Enum.AdminEnum;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
@@ -15,10 +18,100 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
     public class AdminController : ControllerBase
     {
         private readonly AdminService _adminService;
+        private readonly IAuditLogService _auditLogService;
 
-        public AdminController(AdminService adminService)
+        public AdminController(AdminService adminService, IAuditLogService auditLogService)
         {
             _adminService = adminService;
+            _auditLogService = auditLogService;
+        }
+
+        /// <summary>
+        /// Danh sách audit log có phân trang và bộ lọc
+        /// </summary>
+        [HttpGet("audit-logs")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(typeof(AdminAuditLogListResponse), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAuditLogs([FromQuery] AdminAuditLogFilterRequest request, CancellationToken cancellationToken)
+        {
+            var (logs, total) = await _auditLogService.GetAuditLogsAsync(request, cancellationToken);
+
+            var limit = Math.Clamp(request.Limit, 1, 200);
+            var page = request.Page <= 0 ? 1 : request.Page;
+            var totalPages = (int)Math.Ceiling((double)total / limit);
+
+            var response = new AdminAuditLogListResponse
+            {
+                Result = new AdminAuditLogListResult
+                {
+                    Logs = logs.Select(log => new AdminAuditLogItemResponse
+                    {
+                        LogId = log.LogId,
+                        UserId = log.UserId,
+                        Role = log.Role,
+                        Action = log.Action,
+                        TableName = log.TableName,
+                        RecordId = log.RecordId,
+                        Timestamp = DateTimeHelper.ToVietnamTime(log.Timestamp), // Chuyển sang giờ VN
+                        Before = DeserializePayload(log.BeforeData),
+                        After = DeserializePayload(log.AfterData),
+                        Metadata = DeserializePayload(log.Metadata),
+                        IpAddress = log.IpAddress,
+                        UserAgent = log.UserAgent
+                    }).ToList(),
+                    Page = page,
+                    Limit = limit,
+                    Total = total,
+                    TotalPages = totalPages
+                }
+            };
+
+            return Ok(response);
+        }
+
+        /// <summary>
+        /// Chi tiết một audit log
+        /// </summary>
+        [HttpGet("audit-logs/{logId:int}")]
+        [Authorize(Roles = "Admin")]
+        [ProducesResponseType(typeof(AdminAuditLogDetailResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorAdminResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetAuditLogById(int logId, CancellationToken cancellationToken)
+        {
+            var log = await _auditLogService.GetAuditLogByIdAsync(logId, cancellationToken);
+            if (log == null)
+            {
+                return NotFound(new ErrorAdminResponse
+                {
+                    Message = "Không tìm thấy audit log",
+                    ErrorInfo = new ErrorInfo
+                    {
+                        Name = "NotFoundError",
+                        Message = "Audit log không tồn tại"
+                    }
+                });
+            }
+
+            var response = new AdminAuditLogDetailResponse
+            {
+                Result = new AdminAuditLogItemResponse
+                {
+                    LogId = log.LogId,
+                    UserId = log.UserId,
+                    Role = log.Role,
+                    Action = log.Action,
+                    TableName = log.TableName,
+                    RecordId = log.RecordId,
+                    Timestamp = DateTimeHelper.ToVietnamTime(log.Timestamp), // Chuyển sang giờ VN
+                    Before = DeserializePayload(log.BeforeData),
+                    After = DeserializePayload(log.AfterData),
+                    Metadata = DeserializePayload(log.Metadata),
+                    IpAddress = log.IpAddress,
+                    UserAgent = log.UserAgent
+                }
+            };
+
+            return Ok(response);
         }
 
         /// <summary>
@@ -795,6 +888,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             }
         }
 
+        private static object? DeserializePayload(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
+            try
+            {
+                return JsonSerializer.Deserialize<object>(json);
+            }
+            catch
+            {
+                return json;
+            }
+        }
+
         private static string GetUpdateUserErrorName(string message)
         {
             return message switch
@@ -852,5 +962,6 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                 _ => "BusinessRuleError"
             };
         }
+
     }
 }

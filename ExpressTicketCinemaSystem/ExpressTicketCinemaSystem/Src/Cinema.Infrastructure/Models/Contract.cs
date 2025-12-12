@@ -49,6 +49,12 @@ public partial class Contract
 
     public DateTime? ManagerSignedAt { get; set; }
 
+    public int? ManagerStaffId { get; set; }
+
+    public string? ManagerStaffSignature { get; set; }
+
+    public DateTime? ManagerStaffSignedAt { get; set; }
+
     public DateTime? LockedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
@@ -59,4 +65,6 @@ public partial class Contract
     public virtual Manager Manager { get; set; } = null!;
 
     public virtual Partner Partner { get; set; } = null!;
+
+    public virtual ManagerStaff? ManagerStaff { get; set; }
 }

@@ -11,6 +11,8 @@ public partial class Partner
 
     public int? ManagerId { get; set; }
 
+    public int? ManagerStaffId { get; set; }
+
     public string PartnerName { get; set; } = null!;
 
     public string? TaxCode { get; set; }
@@ -35,6 +37,8 @@ public partial class Partner
 
     public string? TheaterPhotosUrl { get; set; }
 
+    public string? AdditionalDocumentsUrl { get; set; }
+
     public string? Status { get; set; }
 
     public string? RejectionReason { get; set; }
@@ -57,6 +61,8 @@ public partial class Partner
 
     public virtual Manager? Manager { get; set; }
 
+    public virtual ManagerStaff? ManagerStaff { get; set; }
+
     public virtual ICollection<MovieSubmission> MovieSubmissions { get; set; } = new List<MovieSubmission>();
 
     public virtual ICollection<Movie> Movies { get; set; } = new List<Movie>();
@@ -64,6 +70,8 @@ public partial class Partner
     public virtual ICollection<PartnerReport> PartnerReports { get; set; } = new List<PartnerReport>();
 
     public virtual ICollection<SeatType> SeatTypes { get; set; } = new List<SeatType>();
+
+    public virtual ICollection<Service> Services { get; set; } = new List<Service>();
 
     public virtual User User { get; set; } = null!;
 }

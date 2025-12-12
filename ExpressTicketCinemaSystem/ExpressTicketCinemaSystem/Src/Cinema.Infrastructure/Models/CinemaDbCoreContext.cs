@@ -23,7 +23,7 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<Booking> Bookings { get; set; }
 
-    public virtual DbSet<Cast> Casts { get; set; }
+    public virtual DbSet<BookingSession> BookingSessions { get; set; }
 
     public virtual DbSet<Cinema> Cinemas { get; set; }
 
@@ -37,9 +37,17 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<Employee> Employees { get; set; }
 
+    public virtual DbSet<EmployeeCinemaAssignment> EmployeeCinemaAssignments { get; set; }
+
+    public virtual DbSet<EmployeeCinemaPermission> EmployeeCinemaPermissions { get; set; }
+
     public virtual DbSet<GameShow> GameShows { get; set; }
 
     public virtual DbSet<Manager> Managers { get; set; }
+
+    public virtual DbSet<ManagerStaff> ManagerStaffs { get; set; }
+
+    public virtual DbSet<ManagerStaffPartnerPermission> ManagerStaffPartnerPermissions { get; set; }
 
     public virtual DbSet<Movie> Movies { get; set; }
 
@@ -48,6 +56,8 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<MovieSubmissionActor> MovieSubmissionActors { get; set; }
 
+    public virtual DbSet<Order> Orders { get; set; }
+
     public virtual DbSet<Partner> Partners { get; set; }
 
     public virtual DbSet<PartnerReport> PartnerReports { get; set; }
@@ -55,6 +65,8 @@ public partial class CinemaDbCoreContext : DbContext
     public virtual DbSet<PasswordResetCode> PasswordResetCodes { get; set; }
 
     public virtual DbSet<Payment> Payments { get; set; }
+
+    public virtual DbSet<Permission> Permissions { get; set; }
 
     public virtual DbSet<RatingFilm> RatingFilms { get; set; }
 
@@ -66,9 +78,13 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<Seat> Seats { get; set; }
 
+    public virtual DbSet<SeatLock> SeatLocks { get; set; }
+
     public virtual DbSet<SeatMap> SeatMaps { get; set; }
 
     public virtual DbSet<SeatType> SeatTypes { get; set; }
+
+    public virtual DbSet<SeatTicket> SeatTickets { get; set; }
 
     public virtual DbSet<Service> Services { get; set; }
 
@@ -85,6 +101,22 @@ public partial class CinemaDbCoreContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<Voucher> Vouchers { get; set; }
+
+    public virtual DbSet<VoucherEmailHistory> VoucherEmailHistories { get; set; }
+
+    public virtual DbSet<UserVoucher> UserVouchers { get; set; }
+
+    public virtual DbSet<VoucherReservation> VoucherReservations { get; set; }
+
+    public virtual DbSet<VIPLevel> VIPLevels { get; set; }
+
+    public virtual DbSet<VIPBenefit> VIPBenefits { get; set; }
+
+    public virtual DbSet<VIPMember> VIPMembers { get; set; }
+
+    public virtual DbSet<PointHistory> PointHistories { get; set; }
+
+    public virtual DbSet<VIPBenefitClaim> VIPBenefitClaims { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     { }
@@ -147,11 +179,29 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(100)
                 .IsUnicode(false)
                 .HasColumnName("action");
+            entity.Property(e => e.Role)
+                .HasMaxLength(32)
+                .IsUnicode(false)
+                .HasColumnName("role");
             entity.Property(e => e.RecordId).HasColumnName("record_id");
             entity.Property(e => e.TableName)
                 .HasMaxLength(100)
                 .IsUnicode(false)
                 .HasColumnName("table_name");
+            entity.Property(e => e.BeforeData)
+                .HasColumnName("before_data");
+            entity.Property(e => e.AfterData)
+                .HasColumnName("after_data");
+            entity.Property(e => e.Metadata)
+                .HasColumnName("metadata");
+            entity.Property(e => e.IpAddress)
+                .HasMaxLength(64)
+                .IsUnicode(false)
+                .HasColumnName("ip_address");
+            entity.Property(e => e.UserAgent)
+                .HasMaxLength(256)
+                .IsUnicode(false)
+                .HasColumnName("user_agent");
             entity.Property(e => e.Timestamp)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("timestamp");
@@ -164,7 +214,15 @@ public partial class CinemaDbCoreContext : DbContext
 
             entity.ToTable("Booking");
 
-            entity.HasIndex(e => e.BookingCode, "UQ__Booking__FF29040F62E5CCE1").IsUnique();
+            entity.HasIndex(e => e.State, "IX_booking_state");
+
+            entity.HasIndex(e => e.PaymentTxId, "IX_booking_tx");
+
+            entity.HasIndex(e => e.BookingCode, "UQ__Booking__FF29040FBC07FE7F").IsUnique();
+
+            entity.HasIndex(e => e.OrderCode, "UX_booking_order_code")
+                .IsUnique()
+                .HasFilter("([order_code] IS NOT NULL)");
 
             entity.Property(e => e.BookingId).HasColumnName("booking_id");
             entity.Property(e => e.BookingCode)
@@ -174,8 +232,35 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.BookingTime)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("booking_time");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
             entity.Property(e => e.CustomerId).HasColumnName("customer_id");
+            entity.Property(e => e.OrderCode)
+                .HasMaxLength(32)
+                .IsUnicode(false)
+                .HasColumnName("order_code");
+            entity.Property(e => e.PaymentProvider)
+                .HasMaxLength(32)
+                .IsUnicode(false)
+                .HasColumnName("payment_provider");
+            entity.Property(e => e.PaymentStatus)
+                .HasMaxLength(24)
+                .IsUnicode(false)
+                .HasColumnName("payment_status");
+            entity.Property(e => e.PaymentTxId)
+                .HasMaxLength(128)
+                .IsUnicode(false)
+                .HasColumnName("payment_tx_id");
+            entity.Property(e => e.PricingSnapshot).HasColumnName("pricing_snapshot");
+            entity.Property(e => e.SessionId).HasColumnName("session_id");
             entity.Property(e => e.ShowtimeId).HasColumnName("showtime_id");
+            entity.Property(e => e.State)
+                .HasMaxLength(24)
+                .IsUnicode(false)
+                .HasDefaultValue("PENDING_PAYMENT")
+                .HasColumnName("state");
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
@@ -183,6 +268,10 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.TotalAmount)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("total_amount");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("updated_at");
             entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
 
             entity.HasOne(d => d.Customer).WithMany(p => p.Bookings)
@@ -200,25 +289,55 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasConstraintName("FK_Booking_Voucher");
         });
 
-        modelBuilder.Entity<Cast>(entity =>
+        modelBuilder.Entity<BookingSession>(entity =>
         {
-            entity.HasKey(e => e.CastId).HasName("PK__Cast__D4C48F8809C4BE6C");
+            entity.ToTable("booking_sessions");
 
-            entity.ToTable("Cast");
+            entity.HasIndex(e => e.ExpiresAt, "IX_bs_expires");
 
-            entity.Property(e => e.CastId).HasColumnName("cast_id");
-            entity.Property(e => e.Character)
-                .HasMaxLength(255)
+            entity.HasIndex(e => e.ShowtimeId, "IX_bs_showtime");
+
+            entity.HasIndex(e => e.UserId, "IX_bs_user");
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("(newsequentialid())")
+                .HasColumnName("id");
+            entity.Property(e => e.CouponCode)
+                .HasMaxLength(64)
+                .HasColumnName("coupon_code");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.ExpiresAt)
+                .HasPrecision(3)
+                .HasColumnName("expires_at");
+            entity.Property(e => e.ItemsJson)
+                .HasDefaultValue("{\"seats\":[],\"combos\":[]}")
+                .HasColumnName("items_json");
+            entity.Property(e => e.PricingJson)
+                .HasDefaultValue("{\"subtotal\":0,\"discount\":0,\"fees\":0,\"total\":0,\"currency\":\"VND\"}")
+                .HasColumnName("pricing_json");
+            entity.Property(e => e.ShowtimeId).HasColumnName("showtime_id");
+            entity.Property(e => e.State)
+                .HasMaxLength(20)
                 .IsUnicode(false)
-                .HasColumnName("character");
-            entity.Property(e => e.Gender)
-                .HasMaxLength(10)
-                .IsUnicode(false)
-                .HasColumnName("gender");
-            entity.Property(e => e.Name)
-                .HasMaxLength(255)
-                .IsUnicode(false)
-                .HasColumnName("name");
+                .HasDefaultValue("DRAFT")
+                .HasColumnName("state");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("updated_at");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Version)
+                .HasDefaultValue(1)
+                .HasColumnName("version")
+                .IsConcurrencyToken(); // Optimistic locking: đảm bảo không bị lost update khi có concurrent requests
+
+            entity.HasOne(d => d.Showtime).WithMany(p => p.BookingSessions)
+                .HasForeignKey(d => d.ShowtimeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_bs_showtime");
         });
 
         modelBuilder.Entity<Cinema>(entity =>
@@ -312,6 +431,11 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(500)
                 .HasColumnName("manager_signature");
             entity.Property(e => e.ManagerSignedAt).HasColumnName("manager_signed_at");
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
+            entity.Property(e => e.ManagerStaffSignature)
+                .HasMaxLength(500)
+                .HasColumnName("manager_staff_signature");
+            entity.Property(e => e.ManagerStaffSignedAt).HasColumnName("manager_staff_signed_at");
             entity.Property(e => e.MinimumRevenue)
                 .HasColumnType("decimal(18, 2)")
                 .HasColumnName("minimum_revenue");
@@ -345,6 +469,11 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.PartnerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Contract_Partner");
+
+            entity.HasOne(d => d.ManagerStaff).WithMany(p => p.Contracts)
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Contract_ManagerStaff");
         });
 
         modelBuilder.Entity<Customer>(entity =>
@@ -448,6 +577,136 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasConstraintName("FK_Employee_User");
         });
 
+        modelBuilder.Entity<EmployeeCinemaAssignment>(entity =>
+        {
+            entity.HasKey(e => e.AssignmentId).HasName("PK__EmployeeCinemaAssignment__AssignmentId");
+
+            entity.ToTable("EmployeeCinemaAssignment");
+
+            entity.Property(e => e.AssignmentId).HasColumnName("assignment_id");
+            entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
+            entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.AssignedAt).HasColumnName("assigned_at");
+            entity.Property(e => e.AssignedBy).HasColumnName("assigned_by");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.UnassignedAt).HasColumnName("unassigned_at");
+
+            entity.HasOne(d => d.Employee).WithMany(p => p.CinemaAssignments)
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaAssignment_Employee");
+
+            entity.HasOne(d => d.Cinema).WithMany(p => p.EmployeeAssignments)
+                .HasForeignKey(d => d.CinemaId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaAssignment_Cinema");
+
+            entity.HasOne(d => d.AssignedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.AssignedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaAssignment_AssignedByUser");
+
+            // Unique constraint: một employee không thể được gán trùng lặp cùng một cinema
+            // Nhưng một employee có thể quản lý nhiều cinema khác nhau (1:N relationship)
+            entity.HasIndex(e => new { e.EmployeeId, e.CinemaId })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<Permission>(entity =>
+        {
+            entity.HasKey(e => e.PermissionId).HasName("PK_Permissions");
+
+            entity.ToTable("Permissions");
+
+            entity.HasIndex(e => e.PermissionCode, "UQ_Permissions_Code").IsUnique();
+
+            entity.Property(e => e.PermissionId).HasColumnName("permission_id");
+            entity.Property(e => e.PermissionCode)
+                .HasMaxLength(100)
+                .IsUnicode(false)
+                .HasColumnName("permission_code");
+            entity.Property(e => e.PermissionName)
+                .HasMaxLength(255)
+                .IsUnicode(true)
+                .HasColumnName("permission_name");
+            entity.Property(e => e.ResourceType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("resource_type");
+            entity.Property(e => e.ActionType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("action_type");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .IsUnicode(true)
+                .HasColumnName("description");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<EmployeeCinemaPermission>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_EmployeeCinemaPermissions");
+
+            entity.ToTable("EmployeeCinemaPermissions");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
+            entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.PermissionId).HasColumnName("permission_id");
+            entity.Property(e => e.GrantedBy).HasColumnName("granted_by");
+            entity.Property(e => e.GrantedAt)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("granted_at");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.RevokedAt).HasColumnName("revoked_at");
+            entity.Property(e => e.RevokedBy).HasColumnName("revoked_by");
+
+            entity.HasOne(d => d.Employee).WithMany()
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_Employee");
+
+            entity.HasOne(d => d.Cinema).WithMany()
+                .HasForeignKey(d => d.CinemaId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_Cinema");
+
+            entity.HasOne(d => d.Permission).WithMany(p => p.EmployeeCinemaPermissions)
+                .HasForeignKey(d => d.PermissionId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_Permission");
+
+            entity.HasOne(d => d.GrantedByUser).WithMany()
+                .HasForeignKey(d => d.GrantedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_GrantedBy");
+
+            entity.HasOne(d => d.RevokedByUser).WithMany()
+                .HasForeignKey(d => d.RevokedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_EmployeeCinemaPermissions_RevokedBy");
+
+            // Index để tăng tốc truy vấn
+            entity.HasIndex(e => new { e.EmployeeId, e.CinemaId, e.PermissionId })
+                .HasDatabaseName("IX_EmployeeCinemaPermissions_Employee_Cinema_Permission")
+                .HasFilter("[is_active] = 1");
+
+            entity.HasIndex(e => e.EmployeeId)
+                .HasDatabaseName("IX_EmployeeCinemaPermissions_Employee_Active")
+                .HasFilter("[is_active] = 1");
+        });
+
         modelBuilder.Entity<GameShow>(entity =>
         {
             entity.HasKey(e => e.GameshowId).HasName("PK__GameShow__651C4D02FE1105CE");
@@ -498,6 +757,96 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasConstraintName("FK_Manager_User");
         });
 
+        modelBuilder.Entity<ManagerStaff>(entity =>
+        {
+            entity.HasKey(e => e.ManagerStaffId).HasName("PK__ManagerStaff__ManagerStaffId");
+
+            entity.ToTable("ManagerStaff");
+
+            entity.HasIndex(e => e.UserId, "UQ__ManagerStaff__B9BE370E").IsUnique();
+
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
+            entity.Property(e => e.ManagerId).HasColumnName("manager_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.FullName)
+                .HasMaxLength(255)
+                .IsUnicode(true)
+                .HasColumnName("full_name");
+            entity.Property(e => e.RoleType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("role_type");
+            entity.Property(e => e.HireDate).HasColumnName("hire_date");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+
+            entity.HasOne(d => d.Manager).WithMany(p => p.ManagerStaffs)
+                .HasForeignKey(d => d.ManagerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaff_Manager");
+
+            entity.HasOne(d => d.User).WithOne(p => p.ManagerStaff)
+                .HasForeignKey<ManagerStaff>(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaff_User");
+        });
+
+        modelBuilder.Entity<ManagerStaffPartnerPermission>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ManagerStaffPartnerPermissions");
+
+            entity.ToTable("ManagerStaffPartnerPermissions");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
+            entity.Property(e => e.PartnerId).HasColumnName("partner_id");
+            entity.Property(e => e.PermissionId).HasColumnName("permission_id");
+            entity.Property(e => e.GrantedBy).HasColumnName("granted_by");
+            entity.Property(e => e.GrantedAt)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("granted_at");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.RevokedAt).HasColumnName("revoked_at");
+            entity.Property(e => e.RevokedBy).HasColumnName("revoked_by");
+
+            entity.HasOne(d => d.ManagerStaff).WithMany(p => p.PartnerPermissions)
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_ManagerStaff");
+
+            entity.HasOne(d => d.Partner).WithMany()
+                .HasForeignKey(d => d.PartnerId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_Partner");
+
+            entity.HasOne(d => d.Permission).WithMany(p => p.ManagerStaffPartnerPermissions)
+                .HasForeignKey(d => d.PermissionId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_Permission");
+
+            entity.HasOne(d => d.GrantedByUser).WithMany()
+                .HasForeignKey(d => d.GrantedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_GrantedBy");
+
+            entity.HasOne(d => d.RevokedByUser).WithMany()
+                .HasForeignKey(d => d.RevokedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_RevokedBy");
+
+            // Index để tăng tốc truy vấn
+            entity.HasIndex(e => new { e.ManagerStaffId, e.PartnerId, e.PermissionId })
+                .HasDatabaseName("IX_ManagerStaffPartnerPermissions_Staff_Partner_Permission")
+                .HasFilter("[is_active] = 1");
+
+            entity.HasIndex(e => e.ManagerStaffId)
+                .HasDatabaseName("IX_ManagerStaffPartnerPermissions_Staff_Active")
+                .HasFilter("[is_active] = 1");
+        });
+
         modelBuilder.Entity<Movie>(entity =>
         {
             entity.HasKey(e => e.MovieId).HasName("PK__Movie__83CDF7494F73DF92");
@@ -513,7 +862,7 @@ public partial class CinemaDbCoreContext : DbContext
                .HasColumnName("banner_url");
             entity.Property(e => e.Country)
                 .HasMaxLength(100)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("country");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
             entity.Property(e => e.CreatedBy)
@@ -522,20 +871,20 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.Director)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("director");
             entity.Property(e => e.DurationMinutes).HasColumnName("duration_minutes");
             entity.Property(e => e.EndDate).HasColumnName("endDate");
             entity.Property(e => e.Genre)
                 .HasMaxLength(100)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("genre");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
             entity.Property(e => e.Language)
                 .HasMaxLength(50)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("language");
             entity.Property(e => e.PartnerId).HasColumnName("partner_id");
             entity.Property(e => e.PosterUrl).HasColumnName("poster_url");
@@ -546,7 +895,7 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.RatingsCount).HasColumnName("ratings_count");
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)  // NVARCHAR để hỗ trợ tiếng Việt
                 .HasColumnName("title");
             entity.Property(e => e.TrailerUrl)
                 .HasMaxLength(500)
@@ -646,6 +995,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("resubmitted_at");
             entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
             entity.Property(e => e.ReviewerId).HasColumnName("reviewer_id");
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
                 .HasDefaultValue("Draft")
@@ -671,6 +1021,11 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasOne(d => d.Reviewer).WithMany(p => p.MovieSubmissions)
                 .HasForeignKey(d => d.ReviewerId)
                 .HasConstraintName("FK_MovieSubmission_Reviewer");
+
+            entity.HasOne(d => d.ManagerStaff).WithMany()
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_MovieSubmission_ManagerStaff");
         });
         modelBuilder.Entity<MovieSubmissionActor>(entity =>
         {
@@ -749,6 +1104,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
             entity.Property(e => e.ManagerId).HasColumnName("manager_id");
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
             entity.Property(e => e.PartnerName)
                 .HasMaxLength(255)
                 .IsUnicode(true)
@@ -777,6 +1133,10 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(1000)
                 .IsUnicode(false)
                 .HasColumnName("theater_photos_url");
+            entity.Property(e => e.AdditionalDocumentsUrl)
+                .HasMaxLength(1000)
+                .IsUnicode(false)
+                .HasColumnName("additional_documents_url");
             entity.Property(e => e.UpdatedAt)
                 .HasColumnType("datetime")
                 .HasColumnName("updated_at");
@@ -786,6 +1146,11 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.ManagerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Partner_Manager");
+
+            entity.HasOne(d => d.ManagerStaff).WithMany(p => p.Partners)
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Partner_ManagerStaff");
 
             entity.HasOne(d => d.User).WithOne(p => p.Partner)
                 .HasForeignKey<Partner>(d => d.UserId)
@@ -843,13 +1208,23 @@ public partial class CinemaDbCoreContext : DbContext
 
             entity.ToTable("Payment");
 
-            entity.HasIndex(e => e.BookingId, "UQ__Payment__5DE3A5B037C84034").IsUnique();
+            entity.HasIndex(e => e.BookingId, "IX_payment_booking");
+
+            entity.HasIndex(e => e.BookingId, "UQ__Payment__5DE3A5B0CD07FA15").IsUnique();
+
+            entity.HasIndex(e => e.TransactionId, "UX_payment_tx")
+                .IsUnique()
+                .HasFilter("([transaction_id] IS NOT NULL)");
 
             entity.Property(e => e.PaymentId).HasColumnName("payment_id");
             entity.Property(e => e.Amount)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("amount");
             entity.Property(e => e.BookingId).HasColumnName("booking_id");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
             entity.Property(e => e.Method)
                 .HasMaxLength(50)
                 .IsUnicode(false)
@@ -857,10 +1232,20 @@ public partial class CinemaDbCoreContext : DbContext
             entity.Property(e => e.PaidAt)
                 .HasDefaultValueSql("(sysutcdatetime())")
                 .HasColumnName("paid_at");
+            entity.Property(e => e.PayloadJson).HasColumnName("payload_json");
+            entity.Property(e => e.Provider)
+                .HasMaxLength(32)
+                .IsUnicode(false)
+                .HasColumnName("provider");
+            entity.Property(e => e.SignatureOk).HasColumnName("signature_ok");
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("status");
+            entity.Property(e => e.TransactionId)
+                .HasMaxLength(128)
+                .IsUnicode(false)
+                .HasColumnName("transaction_id");
 
             entity.HasOne(d => d.Booking).WithOne(p => p.Payment)
                 .HasForeignKey<Payment>(d => d.BookingId)
@@ -882,6 +1267,15 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("rating_at");
             entity.Property(e => e.RatingStar).HasColumnName("rating_star");
             entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.IsDeleted)
+                .HasColumnName("is_deleted")
+                .HasDefaultValue(false);
+            entity.Property(e => e.DeletedAt)
+                .HasColumnName("deleted_at")
+                .IsRequired(false);
+            entity.Property(e => e.ImageUrls)
+                .HasColumnName("image_urls")
+                .IsRequired(false);
 
             entity.HasOne(d => d.Movie).WithMany(p => p.RatingFilms)
                 .HasForeignKey(d => d.MovieId)
@@ -1010,6 +1404,38 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasConstraintName("FK_Seat_SeatType");
         });
 
+        modelBuilder.Entity<SeatLock>(entity =>
+        {
+            entity.HasKey(e => new { e.ShowtimeId, e.SeatId });
+
+            entity.ToTable("seat_locks");
+
+            entity.HasIndex(e => e.LockedBySession, "IX_sl_session");
+
+            entity.HasIndex(e => e.LockedUntil, "IX_sl_until");
+
+            entity.Property(e => e.ShowtimeId).HasColumnName("showtime_id");
+            entity.Property(e => e.SeatId).HasColumnName("seat_id");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.LockedBySession).HasColumnName("locked_by_session");
+            entity.Property(e => e.LockedUntil)
+                .HasPrecision(3)
+                .HasColumnName("locked_until");
+
+            entity.HasOne(d => d.LockedBySessionNavigation).WithMany(p => p.SeatLocks)
+                .HasForeignKey(d => d.LockedBySession)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_sl_session");
+
+            entity.HasOne(d => d.Seat).WithMany(p => p.SeatLocks)
+                .HasForeignKey(d => d.SeatId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_sl_seat");
+        });
+
         modelBuilder.Entity<SeatMap>(entity =>
         {
             entity.HasKey(e => e.SeatMapId).HasName("PK__SeatMap__55CFDE03A2A6F0A8");
@@ -1071,23 +1497,41 @@ public partial class CinemaDbCoreContext : DbContext
 
             entity.ToTable("Service");
 
+            entity.HasIndex(e => new { e.PartnerId, e.IsAvailable }, "IX_Service_Partner_Available");
+
+            entity.HasIndex(e => new { e.PartnerId, e.Code }, "UX_Service_Partner_Code").IsUnique();
+
             entity.Property(e => e.ServiceId).HasColumnName("service_id");
-            entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.Code)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("code");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .HasColumnName("description");
+            entity.Property(e => e.ImageUrl)
+                .HasMaxLength(500)
+                .HasColumnName("image_url");
             entity.Property(e => e.IsAvailable)
                 .HasDefaultValue(true)
                 .HasColumnName("is_available");
+            entity.Property(e => e.PartnerId).HasColumnName("partner_id");
             entity.Property(e => e.Price)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("price");
             entity.Property(e => e.ServiceName)
                 .HasMaxLength(255)
-                .IsUnicode(false)
+                .IsUnicode(true)
                 .HasColumnName("service_name");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
 
-            entity.HasOne(d => d.Cinema).WithMany(p => p.Services)
-                .HasForeignKey(d => d.CinemaId)
+            entity.HasOne(d => d.Partner).WithMany(p => p.Services)
+                .HasForeignKey(d => d.PartnerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK_Service_Cinema");
+                .HasConstraintName("FK_Service_Partner");
         });
 
         modelBuilder.Entity<ServiceOrder>(entity =>
@@ -1122,10 +1566,19 @@ public partial class CinemaDbCoreContext : DbContext
             entity.ToTable("Showtime");
 
             entity.Property(e => e.ShowtimeId).HasColumnName("showtime_id");
+            entity.Property(e => e.AvailableSeats).HasColumnName("available_seats");
             entity.Property(e => e.BasePrice)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("base_price");
             entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.EndTime).HasColumnName("end_time");
+            entity.Property(e => e.FormatType)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("format_type");
             entity.Property(e => e.MovieId).HasColumnName("movie_id");
             entity.Property(e => e.ScreenId).HasColumnName("screen_id");
             entity.Property(e => e.ShowDatetime).HasColumnName("show_datetime");
@@ -1133,6 +1586,30 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("status");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+
+            // Các trường mới được thêm
+            entity.Property(e => e.EndTime)
+                .HasColumnName("end_time")
+                .IsRequired(false);
+
+            entity.Property(e => e.AvailableSeats)
+                .HasColumnName("available_seats")
+                .IsRequired(false);
+
+            entity.Property(e => e.FormatType)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("format_type")
+                .IsRequired(false);
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("GETDATE()");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at")
+                .IsRequired(false);
 
             entity.HasOne(d => d.Cinema).WithMany(p => p.Showtimes)
                 .HasForeignKey(d => d.CinemaId)
@@ -1236,6 +1713,72 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasConstraintName("FK_Ticket_Showtime");
         });
 
+        modelBuilder.Entity<SeatTicket>(entity =>
+        {
+            entity.HasKey(e => e.SeatTicketId).HasName("PK__SeatTicket__D596F96BFAA74F8D");
+
+            entity.ToTable("SeatTicket");
+
+            entity.HasIndex(e => new { e.TicketId }, "IX_SeatTicket_TicketId");
+            entity.HasIndex(e => new { e.BookingId, e.SeatId }, "IX_SeatTicket_Booking_Seat");
+            entity.HasIndex(e => new { e.OrderCode, e.SeatId }, "IX_SeatTicket_OrderCode_Seat");
+
+            entity.Property(e => e.SeatTicketId).HasColumnName("seat_ticket_id");
+            entity.Property(e => e.TicketId).HasColumnName("ticket_id");
+            entity.Property(e => e.BookingId).HasColumnName("booking_id");
+            entity.Property(e => e.SeatId).HasColumnName("seat_id");
+            entity.Property(e => e.ShowtimeId).HasColumnName("showtime_id");
+            entity.Property(e => e.OrderCode)
+                .HasMaxLength(100)
+                .IsUnicode(false)
+                .HasColumnName("order_code");
+            entity.Property(e => e.CheckInStatus)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("check_in_status");
+            entity.Property(e => e.CheckInTime)
+                .HasPrecision(3)
+                .HasColumnName("check_in_time");
+            entity.Property(e => e.CheckedInBy).HasColumnName("checked_in_by");
+            entity.Property(e => e.CinemaId).HasColumnName("cinema_id");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.Ticket).WithMany()
+                .HasForeignKey(d => d.TicketId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Ticket");
+
+            entity.HasOne(d => d.Booking).WithMany()
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Booking");
+
+            entity.HasOne(d => d.Seat).WithMany()
+                .HasForeignKey(d => d.SeatId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Seat");
+
+            entity.HasOne(d => d.Showtime).WithMany()
+                .HasForeignKey(d => d.ShowtimeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Showtime");
+
+            entity.HasOne(d => d.Cinema).WithMany()
+                .HasForeignKey(d => d.CinemaId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SeatTicket_Cinema");
+
+            entity.HasOne(d => d.CheckedInByEmployee).WithMany()
+                .HasForeignKey(d => d.CheckedInBy)
+                .HasConstraintName("FK_SeatTicket_Employee");
+        });
+
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(e => e.UserId).HasName("PK__User__B9BE370F2B516448");
@@ -1323,6 +1866,482 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(50)
                 .IsUnicode(false)
                 .HasColumnName("voucher_code");
+
+            // Các trường mới
+            entity.Property(e => e.ManagerId)
+                .HasColumnName("manager_id")
+                .HasDefaultValue(1);
+
+            entity.Property(e => e.ManagerStaffId)
+                .HasColumnName("manager_staff_id");
+
+            entity.Property(e => e.DiscountType)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("discount_type")
+                .HasDefaultValue("fixed");
+
+            entity.Property(e => e.UsageLimit)
+                .HasColumnName("usage_limit")
+                .IsRequired(false);
+
+            entity.Property(e => e.UsedCount)
+                .HasColumnName("used_count")
+                .HasDefaultValue(0);
+
+            entity.Property(e => e.Description)
+                .HasMaxLength(255)
+                .HasColumnName("description")
+                .IsRequired(false);
+
+            entity.Property(e => e.IsActive)
+                .HasColumnName("is_active")
+                .HasDefaultValue(true);
+
+            entity.Property(e => e.IsDeleted)
+                .HasColumnName("is_deleted")
+                .HasDefaultValue(false);
+
+            entity.Property(e => e.IsRestricted)
+                .HasColumnName("is_restricted")
+                .HasDefaultValue(false);
+
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at")
+                .IsRequired(false);
+
+            entity.Property(e => e.DeletedAt)
+                .HasColumnName("deleted_at")
+                .IsRequired(false);
+
+            // Foreign key constraint
+            entity.HasOne(d => d.Manager)
+                .WithMany(p => p.Vouchers)
+                .HasForeignKey(d => d.ManagerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Voucher_Manager");
+
+            entity.HasOne(d => d.ManagerStaff)
+                .WithMany()
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Voucher_ManagerStaff");
+        });
+
+        modelBuilder.Entity<VoucherEmailHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_VoucherEmailHistory");
+
+            entity.ToTable("VoucherEmailHistory");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.SentAt)
+                .HasColumnName("sent_at")
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("status")
+                .HasDefaultValue("success");
+
+            // Foreign key constraints
+            entity.HasOne(d => d.Voucher)
+                .WithMany(p => p.VoucherEmailHistories)
+                .HasForeignKey(d => d.VoucherId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VoucherEmailHistory_Voucher");
+
+            entity.HasOne(d => d.User)
+                .WithMany(p => p.VoucherEmailHistories)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VoucherEmailHistory_User");
+        });
+
+        modelBuilder.Entity<UserVoucher>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_UserVoucher");
+
+            entity.ToTable("UserVoucher");
+
+            entity.HasIndex(e => new { e.VoucherId, e.UserId }, "IX_UserVoucher_Voucher_User")
+                .IsUnique();
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.IsUsed)
+                .HasColumnName("is_used")
+                .HasDefaultValue(false);
+            entity.Property(e => e.UsedAt)
+                .HasColumnName("used_at")
+                .IsRequired(false);
+            entity.Property(e => e.BookingId)
+                .HasColumnName("booking_id")
+                .IsRequired(false);
+            entity.Property(e => e.CreatedAt)
+                .HasColumnName("created_at")
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+
+            // Foreign key constraints
+            entity.HasOne(d => d.Voucher)
+                .WithMany()
+                .HasForeignKey(d => d.VoucherId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UserVoucher_Voucher");
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UserVoucher_User");
+
+            entity.HasOne(d => d.Booking)
+                .WithMany()
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_UserVoucher_Booking");
+        });
+
+        modelBuilder.Entity<VoucherReservation>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_VoucherReservation");
+
+            entity.ToTable("VoucherReservation");
+
+            entity.HasIndex(e => e.VoucherId, "IX_VoucherReservation_Voucher_Active")
+                .IsUnique()
+                .HasFilter("[released_at] IS NULL");
+
+            entity.HasIndex(e => e.SessionId, "IX_VoucherReservation_Session");
+
+            entity.HasIndex(e => e.ExpiresAt, "IX_VoucherReservation_Expires")
+                .HasFilter("[released_at] IS NULL");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
+            entity.Property(e => e.SessionId).HasColumnName("session_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.ReservedAt)
+                .HasColumnName("reserved_at")
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.ReleasedAt)
+                .HasColumnName("released_at")
+                .IsRequired(false);
+
+            // Foreign key constraints
+            entity.HasOne(d => d.Voucher)
+                .WithMany()
+                .HasForeignKey(d => d.VoucherId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_VoucherReservation_Voucher");
+
+            entity.HasOne(d => d.Session)
+                .WithMany()
+                .HasForeignKey(d => d.SessionId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_VoucherReservation_BookingSession");
+
+            entity.HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VoucherReservation_User");
+        });
+
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.HasKey(e => e.OrderId).HasName("PK__Order__46596229");
+
+            entity.ToTable("Order");
+
+            entity.HasIndex(e => e.BookingSessionId, "IX_order_booking_session");
+
+            entity.HasIndex(e => e.UserId, "IX_order_user")
+                .HasFilter("([user_id] IS NOT NULL)");
+
+            entity.HasIndex(e => e.Status, "IX_order_status");
+
+            entity.HasIndex(e => e.ShowtimeId, "IX_order_showtime");
+
+            entity.HasIndex(e => e.PaymentExpiresAt, "IX_order_expires")
+                .HasFilter("([payment_expires_at] IS NOT NULL)");
+
+            entity.HasIndex(e => e.PayOsOrderCode, "UX_order_payos_code")
+                .IsUnique()
+                .HasFilter("([payos_order_code] IS NOT NULL)");
+
+            entity.HasIndex(e => e.BookingId, "IX_order_booking")
+                .HasFilter("([booking_id] IS NOT NULL)");
+
+            entity.Property(e => e.OrderId)
+                .HasMaxLength(32)
+                .HasColumnName("order_id");
+            entity.Property(e => e.BookingSessionId).HasColumnName("booking_session_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.ShowtimeId).HasColumnName("showtime_id");
+            entity.Property(e => e.Amount)
+                .HasColumnType("decimal(10, 2)")
+                .HasColumnName("amount");
+            entity.Property(e => e.Currency)
+                .HasMaxLength(3)
+                .IsUnicode(false)
+                .HasDefaultValue("VND")
+                .HasColumnName("currency");
+            entity.Property(e => e.Provider)
+                .HasMaxLength(32)
+                .IsUnicode(false)
+                .HasDefaultValue("payos")
+                .HasColumnName("provider");
+            entity.Property(e => e.Status)
+                .HasMaxLength(24)
+                .IsUnicode(false)
+                .HasDefaultValue("PENDING")
+                .HasColumnName("status");
+            entity.Property(e => e.PayOsOrderCode)
+                .HasMaxLength(128)
+                .HasColumnName("payos_order_code");
+            entity.Property(e => e.PayOsPaymentLink)
+                .HasMaxLength(512)
+                .HasColumnName("payos_payment_link");
+            entity.Property(e => e.PayOsQrCode)
+                .HasMaxLength(512)
+                .HasColumnName("payos_qr_code");
+            entity.Property(e => e.PaymentExpiresAt)
+                .HasPrecision(3)
+                .HasColumnName("payment_expires_at");
+            entity.Property(e => e.CustomerName)
+                .HasMaxLength(100)
+                .HasColumnName("customer_name");
+            entity.Property(e => e.CustomerPhone)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasColumnName("customer_phone");
+            entity.Property(e => e.CustomerEmail)
+                .HasMaxLength(100)
+                .HasColumnName("customer_email");
+            entity.Property(e => e.BookingId).HasColumnName("booking_id");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.BookingSession).WithMany()
+                .HasForeignKey(d => d.BookingSessionId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Order_BookingSession");
+
+            entity.HasOne(d => d.User).WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Order_User");
+
+            entity.HasOne(d => d.Showtime).WithMany()
+                .HasForeignKey(d => d.ShowtimeId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Order_Showtime");
+
+            entity.HasOne(d => d.Booking).WithMany()
+                .HasForeignKey(d => d.BookingId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Order_Booking");
+        });
+
+        // VIP System Entities
+        modelBuilder.Entity<VIPLevel>(entity =>
+        {
+            entity.HasKey(e => e.VipLevelId).HasName("PK_VIPLevel");
+
+            entity.ToTable("VIPLevel");
+
+            entity.Property(e => e.VipLevelId).HasColumnName("vip_level_id");
+            entity.Property(e => e.LevelName)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("level_name");
+            entity.Property(e => e.LevelDisplayName)
+                .HasMaxLength(100)
+                .HasColumnName("level_display_name");
+            entity.Property(e => e.MinPointsRequired).HasColumnName("min_points_required");
+            entity.Property(e => e.PointEarningRate)
+                .HasColumnType("decimal(5,2)")
+                .HasColumnName("point_earning_rate");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+        });
+
+        modelBuilder.Entity<VIPBenefit>(entity =>
+        {
+            entity.HasKey(e => e.BenefitId).HasName("PK_VIPBenefit");
+
+            entity.ToTable("VIPBenefit");
+
+            entity.Property(e => e.BenefitId).HasColumnName("benefit_id");
+            entity.Property(e => e.VipLevelId).HasColumnName("vip_level_id");
+            entity.Property(e => e.BenefitType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("benefit_type");
+            entity.Property(e => e.BenefitName)
+                .HasMaxLength(200)
+                .HasColumnName("benefit_name");
+            entity.Property(e => e.BenefitDescription)
+                .HasMaxLength(500)
+                .HasColumnName("benefit_description");
+            entity.Property(e => e.BenefitValue)
+                .HasColumnType("decimal(10,2)")
+                .HasColumnName("benefit_value");
+            entity.Property(e => e.IsActive).HasColumnName("is_active");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.VIPLevel).WithMany(p => p.VIPBenefits)
+                .HasForeignKey(d => d.VipLevelId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPBenefit_VIPLevel");
+        });
+
+        modelBuilder.Entity<VIPMember>(entity =>
+        {
+            entity.HasKey(e => e.VipMemberId).HasName("PK_VIPMember");
+
+            entity.ToTable("VIPMember");
+
+            entity.HasIndex(e => e.CustomerId, "UQ_VIPMember_Customer").IsUnique();
+
+            entity.Property(e => e.VipMemberId).HasColumnName("vip_member_id");
+            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
+            entity.Property(e => e.CurrentVipLevelId).HasColumnName("current_vip_level_id");
+            entity.Property(e => e.TotalPoints).HasColumnName("total_points");
+            entity.Property(e => e.GrowthValue).HasColumnName("growth_value");
+            entity.Property(e => e.LastUpgradeDate)
+                .HasPrecision(3)
+                .HasColumnName("last_upgrade_date");
+            entity.Property(e => e.BirthdayBonusClaimedYear).HasColumnName("birthday_bonus_claimed_year");
+            entity.Property(e => e.MonthlyFreeTicketClaimedMonth).HasColumnName("monthly_free_ticket_claimed_month");
+            entity.Property(e => e.MonthlyFreeComboClaimedMonth).HasColumnName("monthly_free_combo_claimed_month");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasPrecision(3)
+                .HasColumnName("updated_at");
+
+            entity.HasOne(d => d.Customer).WithOne(p => p.VIPMember)
+                .HasForeignKey<VIPMember>(d => d.CustomerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPMember_Customer");
+
+            entity.HasOne(d => d.CurrentVIPLevel).WithMany(p => p.VIPMembers)
+                .HasForeignKey(d => d.CurrentVipLevelId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPMember_VIPLevel");
+        });
+
+        modelBuilder.Entity<PointHistory>(entity =>
+        {
+            entity.HasKey(e => e.PointHistoryId).HasName("PK_PointHistory");
+
+            entity.ToTable("PointHistory");
+
+            entity.Property(e => e.PointHistoryId).HasColumnName("point_history_id");
+            entity.Property(e => e.CustomerId).HasColumnName("customer_id");
+            entity.Property(e => e.OrderId)
+                .HasMaxLength(100)
+                .HasColumnName("order_id");
+            entity.Property(e => e.TransactionType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("transaction_type");
+            entity.Property(e => e.Points).HasColumnName("points");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .HasColumnName("description");
+            entity.Property(e => e.VipLevelId).HasColumnName("vip_level_id");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+
+            entity.HasOne(d => d.Customer).WithMany(p => p.PointHistories)
+                .HasForeignKey(d => d.CustomerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_PointHistory_Customer");
+
+            entity.HasOne(d => d.VIPLevel).WithMany(p => p.PointHistories)
+                .HasForeignKey(d => d.VipLevelId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_PointHistory_VIPLevel");
+        });
+
+        modelBuilder.Entity<VIPBenefitClaim>(entity =>
+        {
+            entity.HasKey(e => e.BenefitClaimId).HasName("PK_VIPBenefitClaim");
+
+            entity.ToTable("VIPBenefitClaim");
+
+            entity.Property(e => e.BenefitClaimId).HasColumnName("benefit_claim_id");
+            entity.Property(e => e.VipMemberId).HasColumnName("vip_member_id");
+            entity.Property(e => e.BenefitId).HasColumnName("benefit_id");
+            entity.Property(e => e.ClaimType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("claim_type");
+            entity.Property(e => e.ClaimValue)
+                .HasColumnType("decimal(10,2)")
+                .HasColumnName("claim_value");
+            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("status");
+            entity.Property(e => e.ClaimedAt)
+                .HasPrecision(3)
+                .HasColumnName("claimed_at");
+            entity.Property(e => e.ExpiresAt)
+                .HasPrecision(3)
+                .HasColumnName("expires_at");
+            entity.Property(e => e.CreatedAt)
+                .HasPrecision(3)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("created_at");
+
+            entity.HasOne(d => d.VIPMember).WithMany(p => p.VIPBenefitClaims)
+                .HasForeignKey(d => d.VipMemberId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPBenefitClaim_VIPMember");
+
+            entity.HasOne(d => d.VIPBenefit).WithMany(p => p.VIPBenefitClaims)
+                .HasForeignKey(d => d.BenefitId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_VIPBenefitClaim_VIPBenefit");
+
+            entity.HasOne(d => d.Voucher).WithMany()
+                .HasForeignKey(d => d.VoucherId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_VIPBenefitClaim_Voucher");
         });
 
         OnModelCreatingPartial(modelBuilder);

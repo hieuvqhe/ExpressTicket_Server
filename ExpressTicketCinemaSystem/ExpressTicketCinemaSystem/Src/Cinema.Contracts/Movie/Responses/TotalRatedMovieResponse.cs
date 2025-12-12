@@ -6,6 +6,7 @@
         public string Title { get; set; } = null!;
         public string? Genre { get; set; }
         public string? PosterUrl { get; set; }
+        public string? BannerUrl { get; set; }
         public DateTime? PremiereDate { get; set; }
         public DateTime? EndDate { get; set; }
         public string Status { get; set; }

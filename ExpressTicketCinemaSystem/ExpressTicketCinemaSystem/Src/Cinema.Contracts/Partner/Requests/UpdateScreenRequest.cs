@@ -17,6 +17,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests
         [Range(1, 1000)]
         public int Capacity { get; set; }
 
+        [Range(1, 50)]
+        public int SeatRows { get; set; }
+
+        [Range(1, 30)]
+        public int SeatColumns { get; set; }
+
         public bool IsActive { get; set; } = true;
     }
 }

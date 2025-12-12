@@ -3,16 +3,19 @@ using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using System.Linq.Dynamic.Core;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Admin.Request;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
     public class AdminService
     {
         private readonly CinemaDbCoreContext _context;
+    private readonly IAuditLogService _auditLogService;
 
-        public AdminService(CinemaDbCoreContext context)
+    public AdminService(CinemaDbCoreContext context, IAuditLogService auditLogService)
         {
             _context = context;
+        _auditLogService = auditLogService;
         }
 
         public async Task<(List<User>, int)> GetFilteredUsersAsync(
@@ -86,8 +89,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             var customerId = customer.CustomerId;
             stats.BookingsCount = await _context.Bookings.CountAsync(b => b.CustomerId == customerId);
-            stats.RatingsCount = await _context.RatingFilms.CountAsync(r => r.UserId == customerId);
-            stats.CommentsCount = await _context.RatingFilms.CountAsync(r => r.UserId == customerId && r.Comment != null);
+
+            // Thống kê rating theo user_id và chỉ lấy những rating chưa bị xóa
+            stats.RatingsCount = await _context.RatingFilms
+                .CountAsync(r => r.UserId == userId && !r.IsDeleted);
+            stats.CommentsCount = await _context.RatingFilms
+                .CountAsync(r => r.UserId == userId && !r.IsDeleted && r.Comment != null);
 
             return stats;
         }
@@ -106,6 +113,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 return (false, "User không tìm thấy", null);
             }
+
+        var beforeSnapshot = BuildUserAuditSnapshot(user);
 
             // Kiểm tra không được xóa admin khác
             if (user.UserType.ToLower() == "admin" && userId != currentAdminId)
@@ -133,6 +142,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Users.Update(user);
             await _context.SaveChangesAsync();
+
+        await _auditLogService.LogEntityChangeAsync(
+            action: "ADMIN_SOFT_DELETE_USER",
+            tableName: "User",
+            recordId: user.UserId,
+            beforeData: beforeSnapshot,
+            afterData: BuildUserAuditSnapshot(user),
+            metadata: BuildAuditMetadata("soft_delete", currentAdminId));
 
             return (true, "Xóa user thành công", user);
         }
@@ -163,6 +180,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 return (false, "User not found", null);
             }
 
+        var beforeSnapshot = BuildUserAuditSnapshot(user);
+
             // Kiểm tra không được ban admin khác
             if (user.UserType.ToLower() == "admin" && userId != currentAdminId)
             {
@@ -183,6 +202,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context.Users.Update(user);
             await _context.SaveChangesAsync();
 
+        await _auditLogService.LogEntityChangeAsync(
+            action: "ADMIN_BAN_USER",
+            tableName: "User",
+            recordId: user.UserId,
+            beforeData: beforeSnapshot,
+            afterData: BuildUserAuditSnapshot(user),
+            metadata: BuildAuditMetadata("ban", currentAdminId));
+
             return (true, "Ban user success", user);
         }
 
@@ -200,6 +227,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 return (false, "User not found", null);
             }
+
+        var beforeSnapshot = BuildUserAuditSnapshot(user);
 
             // Kiểm tra không được unban admin khác
             if (user.UserType.ToLower() == "admin" && userId != currentAdminId)
@@ -221,6 +250,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context.Users.Update(user);
             await _context.SaveChangesAsync();
 
+        await _auditLogService.LogEntityChangeAsync(
+            action: "ADMIN_UNBAN_USER",
+            tableName: "User",
+            recordId: user.UserId,
+            beforeData: beforeSnapshot,
+            afterData: BuildUserAuditSnapshot(user),
+            metadata: BuildAuditMetadata("unban", currentAdminId));
+
             return (true, "Unban user success", user);
         }
 
@@ -238,6 +275,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 return (false, "User not found", null);
             }
+
+        var beforeSnapshot = BuildUserAuditSnapshot(user);
 
             // Kiểm tra không được update role của admin khác
             if (user.UserType.ToLower() == "admin" && userId != currentAdminId)
@@ -257,6 +296,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Users.Update(user);
             await _context.SaveChangesAsync();
+
+        await _auditLogService.LogEntityChangeAsync(
+            action: "ADMIN_UPDATE_USER_ROLE",
+            tableName: "User",
+            recordId: user.UserId,
+            beforeData: beforeSnapshot,
+            afterData: BuildUserAuditSnapshot(user),
+            metadata: BuildAuditMetadata("update_role", currentAdminId, $"new_role:{newRole}"));
 
             return (true, "Update user role success", user);
         }
@@ -289,6 +336,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 return (false, "User not found", null);
             }
+
+        var beforeSnapshot = BuildUserAuditSnapshot(user);
 
             // Kiểm tra không được update admin khác
             if (user.UserType.ToLower() == "admin" && userId != currentAdminId)
@@ -348,8 +397,45 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context.Users.Update(user);
             await _context.SaveChangesAsync();
 
+        await _auditLogService.LogEntityChangeAsync(
+            action: "ADMIN_UPDATE_USER",
+            tableName: "User",
+            recordId: user.UserId,
+            beforeData: beforeSnapshot,
+            afterData: BuildUserAuditSnapshot(user),
+            metadata: BuildAuditMetadata("update_user", currentAdminId));
+
             return (true, "Update user success", user);
         }
+
+    private static object BuildUserAuditSnapshot(User user)
+    {
+        return new
+        {
+            user.UserId,
+            user.Email,
+            user.Username,
+            user.UserType,
+            user.IsActive,
+            user.IsBanned,
+            user.EmailConfirmed,
+            user.CreatedAt,
+            user.UpdatedAt,
+            user.BannedAt,
+            user.UnbannedAt,
+            user.DeactivatedAt
+        };
+    }
+
+    private static object BuildAuditMetadata(string action, int adminId, string? note = null)
+    {
+        return new
+        {
+            triggeredBy = adminId,
+            action,
+            note
+        };
+    }
 
         private async Task<(bool success, string message)> CheckForDuplicatesAsync(int userId, string? email, string? username, string? phone)
         {
@@ -398,4 +484,4 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return (true, string.Empty);
         }
     }
-    }
+}

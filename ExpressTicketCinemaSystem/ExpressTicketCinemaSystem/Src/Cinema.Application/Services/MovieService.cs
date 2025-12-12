@@ -5,12 +5,14 @@ using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.EntityFrameworkCore;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Helpers;
 using static ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests.CreateMovieRequest;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
     public class MovieService : IMovieService
     {
+        const int PRESALE_DAYS = 14;
         private readonly CinemaDbCoreContext _context;
 
         public MovieService(CinemaDbCoreContext context)
@@ -44,12 +46,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 query = status.ToLower() switch
                 {
                     "now_showing" => query.Where(m =>
-                        m.PremiereDate <= today &&
-                        m.EndDate >= today), 
+    m.EndDate >= today &&
+    m.PremiereDate <= today.AddDays(PRESALE_DAYS)),
 
                     "coming_soon" => query.Where(m =>
-                        m.PremiereDate > today &&
-                        m.PremiereDate <= today.AddDays(7)), 
+    m.PremiereDate > today.AddDays(PRESALE_DAYS)),
 
                     "ended" => query.Where(m => m.EndDate < today),
 
@@ -132,6 +133,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 EndDate = m.EndDate,
                 Director = m.Director,
                 PosterUrl = m.PosterUrl,
+                BannerUrl = m.BannerUrl,
                 TrailerUrl = m.TrailerUrl,
                 Country = m.Country,
                 Production = m.Production,
@@ -265,6 +267,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 EndDate = m.EndDate,
                 Director = m.Director,
                 PosterUrl = m.PosterUrl,
+                BannerUrl = m.BannerUrl,
                 TrailerUrl = m.TrailerUrl,
                 Country = m.Country,
                 Production = m.Production,
@@ -311,8 +314,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(ma => ma.Actor)
                 .Where(m =>
                     m.IsActive &&
-                    m.PremiereDate <= today &&
-                    m.EndDate >= today
+                    m.EndDate >= today &&
+    m.PremiereDate <= today.AddDays(PRESALE_DAYS)
                 );
 
             if (!string.IsNullOrEmpty(genre))
@@ -380,6 +383,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 EndDate = m.EndDate,
                 Director = m.Director,
                 PosterUrl = m.PosterUrl,
+                BannerUrl = m.BannerUrl,
                 TrailerUrl = m.TrailerUrl,
                 Country = m.Country,
                 Production = m.Production,
@@ -421,57 +425,41 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     string sortBy = "premiere_date",
     string sortOrder = "asc")
         {
+            const int PRESALE_DAYS = 14; // cửa sổ “được coi như đang chiếu” trước ngày công chiếu
             var today = DateOnly.FromDateTime(DateTime.Today);
-            var sevenDaysFromNow = today.AddDays(7);
+            var cutoff = today.AddDays(PRESALE_DAYS);
 
+            // Coming soon: chỉ những phim công chiếu SAU cutoff (tức > 14 ngày nữa)
             var query = _context.Movies
-                .Include(m => m.MovieActors)
-                    .ThenInclude(ma => ma.Actor)
-                .Where(m =>
-                    m.IsActive &&
-                    m.PremiereDate > today &&
-                    m.PremiereDate <= sevenDaysFromNow
-                );
+                .Include(m => m.MovieActors).ThenInclude(ma => ma.Actor)
+                .Where(m => m.IsActive && m.PremiereDate > cutoff)
+                .AsQueryable();
 
             if (!string.IsNullOrEmpty(genre))
             {
-                query = query.Where(m =>
-                    m.Genre != null &&
-                    m.Genre.ToLower().Contains(genre.ToLower()));
+                var g = genre.ToLowerInvariant();
+                query = query.Where(m => m.Genre != null && m.Genre.ToLower().Contains(g));
             }
 
             if (!string.IsNullOrEmpty(language))
             {
-                query = query.Where(m =>
-                    m.Language != null &&
-                    m.Language.ToLower().Contains(language.ToLower()));
+                var lang = language.ToLowerInvariant();
+                query = query.Where(m => m.Language != null && m.Language.ToLower().Contains(lang));
             }
 
             if (ratingMin.HasValue)
             {
-                decimal ratingMinDecimal = (decimal)ratingMin.Value;
-                query = query.Where(m => m.AverageRating >= ratingMinDecimal);
+                decimal minDec = (decimal)ratingMin.Value;
+                query = query.Where(m => m.AverageRating >= minDec);
             }
 
-            if (durationMin.HasValue)
-            {
-                query = query.Where(m => m.DurationMinutes >= durationMin.Value);
-            }
-            if (durationMax.HasValue)
-            {
-                query = query.Where(m => m.DurationMinutes <= durationMax.Value);
-            }
+            if (durationMin.HasValue) query = query.Where(m => m.DurationMinutes >= durationMin.Value);
+            if (durationMax.HasValue) query = query.Where(m => m.DurationMinutes <= durationMax.Value);
 
-            if (premiereDateFrom.HasValue)
-            {
-                query = query.Where(m => m.PremiereDate >= premiereDateFrom.Value);
-            }
-            if (premiereDateTo.HasValue)
-            {
-                query = query.Where(m => m.PremiereDate <= premiereDateTo.Value);
-            }
+            if (premiereDateFrom.HasValue) query = query.Where(m => m.PremiereDate >= premiereDateFrom.Value);
+            if (premiereDateTo.HasValue) query = query.Where(m => m.PremiereDate <= premiereDateTo.Value);
 
-            query = (sortBy.ToLower(), sortOrder.ToLower()) switch
+            query = (sortBy.ToLowerInvariant(), sortOrder.ToLowerInvariant()) switch
             {
                 ("premiere_date", "desc") => query.OrderByDescending(m => m.PremiereDate),
                 ("premiere_date", "asc") => query.OrderBy(m => m.PremiereDate),
@@ -483,7 +471,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ("duration_minutes", "asc") => query.OrderBy(m => m.DurationMinutes),
                 ("ratings_count", "desc") => query.OrderByDescending(m => m.RatingsCount),
                 ("ratings_count", "asc") => query.OrderBy(m => m.RatingsCount),
-                _ => query.OrderBy(m => m.PremiereDate) 
+                _ => query.OrderBy(m => m.PremiereDate)
             };
 
             var total = await query.CountAsync();
@@ -501,18 +489,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Description = m.Description,
                 DurationMinutes = m.DurationMinutes,
                 Genre = string.Join(", ",
-                   m.Genre?.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                  .Select(g => g.Trim()) ?? Enumerable.Empty<string>()),
+                    m.Genre?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(g => g.Trim()) ?? Enumerable.Empty<string>()),
                 Language = m.Language,
                 PremiereDate = m.PremiereDate,
                 EndDate = m.EndDate,
                 Director = m.Director,
                 PosterUrl = m.PosterUrl,
+                BannerUrl = m.BannerUrl,
                 TrailerUrl = m.TrailerUrl,
                 Country = m.Country,
                 Production = m.Production,
                 IsActive = m.IsActive,
-                Status = "coming_soon",
+                Status = GetMovieStatus(m.PremiereDate, m.EndDate), // KHÔNG hardcode
                 AverageRating = (double?)m.AverageRating,
                 RatingsCount = m.RatingsCount,
                 CreatedAt = m.CreatedAt,
@@ -658,6 +647,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 EndDate = m.EndDate,
                 Director = m.Director,
                 PosterUrl = m.PosterUrl,
+                BannerUrl = m.BannerUrl,
                 TrailerUrl = m.TrailerUrl,
                 Country = m.Country,
                 Production = m.Production,
@@ -710,10 +700,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var active = await _context.Movies.CountAsync(m => m.IsActive);
             var inactive = await _context.Movies.CountAsync(m => !m.IsActive);
 
-            // Rating stats
-            var totalRatings = await _context.RatingFilms.CountAsync();
+            // Rating stats (only non-deleted ratings)
+            var totalRatings = await _context.RatingFilms
+                .Where(r => !r.IsDeleted)
+                .CountAsync();
             var averageRating = totalRatings > 0
-                ? await _context.RatingFilms.AverageAsync(r => r.RatingStar)
+                ? await _context.RatingFilms
+                    .Where(r => !r.IsDeleted)
+                    .AverageAsync(r => r.RatingStar)
                 : 0;
 
             return new MovieStatisticsResponse
@@ -743,11 +737,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Include(m => m.MovieActors)
                     .ThenInclude(ma => ma.Actor)
                 .Include(m => m.RatingFilms)
-                .Where(m => m.IsActive && m.RatingFilms.Count >= minRatingsCount);
+                .Where(m => m.IsActive && m.RatingFilms.Count(r => !r.IsDeleted) >= minRatingsCount);
 
             if (startDate != DateTime.MinValue)
             {
-                query = query.Where(m => m.RatingFilms.Any(r => r.RatingAt >= startDate));
+                query = query.Where(m => m.RatingFilms.Any(r => !r.IsDeleted && r.RatingAt >= startDate));
             }
 
             var result = await query
@@ -763,6 +757,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     m.PremiereDate,
                     m.EndDate,
                     m.PosterUrl,
+                    m.BannerUrl,
                     m.TrailerUrl,
                     Actors = m.MovieActors.Select(ma => new ActorResponse
                     {
@@ -770,8 +765,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         Name = ma.Actor.Name,
                         ProfileImage = ma.Actor.AvatarUrl
                     }).ToList(),
-                    AverageRating = m.RatingFilms.Average(r => r.RatingStar),
-                    TotalRatings = m.RatingFilms.Count()
+                    AverageRating = m.RatingFilms
+                        .Where(r => !r.IsDeleted)
+                        .Average(r => r.RatingStar),
+                    TotalRatings = m.RatingFilms
+                        .Count(r => !r.IsDeleted)
                 })
                 .OrderByDescending(m => m.AverageRating)
                 .ThenByDescending(m => m.TotalRatings)
@@ -784,6 +782,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Title = m.Title,
                 Genre = m.Genre,
                 PosterUrl = m.PosterUrl,
+                BannerUrl = m.BannerUrl,
                 PremiereDate = m.PremiereDate.ToDateTime(TimeOnly.MinValue),
                 EndDate = m.EndDate.ToDateTime(TimeOnly.MinValue),
                 AverageRating = Math.Round(m.AverageRating, 2),
@@ -816,6 +815,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 EndDate = movie.EndDate,
                 Director = movie.Director,
                 PosterUrl = movie.PosterUrl,
+                BannerUrl = movie.BannerUrl,
                 TrailerUrl = movie.TrailerUrl,
                 Country = movie.Country,
                 Production = movie.Production,
@@ -836,19 +836,399 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
         private string GetMovieStatus(DateOnly premiereDate, DateOnly endDate)
         {
-            var today = DateOnly.FromDateTime(DateTime.Today);
-            var daysUntilPremiere = (premiereDate.DayNumber - today.DayNumber);
+            const int PRESALE_DAYS = 14;
 
-            if (daysUntilPremiere >= 1 && daysUntilPremiere <= 7)
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var daysUntilPremiere = premiereDate.DayNumber - today.DayNumber;
+
+            // > 14 ngày nữa mới chiếu -> sắp chiếu (không cho tạo rạp)
+            if (daysUntilPremiere > PRESALE_DAYS)
                 return "coming_soon";
 
+            // 1..14 ngày trước ngày chiếu -> cho phép coi như đang chiếu (mở bán/chuẩn bị)
+            if (daysUntilPremiere >= 1 && daysUntilPremiere <= PRESALE_DAYS)
+                return "now_showing";
+
+            // Đúng/qua ngày chiếu và chưa hết hạn -> đang chiếu
             if (premiereDate <= today && endDate >= today)
                 return "now_showing";
 
+            // Hết hạn
             if (endDate < today)
                 return "end";
 
-            return "upcoming"; 
+            // Phòng hờ (hiếm khi rơi vào)
+            return "upcoming";
+        }
+
+        public async Task<(bool success, string message, RatingFilm? rating)> CreateReviewAsync(
+            int movieId, 
+            int userId, 
+            int ratingStar, 
+            string comment,
+            List<string>? imageUrls = null)
+        {
+            // 1. Kiểm tra phim tồn tại
+            var movie = await _context.Movies.FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
+            if (movie == null)
+            {
+                return (false, "Không tìm thấy phim", null);
+            }
+
+            // 2. Kiểm tra user đã review phim này chưa (chỉ xét review chưa bị xóa)
+            var existingReview = await _context.RatingFilms
+                .FirstOrDefaultAsync(r => r.MovieId == movieId && 
+                                           r.UserId == userId &&
+                                           !r.IsDeleted);
+            
+            if (existingReview != null)
+            {
+                return (false, "Bạn đã đánh giá phim này rồi", null);
+            }
+
+            // 3. Kiểm tra user đã mua vé và thanh toán thành công cho phim này chưa
+            // Lấy customer_id từ user_id
+            var customer = await _context.Customers.FirstOrDefaultAsync(c => c.UserId == userId);
+            if (customer == null)
+            {
+                return (false, "Bạn cần mua vé và thanh toán thành công để đánh giá phim này", null);
+            }
+
+            // Kiểm tra có booking nào đã paid cho phim này không
+            var hasPaidTicket = await _context.Bookings
+                .Where(b => b.CustomerId == customer.CustomerId && 
+                           b.PaymentStatus == "PAID")
+                .Join(_context.Tickets,
+                    booking => booking.BookingId,
+                    ticket => ticket.BookingId,
+                    (booking, ticket) => ticket)
+                .Join(_context.Showtimes,
+                    ticket => ticket.ShowtimeId,
+                    showtime => showtime.ShowtimeId,
+                    (ticket, showtime) => showtime)
+                .AnyAsync(showtime => showtime.MovieId == movieId);
+
+            if (!hasPaidTicket)
+            {
+                return (false, "Bạn cần mua vé và thanh toán thành công để đánh giá phim này", null);
+            }
+
+            // 4. Validate image URLs (tối đa 3 ảnh)
+            if (imageUrls != null && imageUrls.Count > 3)
+            {
+                return (false, "Tối đa 3 ảnh được phép", null);
+            }
+
+            // 5. Tạo review mới
+            var newRating = new RatingFilm
+            {
+                MovieId = movieId,
+                UserId = userId,
+                RatingStar = ratingStar,
+                Comment = comment,
+                RatingAt = DateTime.UtcNow,
+                ImageUrls = imageUrls != null && imageUrls.Any() ? string.Join(";", imageUrls) : null
+            };
+
+            _context.RatingFilms.Add(newRating);
+
+            // 6. Cập nhật Movie (ratings_count và average_rating)
+            var oldCount = movie.RatingsCount ?? 0;
+            var oldAvg = movie.AverageRating ?? 0;
+
+            movie.RatingsCount = oldCount + 1;
+            movie.AverageRating = (oldAvg * oldCount + ratingStar) / (oldCount + 1);
+
+            _context.Movies.Update(movie);
+
+            // 7. Lưu thay đổi
+            await _context.SaveChangesAsync();
+
+            // 8. Load User để trả về user_name và user_avatar
+            await _context.Entry(newRating).Reference(r => r.User).LoadAsync();
+
+            return (true, "Đã tạo review thành công", newRating);
+        }
+
+        public async Task<(bool success, string message, RatingFilm? rating)> UpdateReviewAsync(
+            int movieId,
+            int userId,
+            int ratingStar,
+            string comment,
+            List<string>? imageUrls = null)
+        {
+            // 1. Kiểm tra phim tồn tại
+            var movie = await _context.Movies.FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
+            if (movie == null)
+            {
+                return (false, "Không tìm thấy phim", null);
+            }
+
+            // 2. Tìm review hiện tại của user cho phim này (chỉ lấy review chưa xóa)
+            var existingReview = await _context.RatingFilms
+                .FirstOrDefaultAsync(r => r.MovieId == movieId && r.UserId == userId && !r.IsDeleted);
+
+            if (existingReview == null)
+            {
+                return (false, "Bạn chưa review phim này", null);
+            }
+
+            // 3. Validate image URLs (tối đa 3 ảnh)
+            if (imageUrls != null && imageUrls.Count > 3)
+            {
+                return (false, "Tối đa 3 ảnh được phép", null);
+            }
+
+            // 4. Lưu rating cũ để tính toán lại average
+            var oldRatingStar = existingReview.RatingStar;
+
+            // 5. Cập nhật review
+            existingReview.RatingStar = ratingStar;
+            existingReview.Comment = comment;
+            existingReview.RatingAt = DateTime.UtcNow;
+            existingReview.ImageUrls = imageUrls != null && imageUrls.Any() ? string.Join(";", imageUrls) : null;
+
+            _context.RatingFilms.Update(existingReview);
+
+            // 6. Recalculate Movie average_rating
+            // Công thức: newAvg = (oldAvg * totalCount - oldStar + newStar) / totalCount
+            var totalCount = movie.RatingsCount ?? 0;
+            var oldAvg = movie.AverageRating ?? 0;
+
+            if (totalCount > 0)
+            {
+                movie.AverageRating = (oldAvg * totalCount - oldRatingStar + ratingStar) / totalCount;
+            }
+
+            _context.Movies.Update(movie);
+
+            // 7. Lưu thay đổi
+            await _context.SaveChangesAsync();
+
+            // 8. Load User để trả về user_name và user_avatar
+            await _context.Entry(existingReview).Reference(r => r.User).LoadAsync();
+
+            return (true, "Cập nhật review thành công", existingReview);
+        }
+
+        public async Task<(bool success, string message)> DeleteReviewAsync(
+            int movieId,
+            int userId)
+        {
+            // 1. Kiểm tra phim tồn tại
+            var movie = await _context.Movies.FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
+            if (movie == null)
+            {
+                return (false, "Không tìm thấy phim");
+            }
+
+            // 2. Tìm review hiện tại của user cho phim này (chưa bị xóa)
+            var existingReview = await _context.RatingFilms
+                .FirstOrDefaultAsync(r => r.MovieId == movieId && r.UserId == userId && !r.IsDeleted);
+
+            if (existingReview == null)
+            {
+                return (false, "Bạn chưa review phim này");
+            }
+
+            // 3. Lưu rating star để tính toán lại average
+            var deletedStar = existingReview.RatingStar;
+
+            // 4. Soft delete review
+            existingReview.IsDeleted = true;
+            existingReview.DeletedAt = DateTime.UtcNow;
+
+            _context.RatingFilms.Update(existingReview);
+
+            // 5. Recalculate Movie average_rating và ratings_count
+            // Công thức:
+            // newTotalScore = oldAvg * totalCount - deletedStar
+            // newCount = totalCount - 1
+            // newAvg = newTotalScore / newCount (nếu newCount > 0)
+            // newAvg = null (nếu newCount == 0)
+            
+            var totalCount = movie.RatingsCount ?? 0;
+            var oldAvg = movie.AverageRating ?? 0;
+
+            if (totalCount > 0)
+            {
+                var newTotalScore = oldAvg * totalCount - deletedStar;
+                var newCount = totalCount - 1;
+
+                if (newCount > 0)
+                {
+                    movie.AverageRating = newTotalScore / newCount;
+                }
+                else
+                {
+                    movie.AverageRating = null; // Hoặc 0, tuỳ yêu cầu
+                }
+
+                movie.RatingsCount = newCount;
+            }
+
+            _context.Movies.Update(movie);
+
+            // 6. Lưu thay đổi
+            await _context.SaveChangesAsync();
+
+            return (true, "Đã xoá review của bạn cho phim này");
+        }
+
+        public async Task<(bool success, string message, GetMovieReviewsResponse? data)> GetMovieReviewsAsync(
+            int movieId,
+            int page = 1,
+            int limit = 10,
+            string sort = "newest")
+        {
+            // 1. Kiểm tra phim tồn tại
+            var movie = await _context.Movies.FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
+            if (movie == null)
+            {
+                return (false, "Không tìm thấy phim", null);
+            }
+
+            // 2. Đếm tổng số review (chỉ review chưa bị xóa)
+            var totalReviews = await _context.RatingFilms
+                .CountAsync(r => r.MovieId == movieId && !r.IsDeleted);
+
+            // 3. Query reviews với pagination và sorting
+            var query = _context.RatingFilms
+                .Include(r => r.User)
+                .Where(r => r.MovieId == movieId && !r.IsDeleted);
+
+            // 4. Apply sorting
+            query = sort.ToLower() switch
+            {
+                "oldest" => query.OrderBy(r => r.RatingAt),
+                "highest" => query.OrderByDescending(r => r.RatingStar).ThenByDescending(r => r.RatingAt),
+                "lowest" => query.OrderBy(r => r.RatingStar).ThenByDescending(r => r.RatingAt),
+                _ => query.OrderByDescending(r => r.RatingAt) // "newest" is default
+            };
+
+            // 5. Apply pagination - Load data first
+            var reviewsData = await query
+                .Skip((page - 1) * limit)
+                .Take(limit)
+                .Select(r => new
+                {
+                    r.RatingId,
+                    r.UserId,
+                    UserName = r.User.Fullname ?? "Ẩn danh",
+                    UserAvatar = r.User.AvatarUrl,
+                    r.RatingStar,
+                    Comment = r.Comment ?? "",
+                    r.RatingAt,
+                    r.ImageUrls
+                })
+                .ToListAsync();
+
+            // 6. Map to MovieReviewItem and process ImageUrls in memory
+            var reviews = reviewsData.Select(r => new MovieReviewItem
+            {
+                RatingId = r.RatingId,
+                UserId = r.UserId,
+                UserName = r.UserName,
+                UserAvatar = r.UserAvatar,
+                RatingStar = r.RatingStar,
+                Comment = r.Comment,
+                RatingAt = DateTimeHelper.ToVietnamTime(r.RatingAt), // Chuyển sang giờ VN
+                ImageUrls = !string.IsNullOrEmpty(r.ImageUrls) 
+                    ? r.ImageUrls.Split(';', StringSplitOptions.RemoveEmptyEntries).ToList() 
+                    : new List<string>()
+            }).ToList();
+
+            // 7. Tạo response
+            var response = new GetMovieReviewsResponse
+            {
+                MovieId = movieId,
+                Page = page,
+                Limit = limit,
+                TotalReviews = totalReviews,
+                AverageRating = movie.AverageRating,
+                Items = reviews
+            };
+
+            return (true, "Lấy danh sách review thành công", response);
+        }
+
+        public async Task<(bool success, string message, GetMovieRatingSummaryResponse? data)> GetMovieRatingSummaryAsync(int movieId)
+        {
+            // 1. Kiểm tra phim tồn tại
+            var movie = await _context.Movies.FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
+            if (movie == null)
+            {
+                return (false, "Không tìm thấy phim", null);
+            }
+
+            // 2. Lấy breakdown - đếm số lượng rating theo từng sao (1-5), chỉ đếm review chưa xóa
+            var breakdown = await _context.RatingFilms
+                .Where(r => r.MovieId == movieId && !r.IsDeleted)
+                .GroupBy(r => r.RatingStar)
+                .Select(g => new { Star = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            // 3. Tạo dictionary breakdown với keys "1", "2", "3", "4", "5"
+            var breakdownDict = new Dictionary<string, int>
+            {
+                ["5"] = 0,
+                ["4"] = 0,
+                ["3"] = 0,
+                ["2"] = 0,
+                ["1"] = 0
+            };
+
+            foreach (var item in breakdown)
+            {
+                breakdownDict[item.Star.ToString()] = item.Count;
+            }
+
+            // 4. Lấy total_ratings và average_rating từ Movie (đã được tính sẵn)
+            var response = new GetMovieRatingSummaryResponse
+            {
+                MovieId = movieId,
+                AverageRating = movie.AverageRating,
+                TotalRatings = movie.RatingsCount ?? 0,
+                Breakdown = breakdownDict
+            };
+
+            return (true, "Lấy thống kê rating thành công", response);
+        }
+
+        public async Task<(bool success, string message, GetMyReviewResponse? data)> GetMyReviewAsync(int movieId, int userId)
+        {
+            // 1. Kiểm tra phim tồn tại (optional theo yêu cầu)
+            var movie = await _context.Movies.FirstOrDefaultAsync(m => m.MovieId == movieId && m.IsActive);
+            if (movie == null)
+            {
+                return (false, "Không tìm thấy phim", null);
+            }
+
+            // 2. Tìm review của user cho phim này (chỉ lấy review chưa xóa) và include User
+            var review = await _context.RatingFilms
+                .Include(r => r.User)
+                .FirstOrDefaultAsync(r => r.MovieId == movieId && r.UserId == userId && !r.IsDeleted);
+
+            // 3. Tạo response
+            var response = new GetMyReviewResponse
+            {
+                MovieId = movieId,
+                UserId = userId,
+                Review = review != null ? new MyReviewDetail
+                {
+                    RatingId = review.RatingId,
+                    UserName = review.User.Fullname ?? "Ẩn danh",
+                    UserAvatar = review.User.AvatarUrl,
+                    RatingStar = review.RatingStar,
+                    Comment = review.Comment ?? "",
+                    RatingAt = DateTimeHelper.ToVietnamTime(review.RatingAt), // Chuyển sang giờ VN
+                    ImageUrls = !string.IsNullOrEmpty(review.ImageUrls) 
+                        ? review.ImageUrls.Split(';').ToList() 
+                        : new List<string>()
+                } : null
+            };
+
+            return (true, "Lấy review của bạn thành công", response);
         }
     }
 

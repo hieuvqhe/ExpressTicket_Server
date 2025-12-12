@@ -1,5 +1,4 @@
 ﻿using ExpressTicketCinemaSystem.Src.Cinema.Api.Example;
-using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
@@ -8,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Reflection;
+using System.Security.Claims;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Movie;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Auth;
@@ -18,6 +18,12 @@ using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Manager;
 using System.Text;
 using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.MovieManagement;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Serialization;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Booking;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Catalog;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Cashier;
+using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
+using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,9 +39,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .SetIsOriginAllowed(_ => true) // Cho phép tất cả origins
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials(); // Cần cho SignalR khi FE gửi credentials
     });
 });
 
@@ -55,6 +62,8 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.MapType<DateOnly>(() => new OpenApiSchema { Type = "string", Format = "date" });
     options.MapType<DateOnly?>(() => new OpenApiSchema { Type = "string", Format = "date", Nullable = true });
+    // Ignore schema errors for complex types
+    options.CustomSchemaIds(type => type.FullName?.Replace("+", "."));
     // Cấu hình JWT Bearer để có nút "Authorize" trong Swagger
     var jwtSecurityScheme = new OpenApiSecurityScheme
     {
@@ -124,6 +133,46 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<CreateCinemaExampleFilter>();
     options.OperationFilter<UpdateCinemaExampleFilter>();
     options.OperationFilter<DeleteCinemaExampleFilter>();
+    options.OperationFilter<PartnerCreateShowtimeExampleFilter>();
+    options.OperationFilter<PartnerUpdateShowtimeExampleFilter>();
+    options.OperationFilter<PartnerDeleteShowtimeExampleFilter>();
+    options.OperationFilter<PartnerGetShowtimeByIdExampleFilter>();
+    options.OperationFilter<PartnerGetAllShowtimesExampleFilter>();
+    options.OperationFilter<PartnerMovieSubmissionsExampleFilter>();
+    options.OperationFilter<PartnerCreateServiceExampleFilter>();
+    options.OperationFilter<PartnerGetServiceByIdExampleFilter>();
+    options.OperationFilter<PartnerGetServicesExampleFilter>();
+    options.OperationFilter<PartnerUpdateServiceExampleFilter>();
+    options.OperationFilter<PartnerDeleteServiceExampleFilter>();
+    options.OperationFilter<PartnerGetBookingsExampleFilter>();
+    options.OperationFilter<Booking_CreateSession_ExampleFilter>();
+    options.OperationFilter<Booking_GetSession_ExampleFilter>();
+    options.OperationFilter<Booking_DeleteSession_ExampleFilter>();
+    options.OperationFilter<Booking_TouchSession_ExampleFilter>();
+    options.OperationFilter<Booking_LockSeats_ExampleFilter>();
+    options.OperationFilter<Booking_ReleaseSeats_ExampleFilter>();
+    options.OperationFilter<Booking_ReplaceSeats_ExampleFilter>();
+    options.OperationFilter<Catalog_GetMovieShowtimesOverview_ExampleFilter>();
+    options.OperationFilter<Catalog_GetShowtimeSeats_ExampleFilter>();
+    // Catalog_GetShowtimeSeatsStream_ExampleFilter đã bị xóa vì SSE endpoint không còn tồn tại (đã chuyển sang SignalR)
+    options.OperationFilter<ManagerCreateVoucherExampleFilter>();
+    options.OperationFilter<ManagerGetAllVouchersExampleFilter>();
+    options.OperationFilter<ManagerUpdateVoucherExampleFilter>();
+    options.OperationFilter<ManagerGetVoucherIdExampleFilter>();
+    options.OperationFilter<ManagerDeleteVoucherExampleFilter>();
+    options.OperationFilter<ManagerSendVoucherToAllExampleFilter>();
+    options.OperationFilter<ManagerSendVoucherToSpecificExampleFilter>();
+    options.OperationFilter<UserGetVouchersExampleFilter>();
+    options.OperationFilter<UserGetOrdersExampleFilter>();
+    options.OperationFilter<UserGetOrderDetailExampleFilter>();
+    options.OperationFilter<UserGetTicketsExampleFilter>();
+    options.OperationFilter<CashierGetBookingsExampleFilter>();
+    options.OperationFilter<CreateMovieReviewExampleFilter>();
+    options.OperationFilter<UpdateMovieReviewExampleFilter>();
+    options.OperationFilter<DeleteMovieReviewExampleFilter>();
+    options.OperationFilter<GetMovieReviewsExampleFilter>();
+    options.OperationFilter<GetMovieRatingSummaryExampleFilter>();
+    options.OperationFilter<GetMyReviewExampleFilter>();
 
 
     var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
@@ -137,6 +186,8 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
     options.OperationFilter<AdminUserExamplesFilter>();
+    options.OperationFilter<ManagerGetBookingsExampleFilter>();
+    options.OperationFilter<ManagerGetBookingDetailExampleFilter>();
 
 });
 
@@ -149,12 +200,21 @@ builder.Services.Configure<AzureBlobStorageSettings>(
     builder.Configuration.GetSection("AzureBlobStorage"));
 
 // DEPENDENCY INJECTION 
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ExpressTicketCinemaSystem.Src.Cinema.Application.Services.IMovieService, ExpressTicketCinemaSystem.Src.Cinema.Application.Services.MovieService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<PartnerService>();
+builder.Services.AddScoped<EmployeeManagementService>();
+builder.Services.AddScoped<ManagerStaffManagementService>();
+builder.Services.AddScoped<IEmployeeCinemaAssignmentService, EmployeeCinemaAssignmentService>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IManagerStaffPermissionService, ManagerStaffPermissionService>();
+builder.Services.AddScoped<IStaffService, StaffService>();
+builder.Services.AddScoped<ICashierService, CashierService>();
+builder.Services.AddScoped<IPartnerStatisticsService, PartnerStatisticsService>();
 builder.Services.AddScoped<ContractService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<IManagerService, ManagerService>();
@@ -166,8 +226,42 @@ builder.Services.AddScoped<IContractValidationService, ContractValidationService
 builder.Services.AddScoped<ICinemaService, CinemaService>();
 builder.Services.AddScoped<PartnerMovieManagementService>();
 builder.Services.AddScoped<ManagerMovieSubmissionService>();
+builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
+builder.Services.AddScoped<IComboService, ComboService>();
+builder.Services.AddScoped<IBookingSessionService, BookingSessionService>();
+builder.Services.AddScoped<IBookingSessionComboService, BookingSessionComboService>();
+builder.Services.AddScoped<IBookingPricingService, BookingPricingService>();
+builder.Services.AddScoped<IBookingCheckoutService, BookingCheckoutService>();
+builder.Services.AddScoped<IBookingExtrasService, BookingExtrasService>();
+builder.Services.AddScoped<IBookingComboQueryService, BookingComboQueryService>();
+builder.Services.AddScoped<ISeatLockAppService, SeatLockAppService>();
+builder.Services.AddScoped<ICatalogQueryService, CatalogQueryService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
+// SignalR
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true; // Bật để debug dễ hơn
+});
 
+// SignalR-based event stream service (thay thế SSE)
+builder.Services.AddSingleton<IShowtimeSeatEventPublisher, SignalRShowtimeSeatEventPublisher>();
+
+// Giữ lại IShowtimeSeatEventStream cho backward compatibility (có thể xóa sau)
+builder.Services.AddSingleton<
+    ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.IShowtimeSeatEventStream,
+    ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Realtime.InMemoryShowtimeSeatEventStream>();
+
+// Background Services (Hosted Services)
+builder.Services.AddHostedService<ShowtimeStatusUpdaterService>();
+builder.Services.AddHostedService<BookingSessionCleanupService>(); 
+builder.Services.AddScoped<IVoucherService, VoucherService>();
+builder.Services.AddScoped<IVIPService, VIPService>();
+builder.Services.AddHttpClient(); // For PayOS HTTP calls
+builder.Services.AddScoped<IPayOSService, PayOSService>();
+builder.Services.AddHostedService<PaymentPollingService>(); 
+builder.Services.AddHostedService<OrderExpirationService>();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -185,7 +279,9 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
         ),
-        ClockSkew = TimeSpan.Zero
+        ClockSkew = TimeSpan.Zero,
+        RoleClaimType = ClaimTypes.Role,
+        NameClaimType = ClaimTypes.NameIdentifier
     };
     options.Events = new JwtBearerEvents
     {
@@ -258,6 +354,11 @@ app.UseSwaggerUI();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Map SignalR Hub với CORS
+app.MapHub<ShowtimeSeatHub>("/hubs/showtime-seat")
+    .RequireCors("AllowAll");
+
 app.MapControllers();
 
 app.Run();

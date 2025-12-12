@@ -1,10 +1,20 @@
-﻿namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
+﻿using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+
+namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
     public interface IManagerService
     {
         Task<int> GetManagerIdByUserIdAsync(int userId);
+        Task<int> GetManagerIdOrManagerStaffIdByUserIdAsync(int userId);
+        Task<int?> GetManagerStaffIdByUserIdAsync(int userId);
         Task<int> GetDefaultManagerIdAsync();
         Task<bool> ValidateManagerExistsAsync(int managerId);
+        Task<bool> IsUserManagerOrManagerStaffAsync(int userId);
         Task<bool> IsUserManagerAsync(int userId);
+        Task<ManagerBookingsResponse> GetManagerBookingsAsync(int userId, GetManagerBookingsRequest request);
+        Task<BookingDetailResponse> GetBookingDetailAsync(int userId, int bookingId);
+        Task<ManagerBookingStatisticsResponse> GetBookingStatisticsAsync(int userId, GetManagerBookingStatisticsRequest request);
+        Task<SuccessfulBookingCustomersResponse> GetSuccessfulBookingCustomersAsync(int userId, GetSuccessfulBookingCustomersRequest request);
     }
 }

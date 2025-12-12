@@ -41,6 +41,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                             "https://example.com/photos/theater1-updated.jpg",
                             "https://example.com/photos/theater2-updated.jpg",
                             "https://example.com/photos/theater3-new.jpg"
+                          ],
+                          "additionalDocumentsUrls": [
+                            "https://example.com/docs/doc1-updated.jpg",
+                            "https://example.com/docs/doc2-new.jpg"
                           ]
                         }
                         """
@@ -81,6 +85,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Partner
                               "https://example.com/photos/theater1-updated.jpg",
                               "https://example.com/photos/theater2-updated.jpg",
                               "https://example.com/photos/theater3-new.jpg"
+                            ],
+                            "additionalDocumentsUrls": [
+                              "https://example.com/docs/doc1-updated.jpg",
+                              "https://example.com/docs/doc2-new.jpg"
                             ],
                             "status": "approved",
                             "createdAt": "2025-10-19T10:30:00Z",

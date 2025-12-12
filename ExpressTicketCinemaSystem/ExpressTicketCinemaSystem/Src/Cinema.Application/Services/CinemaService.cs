@@ -15,10 +15,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     public class CinemaService : ICinemaService
     {
         private readonly CinemaDbCoreContext _context;
+        private readonly IAuditLogService _auditLogService;
+        private readonly IEmployeeCinemaAssignmentService _employeeCinemaAssignmentService;
+        private readonly IPermissionService _permissionService;
 
-        public CinemaService(CinemaDbCoreContext context)
+        public CinemaService(CinemaDbCoreContext context, IAuditLogService auditLogService, IEmployeeCinemaAssignmentService employeeCinemaAssignmentService, IPermissionService permissionService)
         {
             _context = context;
+            _auditLogService = auditLogService;
+            _employeeCinemaAssignmentService = employeeCinemaAssignmentService;
+            _permissionService = permissionService;
         }
 
         public async Task<CinemaResponse> CreateCinemaAsync(CreateCinemaRequest request, int partnerId, int userId)
@@ -31,12 +37,16 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // ==================== BUSINESS LOGIC SECTION ====================
             await ValidateCinemaBusinessRulesAsync(request, partnerId);
             // SỬA Ở ĐÂY: Sử dụng fully qualified name hoặc alias nếu cần
+            var normalizedPhone = string.IsNullOrWhiteSpace(request.Phone) 
+                ? null 
+                : NormalizePhoneNumber(Regex.Replace(request.Phone.Trim(), @"\s+", ""));
+            
             var cinema = new Infrastructure.Models.Cinema
             {
                 PartnerId = partnerId,
                 CinemaName = request.CinemaName.Trim(),
                 Address = request.Address.Trim(),
-                Phone = request.Phone?.Trim(),
+                Phone = normalizedPhone,
                 Code = request.Code.Trim().ToUpper(),
                 City = request.City.Trim(),
                 District = request.District.Trim(),
@@ -51,6 +61,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Cinemas.Add(cinema);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_CREATE_CINEMA",
+                tableName: "Cinema",
+                recordId: cinema.CinemaId,
+                beforeData: null,
+                afterData: BuildCinemaSnapshot(cinema),
+                metadata: new { partnerId, userId });
 
             return await MapToCinemaResponseAsync(cinema);
         }
@@ -69,6 +86,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy rạp với ID này hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Nếu là Staff, kiểm tra có được phân quyền rạp này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, cinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
+            }
+
             return await MapToCinemaResponseAsync(cinema);
         }
 
@@ -84,6 +118,47 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var query = _context.Cinemas
                 .Where(c => c.PartnerId == partnerId)
                 .AsQueryable();
+
+            // Nếu là Staff, kiểm tra quyền READ và chỉ lấy các rạp được phân quyền VÀ có quyền READ
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    // Lấy danh sách cinemaIds được phân quyền cho Staff
+                    var assignedCinemaIds = await _context.EmployeeCinemaAssignments
+                        .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                        .Select(eca => eca.CinemaId)
+                        .ToListAsync();
+
+                    if (assignedCinemaIds.Count == 0)
+                    {
+                        // Staff chưa được phân quyền rạp nào
+                        throw new UnauthorizedException("Bạn chưa được phân quyền rạp nào. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+
+                    // Kiểm tra quyền CINEMA_READ cho từng rạp - chỉ lấy các rạp có quyền READ
+                    var cinemasWithReadPermission = new List<int>();
+                    foreach (var cinemaId in assignedCinemaIds)
+                    {
+                        if (await _permissionService.HasPermissionAsync(employee.EmployeeId, cinemaId, "CINEMA_READ"))
+                        {
+                            cinemasWithReadPermission.Add(cinemaId);
+                        }
+                    }
+
+                    if (cinemasWithReadPermission.Count == 0)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền xem danh sách rạp. Vui lòng liên hệ Partner để được cấp quyền CINEMA_READ.");
+                    }
+
+                    // Filter chỉ lấy các rạp được phân quyền VÀ có quyền READ
+                    query = query.Where(c => cinemasWithReadPermission.Contains(c.CinemaId));
+                }
+            }
 
             // Apply filters
             query = ApplyCinemaFilters(query, city, district, isActive, search);
@@ -106,7 +181,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 cinemaResponses.Add(await MapToCinemaResponseAsync(cinema));
             }
 
-            var pagination = new PaginationMetadata
+            var pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
             {
                 CurrentPage = page,
                 PageSize = limit,
@@ -119,6 +194,39 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Cinemas = cinemaResponses,
                 Pagination = pagination
             };
+        }
+
+        /// <summary>
+        /// Get all cinemas for Staff (without pagination in service - will be paginated in controller after filtering by assigned cinemas)
+        /// </summary>
+        public async Task<List<CinemaResponse>> GetAllCinemasForStaffAsync(int partnerId, int userId,
+            string? city = null, string? district = null, bool? isActive = null, string? search = null,
+            string? sortBy = "cinema_name", string? sortOrder = "asc")
+        {
+            // ==================== VALIDATION SECTION ====================
+            await ValidatePartnerAccessAsync(partnerId, userId);
+
+            // ==================== BUSINESS LOGIC SECTION ====================
+            var query = _context.Cinemas
+                .Where(c => c.PartnerId == partnerId)
+                .AsQueryable();
+
+            // Apply filters
+            query = ApplyCinemaFilters(query, city, district, isActive, search);
+
+            // Apply sorting
+            query = ApplyCinemaSorting(query, sortBy, sortOrder);
+
+            // Get all cinemas (no pagination - will be done in controller)
+            var cinemas = await query.ToListAsync();
+
+            var cinemaResponses = new List<CinemaResponse>();
+            foreach (var cinema in cinemas)
+            {
+                cinemaResponses.Add(await MapToCinemaResponseAsync(cinema));
+            }
+
+            return cinemaResponses;
         }
 
         public async Task<CinemaResponse> UpdateCinemaAsync(int cinemaId, UpdateCinemaRequest request, int partnerId, int userId)
@@ -137,7 +245,56 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy rạp với ID này hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Nếu là Staff, kiểm tra có được phân quyền rạp này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, cinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
+            }
+
             await ValidateCinemaBusinessRulesForUpdateAsync(cinemaId, request, partnerId);
+
+            // Kiểm tra: Nếu đã có showtime tồn tại thì không được sửa bất kỳ thông tin nào
+            var hasShowtimes = await _context.Showtimes
+                .AnyAsync(s => s.CinemaId == cinemaId);
+
+            if (hasShowtimes)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["showtimes"] = new ValidationError
+                    {
+                        Msg = "Không thể cập nhật thông tin rạp khi đã có suất chiếu được tạo",
+                        Path = "cinemaId"
+                    }
+                });
+            }
+
+            // Kiểm tra: Nếu đã có vé được bán thì không được sửa tên rạp
+            var hasSoldTickets = await _context.Tickets
+                .AnyAsync(t => t.Showtime.CinemaId == cinemaId && (t.Status == "VALID" || t.Status == "USED"));
+
+            if (hasSoldTickets && cinema.CinemaName.Trim().ToLower() != request.CinemaName.Trim().ToLower())
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["cinemaName"] = new ValidationError
+                    {
+                        Msg = "Không thể thay đổi tên rạp khi đã có vé được bán",
+                        Path = "cinemaName"
+                    }
+                });
+            }
 
             // Validate không thể deactivate nếu còn phòng active
             if (!request.IsActive && cinema.IsActive == true)
@@ -158,9 +315,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             }
 
+            var beforeSnapshot = BuildCinemaSnapshot(cinema);
+
             cinema.CinemaName = request.CinemaName.Trim();
             cinema.Address = request.Address.Trim();
-            cinema.Phone = request.Phone?.Trim();
+            cinema.Phone = string.IsNullOrWhiteSpace(request.Phone) 
+                ? null 
+                : NormalizePhoneNumber(Regex.Replace(request.Phone.Trim(), @"\s+", ""));
             cinema.City = request.City.Trim();
             cinema.District = request.District.Trim();
             cinema.Latitude = request.Latitude;
@@ -171,6 +332,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             cinema.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            var updateAction = await ResolveCinemaAuditActionAsync("PARTNER_UPDATE_CINEMA", "STAFF_UPDATE_CINEMA", userId);
+            await _auditLogService.LogEntityChangeAsync(
+                action: updateAction,
+                tableName: "Cinema",
+                recordId: cinema.CinemaId,
+                beforeData: beforeSnapshot,
+                afterData: BuildCinemaSnapshot(cinema),
+                metadata: new { partnerId, userId });
 
             return await MapToCinemaResponseAsync(cinema);
         }
@@ -210,27 +379,34 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (!string.IsNullOrWhiteSpace(request.Phone))
             {
                 var phone = request.Phone.Trim();
-                if (!Regex.IsMatch(phone, @"^(0|\+84|84)[0-9]{9,10}$"))
+                var cleanPhone = Regex.Replace(phone, @"\s+", ""); // Bỏ tất cả khoảng trắng
+                
+                if (!ValidateCinemaPhoneNumber(cleanPhone))
                 {
                     errors["phone"] = new ValidationError
                     {
-                        Msg = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678)",
+                        Msg = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678, +84912345678, +84 1900 6017)",
                         Path = "phone"
                     };
                 }
-
-                var existingPhone = await _context.Cinemas
-                    .FirstOrDefaultAsync(c => c.PartnerId == partnerId &&
-                                             c.CinemaId != cinemaId && 
-                                             c.Phone == phone);
-
-                if (existingPhone != null)
+                else
                 {
-                    errors["phone"] = new ValidationError
+                    // Lưu số điện thoại đã được clean
+                    var normalizedPhone = NormalizePhoneNumber(cleanPhone);
+                    
+                    var existingPhone = await _context.Cinemas
+                        .FirstOrDefaultAsync(c => c.PartnerId == partnerId &&
+                                                 c.CinemaId != cinemaId && 
+                                                 c.Phone == normalizedPhone);
+
+                    if (existingPhone != null)
                     {
-                        Msg = "Số điện thoại đã được sử dụng cho rạp khác",
-                        Path = "phone"
-                    };
+                        errors["phone"] = new ValidationError
+                        {
+                            Msg = "Số điện thoại đã được sử dụng cho rạp khác",
+                            Path = "phone"
+                        };
+                    }
                 }
             }
 
@@ -287,6 +463,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new NotFoundException("Không tìm thấy rạp với ID này hoặc không thuộc quyền quản lý của bạn");
             }
 
+            // Nếu là Staff, kiểm tra có được phân quyền rạp này không
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee != null)
+                {
+                    var hasAccess = await _employeeCinemaAssignmentService.HasAccessToCinemaAsync(employee.EmployeeId, cinemaId);
+                    if (!hasAccess)
+                    {
+                        throw new UnauthorizedException("Bạn không có quyền truy cập rạp này. Vui lòng liên hệ Partner để được phân quyền.");
+                    }
+                }
+            }
+
             // Validate không thể xóa nếu còn phòng
             var screensCount = await _context.Screens
                 .CountAsync(s => s.CinemaId == cinemaId);
@@ -304,10 +497,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             // SOFT DELETE - Chỉ cập nhật IsActive = false
+            var beforeSnapshot = BuildCinemaSnapshot(cinema);
             cinema.IsActive = false;
             cinema.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+            var deleteAction = await ResolveCinemaAuditActionAsync("PARTNER_DELETE_CINEMA", "STAFF_DELETE_CINEMA", userId);
+            await _auditLogService.LogEntityChangeAsync(
+                action: deleteAction,
+                tableName: "Cinema",
+                recordId: cinema.CinemaId,
+                beforeData: beforeSnapshot,
+                afterData: BuildCinemaSnapshot(cinema),
+                metadata: new { partnerId, userId });
 
             return new CinemaActionResponse
             {
@@ -456,13 +658,34 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private async Task ValidatePartnerAccessAsync(int partnerId, int userId)
         {
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.UserId == userId && u.UserType == "Partner");
+                .FirstOrDefaultAsync(u => u.UserId == userId && (u.UserType == "Partner" || u.UserType == "Staff" || u.UserType == "Marketing" || u.UserType == "Cashier"));
 
             if (user == null)
             {
-                throw new UnauthorizedException("Chỉ tài khoản Partner mới được sử dụng chức năng này");
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
             }
 
+            // Nếu là Staff, kiểm tra Employee và Partner thông qua Employee
+            if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .Include(e => e.Partner)
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.PartnerId == partnerId && e.IsActive);
+
+                if (employee == null || employee.Partner == null)
+                {
+                    throw new UnauthorizedException("Nhân viên không thuộc Partner này");
+                }
+
+                if (employee.Partner.Status != "approved" || !employee.Partner.IsActive)
+                {
+                    throw new UnauthorizedException("Partner không tồn tại hoặc chưa được duyệt");
+                }
+
+                return; // Staff validated successfully
+            }
+
+            // Nếu là Partner, kiểm tra trực tiếp
             var partner = await _context.Partners
                 .FirstOrDefaultAsync(p => p.PartnerId == partnerId && p.UserId == userId && p.Status == "approved");
 
@@ -521,25 +744,33 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (!string.IsNullOrWhiteSpace(request.Phone))
             {
                 var phone = request.Phone.Trim();
-                if (!Regex.IsMatch(phone, @"^(0|\+84|84)[0-9]{9,10}$"))
+                var cleanPhone = Regex.Replace(phone, @"\s+", ""); // Bỏ tất cả khoảng trắng
+                
+                if (!ValidateCinemaPhoneNumber(cleanPhone))
                 {
                     errors["phone"] = new ValidationError
                     {
-                        Msg = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678 hoặc +84912345678)",
+                        Msg = "Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0912345678, +84912345678, +84 1900 6017)",
                         Path = "phone"
                     };
                 }
-
-                var existingPhone = await _context.Cinemas
-                    .FirstOrDefaultAsync(c => c.Phone == phone && c.PartnerId == partnerId);
-
-                if (existingPhone != null)
+                else
                 {
-                    errors["phone"] = new ValidationError
+                    // Lưu số điện thoại đã được clean
+                    var normalizedPhone = NormalizePhoneNumber(cleanPhone);
+                    
+                    var existingPhone = await _context.Cinemas
+                        .FirstOrDefaultAsync(c => c.PartnerId == partnerId &&
+                                                 c.Phone == normalizedPhone);
+
+                    if (existingPhone != null)
                     {
-                        Msg = "Số điện thoại đã được sử dụng cho rạp khác",
-                        Path = "phone"
-                    };
+                        errors["phone"] = new ValidationError
+                        {
+                            Msg = "Số điện thoại đã được sử dụng cho rạp khác",
+                            Path = "phone"
+                        };
+                    }
                 }
             }
 
@@ -628,6 +859,143 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 "updated_at" => isAscending ? query.OrderBy(c => c.UpdatedAt) : query.OrderByDescending(c => c.UpdatedAt),
                 _ => isAscending ? query.OrderBy(c => c.CinemaName) : query.OrderByDescending(c => c.CinemaName)
             };
+        }
+
+        /// <summary>
+        /// Validate số điện thoại cho rạp chiếu phim
+        /// Hỗ trợ: 0xxxxxxxxx (10 số), +84xxxxxxxxx (9 số sau +84), +84xxxxxxxx (8 số sau +84 phải bắt đầu bằng 1900)
+        /// </summary>
+        private bool ValidateCinemaPhoneNumber(string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+                return false;
+
+            // Bỏ tất cả khoảng trắng
+            var cleanPhone = Regex.Replace(phone, @"\s+", "");
+
+            // Nếu bắt đầu bằng +84
+            if (cleanPhone.StartsWith("+84"))
+            {
+                var numberPart = cleanPhone.Substring(3); // Lấy phần sau +84
+
+                // Nếu 8 số: phải bắt đầu bằng 1900
+                if (numberPart.Length == 8)
+                {
+                    return numberPart.StartsWith("1900") && Regex.IsMatch(numberPart, @"^1900[0-9]{4}$");
+                }
+                // Nếu 9 số: kiểm tra đầu số hợp lệ (bao gồm 46 cho VinaPhone)
+                else if (numberPart.Length == 9)
+                {
+                    return Regex.IsMatch(numberPart, @"^(3[2-9]|4[6]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            // Nếu bắt đầu bằng 0
+            else if (cleanPhone.StartsWith("0"))
+            {
+                // Phải có đúng 10 số và đầu số hợp lệ (bao gồm 046 cho VinaPhone)
+                if (cleanPhone.Length == 10)
+                {
+                    return Regex.IsMatch(cleanPhone, @"^0(3[2-9]|4[6]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            // Nếu bắt đầu bằng 84 (không có dấu +)
+            else if (cleanPhone.StartsWith("84"))
+            {
+                var numberPart = cleanPhone.Substring(2); // Lấy phần sau 84
+
+                // Nếu 8 số: phải bắt đầu bằng 1900
+                if (numberPart.Length == 8)
+                {
+                    return numberPart.StartsWith("1900") && Regex.IsMatch(numberPart, @"^1900[0-9]{4}$");
+                }
+                // Nếu 9 số: kiểm tra đầu số hợp lệ (bao gồm 46 cho VinaPhone)
+                else if (numberPart.Length == 9)
+                {
+                    return Regex.IsMatch(numberPart, @"^(3[2-9]|4[6]|5[2689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}$");
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Chuẩn hóa số điện thoại về dạng 0xxxxxxxxx hoặc +84xxxxxxxxx
+        /// </summary>
+        private string NormalizePhoneNumber(string phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone))
+                return phone;
+
+            // Bỏ tất cả khoảng trắng
+            var cleanPhone = Regex.Replace(phone.Trim(), @"\s+", "");
+
+            // Nếu bắt đầu bằng +84
+            if (cleanPhone.StartsWith("+84"))
+            {
+                return cleanPhone; // Giữ nguyên +84
+            }
+            // Nếu bắt đầu bằng 84 (không có dấu +)
+            else if (cleanPhone.StartsWith("84") && cleanPhone.Length >= 11)
+            {
+                return "+" + cleanPhone; // Thêm dấu +
+            }
+            // Nếu bắt đầu bằng 0
+            else if (cleanPhone.StartsWith("0"))
+            {
+                return cleanPhone; // Giữ nguyên
+            }
+
+            return cleanPhone;
+        }
+
+        private static object BuildCinemaSnapshot(Infrastructure.Models.Cinema cinema)
+        {
+            return new
+            {
+                cinema.CinemaId,
+                cinema.PartnerId,
+                cinema.CinemaName,
+                cinema.Address,
+                cinema.Phone,
+                cinema.Email,
+                cinema.Code,
+                cinema.City,
+                cinema.District,
+                cinema.Latitude,
+                cinema.Longitude,
+                cinema.LogoUrl,
+                cinema.IsActive,
+                cinema.CreatedAt,
+                cinema.UpdatedAt
+            };
+        }
+
+        private async Task<string> ResolveCinemaAuditActionAsync(string partnerAction, string? staffAction, int userId)
+        {
+            var userType = await _context.Users
+                .Where(u => u.UserId == userId)
+                .Select(u => u.UserType)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(staffAction) &&
+                string.Equals(userType, "staff", StringComparison.OrdinalIgnoreCase))
+            {
+                return staffAction!;
+            }
+
+            return partnerAction;
         }
     }
 }

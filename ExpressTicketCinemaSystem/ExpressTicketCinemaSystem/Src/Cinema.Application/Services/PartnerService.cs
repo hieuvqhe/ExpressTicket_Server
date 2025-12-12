@@ -5,6 +5,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
+using PartnerResponses = ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses;
 using System.Text.RegularExpressions;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,6 +14,7 @@ using System.Threading.Tasks;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
@@ -22,20 +24,29 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
         private readonly IManagerService _managerService;
+        private readonly IManagerStaffPermissionService _managerStaffPermissionService;
         private readonly IContractValidationService _contractValidationService;
+        private readonly IAuditLogService _auditLogService;
+        private readonly ILogger<PartnerService> _logger;
 
         public PartnerService(
             CinemaDbCoreContext context,
             IPasswordHasher<User> passwordHasher,
             IEmailService emailService,
-            IManagerService managerService ,
-            IContractValidationService contractValidationService)
+            IManagerService managerService,
+            IManagerStaffPermissionService managerStaffPermissionService,
+            IContractValidationService contractValidationService,
+            IAuditLogService auditLogService,
+            ILogger<PartnerService> logger)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _emailService = emailService;
             _managerService = managerService;
+            _managerStaffPermissionService = managerStaffPermissionService;
             _contractValidationService = contractValidationService;
+            _auditLogService = auditLogService;
+            _logger = logger;
         }
         public async Task<PartnerRegisterResponse> RegisterPartnerAsync(PartnerRegisterRequest request)
         {
@@ -49,6 +60,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateCommissionRate(request.CommissionRate);
             ValidateDocuments(request);
             ValidateTheaterPhotos(request.TheaterPhotosUrls);
+            ValidateAdditionalDocuments(request.AdditionalDocumentsUrls);
 
             // ==================== BUSINESS LOGIC SECTION ====================
             var defaultManager = await _context.Managers
@@ -89,7 +101,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 BusinessRegistrationCertificateUrl = request.BusinessRegistrationCertificateUrl,
                 TaxRegistrationCertificateUrl = request.TaxRegistrationCertificateUrl,
                 IdentityCardUrl = request.IdentityCardUrl,
-                TheaterPhotosUrl = string.Join(";", request.TheaterPhotosUrls), 
+                TheaterPhotosUrl = string.Join(";", request.TheaterPhotosUrls),
+                AdditionalDocumentsUrl = request.AdditionalDocumentsUrls != null && request.AdditionalDocumentsUrls.Any() 
+                    ? string.Join(";", request.AdditionalDocumentsUrls) 
+                    : null,
                 Status = "pending",
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -97,12 +112,34 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.Partners.Add(partner);
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "PARTNER_REGISTER",
+                tableName: "Partner",
+                recordId: partner.PartnerId,
+                beforeData: null,
+                afterData: BuildPartnerAuditSnapshot(partner),
+                metadata: new
+                {
+                    partner.UserId,
+                    partner.Email,
+                    partner.PartnerName
+                });
 
-            await _emailService.SendPartnerRegistrationConfirmationAsync(
-                user.Email,
-                user.Fullname,
-                partner.PartnerName
-            );
+            // Gửi email không chặn - nếu lỗi thì chỉ log, không làm fail đăng ký
+            try
+            {
+                await _emailService.SendPartnerRegistrationConfirmationAsync(
+                    user.Email,
+                    user.Fullname,
+                    partner.PartnerName
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không thể gửi email xác nhận đăng ký đối tác. Email: {Email}, PartnerId: {PartnerId}", 
+                    user.Email, partner.PartnerId);
+                // Không throw exception - đăng ký vẫn thành công dù email lỗi
+            }
 
             return new PartnerRegisterResponse
             {
@@ -191,6 +228,29 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (errors.Any())
                 throw new ValidationException(errors); 
+        }
+
+        private static object BuildPartnerAuditSnapshot(Partner partner)
+        {
+            return new
+            {
+                partner.PartnerId,
+                partner.UserId,
+                partner.ManagerId,
+                partner.PartnerName,
+                partner.TaxCode,
+                partner.Address,
+                partner.Phone,
+                partner.Email,
+                partner.CommissionRate,
+                partner.Status,
+                partner.IsActive,
+                partner.ApprovedAt,
+                partner.ApprovedBy,
+                partner.RejectionReason,
+                partner.CreatedAt,
+                partner.UpdatedAt
+            };
         }
 
         private void ValidatePhoneNumber(string phone)
@@ -304,6 +364,42 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (errors.Any())
                 throw new ValidationException(errors); 
         }
+
+        private void ValidateAdditionalDocuments(List<string> additionalDocumentsUrls)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            // Optional field - chỉ validate nếu có giá trị
+            if (additionalDocumentsUrls != null && additionalDocumentsUrls.Any())
+            {
+                if (additionalDocumentsUrls.Count > 10)
+                    errors.TryAdd("additionalDocumentsUrls", new ValidationError { Msg = "Chỉ được phép tối đa 10 ảnh giấy tờ khác", Path = "additionalDocumentsUrls" });
+                else
+                {
+                    var urlPattern = @"^https?://.+\.(jpg|jpeg|png|webp|svg)$";
+                    foreach (var documentUrl in additionalDocumentsUrls)
+                    {
+                        if (string.IsNullOrWhiteSpace(documentUrl))
+                        {
+                            errors.TryAdd("additionalDocumentsUrls_empty", new ValidationError { Msg = "URL ảnh giấy tờ không được để trống", Path = "additionalDocumentsUrls" });
+                            break;
+                        }
+                        if (!Regex.IsMatch(documentUrl, urlPattern, RegexOptions.IgnoreCase))
+                        {
+                            errors.TryAdd("additionalDocumentsUrls_pattern", new ValidationError { Msg = $"URL ảnh giấy tờ không hợp lệ: {documentUrl}. Phải là URL ảnh (jpg, jpeg, png, webp, svg)", Path = "additionalDocumentsUrls" });
+                            break;
+                        }
+                    }
+
+                    if (additionalDocumentsUrls.Distinct().Count() != additionalDocumentsUrls.Count)
+                        errors.TryAdd("additionalDocumentsUrls_duplicate", new ValidationError { Msg = "Không được phép có URL ảnh trùng lặp", Path = "additionalDocumentsUrls" });
+                }
+            }
+
+            if (errors.Any())
+                throw new ValidationException(errors); 
+        }
+
         private void ValidatePasswordConfirmation(string password, string confirmPassword)
         {
             var errors = new Dictionary<string, ValidationError>();
@@ -338,6 +434,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ? new List<string>()
                 : partner.TheaterPhotosUrl.Split(';').ToList();
 
+            var additionalDocuments = string.IsNullOrEmpty(partner.AdditionalDocumentsUrl)
+                ? new List<string>()
+                : partner.AdditionalDocumentsUrl.Split(';').ToList();
+
             return new PartnerProfileResponse
             {
                 UserId = partner.User.UserId,
@@ -356,6 +456,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 TaxRegistrationCertificateUrl = partner.TaxRegistrationCertificateUrl ?? "",
                 IdentityCardUrl = partner.IdentityCardUrl ?? "",
                 TheaterPhotosUrls = theaterPhotos,
+                AdditionalDocumentsUrls = additionalDocuments,
 
                 Status = partner.Status,
                 CreatedAt = partner.CreatedAt,
@@ -371,6 +472,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             ValidateCommissionRate(request.CommissionRate);
             ValidateDocuments(request);
             ValidateTheaterPhotos(request.TheaterPhotosUrls);
+            ValidateAdditionalDocuments(request.AdditionalDocumentsUrls);
 
             // ==================== BUSINESS LOGIC SECTION ====================
 
@@ -410,6 +512,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (request.TheaterPhotosUrls != null && request.TheaterPhotosUrls.Any())
                 partner.TheaterPhotosUrl = string.Join(";", request.TheaterPhotosUrls);
 
+            if (request.AdditionalDocumentsUrls != null && request.AdditionalDocumentsUrls.Any())
+                partner.AdditionalDocumentsUrl = string.Join(";", request.AdditionalDocumentsUrls);
+            else if (request.AdditionalDocumentsUrls != null && !request.AdditionalDocumentsUrls.Any())
+                partner.AdditionalDocumentsUrl = null;
+
             partner.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -417,6 +524,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var theaterPhotos = string.IsNullOrEmpty(partner.TheaterPhotosUrl)
                 ? new List<string>()
                 : partner.TheaterPhotosUrl.Split(';').ToList();
+
+            var additionalDocuments = string.IsNullOrEmpty(partner.AdditionalDocumentsUrl)
+                ? new List<string>()
+                : partner.AdditionalDocumentsUrl.Split(';').ToList();
 
             return new PartnerProfileResponse
             {
@@ -436,6 +547,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 TaxRegistrationCertificateUrl = partner.TaxRegistrationCertificateUrl ?? "",
                 IdentityCardUrl = partner.IdentityCardUrl ?? "",
                 TheaterPhotosUrls = theaterPhotos,
+                AdditionalDocumentsUrls = additionalDocuments,
 
                 Status = partner.Status,
                 CreatedAt = partner.CreatedAt,
@@ -516,7 +628,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     int limit = 10,
     string? search = null,
     string? sortBy = "created_at",
-    string? sortOrder = "desc")
+    string? sortOrder = "desc",
+    int? managerStaffId = null)
         {
             // Validate pagination
             if (page < 1) page = 1;
@@ -525,8 +638,67 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Base query - chỉ lấy partners có status = "pending"
             var query = _context.Partners
                 .Include(p => p.User)
+                .Include(p => p.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .Where(p => p.Status == "pending")
                 .AsQueryable();
+
+            // If managerStaffId is provided, filter by PARTNER_READ permission
+            if (managerStaffId.HasValue)
+            {
+                // Get list of partner IDs that ManagerStaff has PARTNER_READ permission
+                var assignedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaffId.Value)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+
+                if (assignedPartnerIds.Count > 0)
+                {
+                    // Get partner IDs with PARTNER_READ permission
+                    var partnerIdsWithPermission = await _context.ManagerStaffPartnerPermissions
+                        .Where(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && (msp.PartnerId == null || assignedPartnerIds.Contains(msp.PartnerId.Value))
+                            && msp.Permission.PermissionCode == "PARTNER_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive)
+                        .Select(msp => msp.PartnerId ?? 0)
+                        .Distinct()
+                        .ToListAsync();
+
+                    // Check if has global permission (null)
+                    var hasGlobalPermission = await _context.ManagerStaffPartnerPermissions
+                        .AnyAsync(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && msp.PartnerId == null
+                            && msp.Permission.PermissionCode == "PARTNER_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive);
+
+                    if (hasGlobalPermission)
+                    {
+                        // Global permission: show all pending partners assigned to this staff
+                        query = query.Where(p => p.ManagerStaffId == managerStaffId.Value);
+                    }
+                    else
+                    {
+                        // Specific permissions: only show partners with PARTNER_READ permission
+                        var validPartnerIds = partnerIdsWithPermission.Where(p => p > 0).ToList();
+                        if (validPartnerIds.Count > 0)
+                        {
+                            query = query.Where(p => validPartnerIds.Contains(p.PartnerId) && p.ManagerStaffId == managerStaffId.Value);
+                        }
+                        else
+                        {
+                            // No permission: return empty result
+                            query = query.Where(p => false);
+                        }
+                    }
+                }
+                else
+                {
+                    // No assigned partners: return empty result
+                    query = query.Where(p => false);
+                }
+            }
 
             // Apply search filter
             if (!string.IsNullOrWhiteSpace(search))
@@ -561,6 +733,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     CommissionRate = p.CommissionRate,
                     Status = p.Status,
                     CreatedAt = p.CreatedAt, 
+                    UpdatedAt = p.UpdatedAt ?? p.CreatedAt,
                     UserId = p.UserId,
                     Fullname = p.User != null ? p.User.Fullname : "",
                     UserEmail = p.User != null ? p.User.Email : "",
@@ -569,11 +742,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     BusinessRegistrationCertificateUrl = p.BusinessRegistrationCertificateUrl,
                     TaxRegistrationCertificateUrl = p.TaxRegistrationCertificateUrl,
                     IdentityCardUrl = p.IdentityCardUrl,
-                    TheaterPhotosUrl = p.TheaterPhotosUrl
+                    TheaterPhotosUrl = p.TheaterPhotosUrl,
+                    AdditionalDocumentsUrl = p.AdditionalDocumentsUrl,
+
+                    // ManagerStaff assignment information
+                    ManagerStaffId = p.ManagerStaffId,
+                    ManagerStaffName = p.ManagerStaff != null ? p.ManagerStaff.FullName : null,
+                    ManagerStaffEmail = p.ManagerStaff != null && p.ManagerStaff.User != null ? p.ManagerStaff.User.Email : null,
+                    IsAssignedToStaff = p.ManagerStaffId != null
                 })
                 .ToListAsync();  
 
-            var pagination = new PaginationMetadata
+            var pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
             {
                 CurrentPage = page,
                 PageSize = limit,
@@ -587,12 +767,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Pagination = pagination
             };
         }
-        public async Task<PartnerApprovalResponse> ApprovePartnerAsync(int partnerId, int managerId)
+        public async Task<PartnerApprovalResponse> ApprovePartnerAsync(int partnerId, int managerId, int? managerStaffId = null)
         {
             var partner = await _context.Partners
             .Include(p => p.User)
             .Include(p => p.Manager)
             .ThenInclude(m => m.User)
+            .Include(p => p.ManagerStaff)
+            .ThenInclude(ms => ms.User)
             .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
 
             if (partner == null)
@@ -612,16 +794,55 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (manager == null)
                 throw new UnauthorizedException("Manager không tồn tại.");
 
+            // If managerStaffId is provided, verify it belongs to the manager and has permission
+            ManagerStaff? managerStaff = null;
+            if (managerStaffId.HasValue)
+            {
+                // Check permission: ManagerStaff must have PARTNER_APPROVE permission for this partner
+                var hasPermission = await _managerStaffPermissionService.HasPermissionAsync(
+                    managerStaffId.Value,
+                    partnerId,
+                    "PARTNER_APPROVE");
+
+                if (!hasPermission)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["permission"] = new ValidationError
+                        {
+                            Msg = "Bạn không có quyền duyệt partner này",
+                            Path = "partnerId",
+                            Location = "path"
+                        }
+                    });
+                }
+
+                managerStaff = await _context.ManagerStaffs
+                    .Include(ms => ms.Manager)
+                    .Include(ms => ms.User)
+                    .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId.Value && ms.ManagerId == managerId && ms.IsActive);
+
+                if (managerStaff == null)
+                    throw new NotFoundException("Không tìm thấy staff hoặc staff không thuộc quyền quản lý của bạn.");
+            }
+
             // Business logic validation
             ValidatePartnerForApproval(partner);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildPartnerAuditSnapshot(partner);
 
             partner.Status = "approved";
             partner.ApprovedAt = DateTime.UtcNow;
-            partner.ApprovedBy = manager.ManagerId; // ← DÙNG manager.ManagerId THAY VÌ managerId parameter
+            partner.ApprovedBy = manager.ManagerId;
             partner.UpdatedAt = DateTime.UtcNow;
-            partner.ManagerId = manager.ManagerId;  // ← DÙNG manager.ManagerId THAY VÌ managerId parameter
+            partner.ManagerId = manager.ManagerId;
+            
+            // If approved by ManagerStaff, assign partner to that staff
+            if (managerStaff != null)
+            {
+                partner.ManagerStaffId = managerStaff.ManagerStaffId;
+            }
 
             if (partner.User != null)
             {
@@ -631,6 +852,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_APPROVE_PARTNER",
+                tableName: "Partner",
+                recordId: partner.PartnerId,
+                beforeData: beforeSnapshot,
+                afterData: BuildPartnerAuditSnapshot(partner),
+                metadata: new { managerId = manager.ManagerId });
 
             await SendPartnerApprovalEmailAsync(partner, manager);
 
@@ -750,7 +978,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Console.WriteLine($"Failed to send approval email: {ex.Message}");
             }
         }
-        public async Task<PartnerRejectionResponse> RejectPartnerAsync(int partnerId, int managerId, RejectPartnerRequest request)
+        public async Task<PartnerRejectionResponse> RejectPartnerAsync(int partnerId, int managerId, RejectPartnerRequest request, int? managerStaffId = null)
         {
             ValidateRejectRequest(request);
 
@@ -758,6 +986,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
              .Include(p => p.User)
              .Include(p => p.Manager)
              .ThenInclude(m => m.User)
+             .Include(p => p.ManagerStaff)
+             .ThenInclude(ms => ms.User)
              .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
 
             if (partner == null)
@@ -777,9 +1007,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (manager == null)
                 throw new UnauthorizedException("Manager không tồn tại.");
 
+            // If managerStaffId is provided, verify it belongs to the manager
+            ManagerStaff? managerStaff = null;
+            if (managerStaffId.HasValue)
+            {
+                managerStaff = await _context.ManagerStaffs
+                    .Include(ms => ms.Manager)
+                    .Include(ms => ms.User)
+                    .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId.Value && ms.ManagerId == managerId && ms.IsActive);
+
+                if (managerStaff == null)
+                    throw new NotFoundException("Không tìm thấy staff hoặc staff không thuộc quyền quản lý của bạn.");
+            }
+
             ValidatePartnerForRejection(partner);
 
             // ==================== BUSINESS LOGIC SECTION ====================
+            var beforeSnapshot = BuildPartnerAuditSnapshot(partner);
 
             partner.Status = "rejected";
             partner.RejectionReason = request.RejectionReason;
@@ -794,6 +1038,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_REJECT_PARTNER",
+                tableName: "Partner",
+                recordId: partner.PartnerId,
+                beforeData: beforeSnapshot,
+                afterData: BuildPartnerAuditSnapshot(partner),
+                metadata: new
+                {
+                    managerId = manager.ManagerId,
+                    request.RejectionReason
+                });
 
             await SendPartnerRejectionEmailAsync(partner, manager, request.RejectionReason);
 
@@ -921,10 +1176,50 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Console.WriteLine($"Failed to send rejection email: {ex.Message}");
             }
         }
+        public async Task AssignPartnerToStaffAsync(int partnerId, int managerId, int managerStaffId)
+        {
+            var partner = await _context.Partners
+                .Include(p => p.Manager)
+                .Include(p => p.ManagerStaff)
+                .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
+
+            if (partner == null)
+                throw new NotFoundException("Không tìm thấy partner với ID này.");
+
+            // Verify manager exists and has access
+            var manager = await _context.Managers
+                .FirstOrDefaultAsync(m => m.ManagerId == managerId);
+
+            if (manager == null)
+                throw new UnauthorizedException("Manager không tồn tại.");
+
+            // Verify managerStaff exists and belongs to this manager
+            var managerStaff = await _context.ManagerStaffs
+                .Include(ms => ms.Manager)
+                .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId && ms.ManagerId == managerId && ms.IsActive);
+
+            if (managerStaff == null)
+                throw new NotFoundException("Không tìm thấy staff hoặc staff không thuộc quyền quản lý của bạn.");
+
+            // Update partner to assign to staff
+            partner.ManagerStaffId = managerStaffId;
+            partner.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_ASSIGN_PARTNER_TO_STAFF",
+                tableName: "Partner",
+                recordId: partner.PartnerId,
+                beforeData: new { partner.ManagerStaffId },
+                afterData: new { ManagerStaffId = managerStaffId },
+                metadata: new { managerId, managerStaffId });
+        }
+
         public async Task<PaginatedPartnersWithoutContractsResponse> GetPartnersWithoutContractsAsync(
     int page = 1,
     int limit = 10,
-    string? search = null)
+    string? search = null,
+    int? managerStaffId = null)
         {
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 10;
@@ -937,6 +1232,62 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var query = _context.Partners
                 .Where(p => p.Status == "approved" && !partnersWithContracts.Contains(p.PartnerId))
                 .AsQueryable();
+
+            // If ManagerStaff, filter by PARTNER_READ permission
+            if (managerStaffId.HasValue)
+            {
+                var assignedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaffId.Value)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+
+                if (assignedPartnerIds.Count > 0)
+                {
+                    // Get partner IDs with PARTNER_READ permission
+                    var partnerIdsWithPermission = await _context.ManagerStaffPartnerPermissions
+                        .Where(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && (msp.PartnerId == null || assignedPartnerIds.Contains(msp.PartnerId.Value))
+                            && msp.Permission.PermissionCode == "PARTNER_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive)
+                        .Select(msp => msp.PartnerId ?? 0)
+                        .Distinct()
+                        .ToListAsync();
+
+                    // Check if has global permission (null)
+                    var hasGlobalPermission = await _context.ManagerStaffPartnerPermissions
+                        .AnyAsync(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && msp.PartnerId == null
+                            && msp.Permission.PermissionCode == "PARTNER_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive);
+
+                    if (hasGlobalPermission)
+                    {
+                        // Global permission: show all partners without contracts assigned to this staff
+                        query = query.Where(p => assignedPartnerIds.Contains(p.PartnerId));
+                    }
+                    else
+                    {
+                        // Specific permissions: only show partners with PARTNER_READ permission
+                        var validPartnerIds = partnerIdsWithPermission.Where(p => p > 0).ToList();
+                        if (validPartnerIds.Count > 0)
+                        {
+                            query = query.Where(p => validPartnerIds.Contains(p.PartnerId));
+                        }
+                        else
+                        {
+                            // No permission: return empty result
+                            query = query.Where(p => false);
+                        }
+                    }
+                }
+                else
+                {
+                    // No assigned partners: return empty result
+                    query = query.Where(p => false);
+                }
+            }
 
             // Apply search filter
             if (!string.IsNullOrWhiteSpace(search))
@@ -958,7 +1309,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 })
                 .ToListAsync();
 
-            var pagination = new PaginationMetadata
+            var pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
             {
                 CurrentPage = page,
                 PageSize = limit,
@@ -988,6 +1339,1586 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 "updated_at" => isAscending ? query.OrderBy(p => p.UpdatedAt) : query.OrderByDescending(p => p.UpdatedAt),
                 _ => isAscending ? query.OrderBy(p => p.CreatedAt) : query.OrderByDescending(p => p.CreatedAt) // default
             };
+        }
+
+        /// <summary>
+        /// Get partner's bookings from their cinemas with filtering and pagination
+        /// </summary>
+        public async Task<PartnerBookingsResponse> GetPartnerBookingsAsync(int userId, GetPartnerBookingsRequest request)
+        {
+            // Validate pagination
+            if (request.Page < 1)
+                throw new ValidationException("page", "Page phải lớn hơn hoặc bằng 1.");
+
+            if (request.PageSize < 1 || request.PageSize > 100)
+                throw new ValidationException("pageSize", "PageSize phải trong khoảng 1-100.");
+
+            // Validate sort parameters
+            var validSortBy = new[] { "booking_time", "total_amount", "created_at" };
+            if (!validSortBy.Contains(request.SortBy.ToLower()))
+                throw new ValidationException("sortBy", "SortBy phải là một trong: booking_time, total_amount, created_at.");
+
+            var validSortOrder = new[] { "asc", "desc" };
+            if (!validSortOrder.Contains(request.SortOrder.ToLower()))
+                throw new ValidationException("sortOrder", "SortOrder phải là asc hoặc desc.");
+
+            // Get partner from userId
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            Partner? partner = null;
+            List<int> partnerCinemaIds = new List<int>();
+
+            // Nếu là Partner, lấy trực tiếp
+            if (user?.UserType == "Partner")
+            {
+                partner = await _context.Partners
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
+
+                if (partner == null)
+                    throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
+
+                // Get list of cinema IDs belonging to this partner
+                partnerCinemaIds = await _context.Cinemas
+                    .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
+                    .Select(c => c.CinemaId)
+                    .ToListAsync();
+            }
+            // Nếu là Staff, lấy từ Employee và chỉ lấy cinemas được phân quyền
+            else if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .Include(e => e.Partner)
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.IsActive);
+
+                if (employee == null || employee.Partner == null)
+                    throw new NotFoundException("Không tìm thấy thông tin nhân viên hoặc tài khoản chưa được kích hoạt.");
+
+                partner = employee.Partner;
+
+                // Chỉ lấy các rạp được phân quyền cho Staff
+                partnerCinemaIds = await _context.EmployeeCinemaAssignments
+                    .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                    .Select(eca => eca.CinemaId)
+                    .ToListAsync();
+            }
+            else
+            {
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
+            }
+
+            if (!partnerCinemaIds.Any())
+            {
+                // Partner/Staff has no cinemas
+                return new PartnerBookingsResponse
+                {
+                    Page = request.Page,
+                    PageSize = request.PageSize,
+                    TotalItems = 0,
+                    TotalPages = 0,
+                    Items = new List<PartnerBookingItemDto>()
+                };
+            }
+
+            // If cinemaId is specified, verify it belongs to this partner/staff
+            if (request.CinemaId.HasValue)
+            {
+                if (!partnerCinemaIds.Contains(request.CinemaId.Value))
+                    throw new ValidationException("cinemaId", "Rạp này không thuộc về đối tác của bạn hoặc bạn chưa được phân quyền.");
+            }
+
+            // Build query
+            var query = _context.Bookings
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Cinema)
+                .Include(b => b.Customer)
+                    .ThenInclude(c => c.User)
+                .Include(b => b.Tickets)
+                .Where(b => partnerCinemaIds.Contains(b.Showtime.CinemaId))
+                .AsNoTracking();
+
+            // Apply filters
+            if (request.CinemaId.HasValue)
+            {
+                query = query.Where(b => b.Showtime.CinemaId == request.CinemaId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Status))
+            {
+                var statusLower = request.Status.Trim().ToLower();
+                query = query.Where(b =>
+                    b.Status.ToLower() == statusLower ||
+                    b.State.ToLower() == statusLower);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.PaymentStatus))
+            {
+                var paymentStatusLower = request.PaymentStatus.Trim().ToLower();
+                query = query.Where(b => b.PaymentStatus != null && b.PaymentStatus.ToLower() == paymentStatusLower);
+            }
+
+            if (request.FromDate.HasValue)
+            {
+                query = query.Where(b => b.BookingTime >= request.FromDate.Value);
+            }
+
+            if (request.ToDate.HasValue)
+            {
+                var toDateEndOfDay = request.ToDate.Value.Date.AddDays(1);
+                query = query.Where(b => b.BookingTime < toDateEndOfDay);
+            }
+
+            if (request.CustomerId.HasValue)
+            {
+                query = query.Where(b => b.CustomerId == request.CustomerId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.CustomerEmail))
+            {
+                var emailSearch = request.CustomerEmail.Trim().ToLower();
+                query = query.Where(b => b.Customer.User.Email != null && b.Customer.User.Email.ToLower().Contains(emailSearch));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.CustomerPhone))
+            {
+                var phoneSearch = request.CustomerPhone.Trim();
+                query = query.Where(b => b.Customer.User.Phone != null && b.Customer.User.Phone.Contains(phoneSearch));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.BookingCode))
+            {
+                var bookingCodeSearch = request.BookingCode.Trim().ToUpper();
+                query = query.Where(b => b.BookingCode.ToUpper().Contains(bookingCodeSearch));
+            }
+
+            // Get total count
+            var totalItems = await query.CountAsync();
+
+            // Apply sorting
+            var sortBy = request.SortBy.ToLower();
+            var isAscending = request.SortOrder.ToLower() == "asc";
+
+            query = sortBy switch
+            {
+                "total_amount" => isAscending ? query.OrderBy(b => b.TotalAmount) : query.OrderByDescending(b => b.TotalAmount),
+                "created_at" => isAscending ? query.OrderBy(b => b.CreatedAt) : query.OrderByDescending(b => b.CreatedAt),
+                _ => isAscending ? query.OrderBy(b => b.BookingTime) : query.OrderByDescending(b => b.BookingTime) // default booking_time
+            };
+
+            // Apply pagination
+            var bookings = await query
+                .Skip((request.Page - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ToListAsync();
+
+            // Map to response DTO
+            var items = bookings.Select(b => new PartnerBookingItemDto
+            {
+                BookingId = b.BookingId,
+                BookingCode = b.BookingCode,
+                BookingTime = b.BookingTime,
+                TotalAmount = b.TotalAmount,
+                Status = b.Status,
+                State = b.State,
+                PaymentStatus = b.PaymentStatus,
+                PaymentProvider = b.PaymentProvider,
+                PaymentTxId = b.PaymentTxId,
+                OrderCode = b.OrderCode,
+                CreatedAt = b.CreatedAt,
+                UpdatedAt = b.UpdatedAt,
+                TicketCount = b.Tickets.Count,
+                Customer = new PartnerBookingCustomerDto
+                {
+                    CustomerId = b.Customer.CustomerId,
+                    UserId = b.Customer.UserId,
+                    Fullname = b.Customer.User.Fullname,
+                    Email = b.Customer.User.Email,
+                    Phone = b.Customer.User.Phone
+                },
+                Showtime = new PartnerBookingShowtimeDto
+                {
+                    ShowtimeId = b.Showtime.ShowtimeId,
+                    ShowDatetime = b.Showtime.ShowDatetime,
+                    EndTime = b.Showtime.EndTime,
+                    FormatType = b.Showtime.FormatType,
+                    Status = b.Showtime.Status
+                },
+                Cinema = new PartnerBookingCinemaDto
+                {
+                    CinemaId = b.Showtime.Cinema.CinemaId,
+                    CinemaName = b.Showtime.Cinema.CinemaName,
+                    Address = b.Showtime.Cinema.Address,
+                    City = b.Showtime.Cinema.City,
+                    District = b.Showtime.Cinema.District
+                },
+                Movie = new PartnerBookingMovieDto
+                {
+                    MovieId = b.Showtime.Movie.MovieId,
+                    Title = b.Showtime.Movie.Title,
+                    DurationMinutes = b.Showtime.Movie.DurationMinutes,
+                    PosterUrl = b.Showtime.Movie.PosterUrl,
+                    Genre = b.Showtime.Movie.Genre
+                }
+            }).ToList();
+
+            var totalPages = (int)Math.Ceiling((double)totalItems / request.PageSize);
+
+            return new PartnerBookingsResponse
+            {
+                Page = request.Page,
+                PageSize = request.PageSize,
+                TotalItems = totalItems,
+                TotalPages = totalPages,
+                Items = items
+            };
+        }
+
+        /// <summary>
+        /// Get partner's booking detail by booking ID
+        /// Partner can only view bookings from their own cinemas
+        /// </summary>
+        public async Task<PartnerBookingDetailResponse> GetPartnerBookingDetailAsync(int userId, int bookingId)
+        {
+            // Get partner and cinema IDs (filtered by EmployeeCinemaAssignment for Staff)
+            var (partner, partnerCinemaIds) = await GetPartnerAndCinemaIdsAsync(userId);
+
+            if (!partnerCinemaIds.Any())
+                throw new NotFoundException("Bạn chưa có rạp chiếu phim nào được phân quyền.");
+
+            // Get booking with all related data
+            var booking = await _context.Bookings
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Cinema)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Screen)
+                .Include(b => b.Customer)
+                    .ThenInclude(c => c.User)
+                .Include(b => b.Tickets)
+                    .ThenInclude(t => t.Seat)
+                .Include(b => b.ServiceOrders)
+                    .ThenInclude(so => so.Service)
+                .Include(b => b.Voucher)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
+
+            if (booking == null)
+                throw new NotFoundException("Không tìm thấy đơn đặt vé với ID đã cho.");
+
+            // Verify that the booking belongs to one of partner's/staff's cinemas
+            if (!partnerCinemaIds.Contains(booking.Showtime.CinemaId))
+                throw new NotFoundException("Không tìm thấy đơn đặt vé với ID đã cho.");
+
+            // Map to response DTO
+            var response = new PartnerBookingDetailResponse
+            {
+                BookingId = booking.BookingId,
+                BookingCode = booking.BookingCode,
+                BookingTime = booking.BookingTime,
+                TotalAmount = booking.TotalAmount,
+                Status = booking.Status,
+                State = booking.State,
+                PaymentStatus = booking.PaymentStatus,
+                PaymentProvider = booking.PaymentProvider,
+                PaymentTxId = booking.PaymentTxId,
+                OrderCode = booking.OrderCode,
+                CreatedAt = booking.CreatedAt,
+                UpdatedAt = booking.UpdatedAt,
+                Customer = new PartnerBookingCustomerDto
+                {
+                    CustomerId = booking.Customer.CustomerId,
+                    UserId = booking.Customer.UserId,
+                    Fullname = booking.Customer.User.Fullname,
+                    Email = booking.Customer.User.Email,
+                    Phone = booking.Customer.User.Phone
+                },
+                Showtime = new PartnerBookingShowtimeDto
+                {
+                    ShowtimeId = booking.Showtime.ShowtimeId,
+                    ShowDatetime = booking.Showtime.ShowDatetime,
+                    EndTime = booking.Showtime.EndTime,
+                    FormatType = booking.Showtime.FormatType,
+                    Status = booking.Showtime.Status
+                },
+                Cinema = new PartnerBookingCinemaDto
+                {
+                    CinemaId = booking.Showtime.Cinema.CinemaId,
+                    CinemaName = booking.Showtime.Cinema.CinemaName,
+                    Address = booking.Showtime.Cinema.Address,
+                    City = booking.Showtime.Cinema.City,
+                    District = booking.Showtime.Cinema.District
+                },
+                Movie = new PartnerBookingMovieDto
+                {
+                    MovieId = booking.Showtime.Movie.MovieId,
+                    Title = booking.Showtime.Movie.Title,
+                    DurationMinutes = booking.Showtime.Movie.DurationMinutes,
+                    PosterUrl = booking.Showtime.Movie.PosterUrl,
+                    Genre = booking.Showtime.Movie.Genre
+                },
+                Tickets = booking.Tickets.Select(t => new PartnerBookingTicketDto
+                {
+                    TicketId = t.TicketId,
+                    SeatId = t.SeatId,
+                    SeatName = t.Seat.SeatName ?? $"{t.Seat.RowCode}{t.Seat.SeatNumber}",
+                    RowCode = t.Seat.RowCode,
+                    SeatNumber = t.Seat.SeatNumber,
+                    Price = t.Price,
+                    Status = t.Status
+                }).ToList(),
+                ServiceOrders = booking.ServiceOrders.Select(so => new PartnerBookingServiceOrderDto
+                {
+                    OrderId = so.OrderId,
+                    ServiceId = so.ServiceId,
+                    ServiceName = so.Service.ServiceName,
+                    ServiceCode = so.Service.Code,
+                    Quantity = so.Quantity,
+                    UnitPrice = so.UnitPrice,
+                    SubTotal = so.Quantity * so.UnitPrice
+                }).ToList()
+            };
+
+            // Add voucher information if exists
+            if (booking.Voucher != null)
+            {
+                response.Voucher = new PartnerBookingVoucherDto
+                {
+                    VoucherId = booking.Voucher.VoucherId,
+                    VoucherCode = booking.Voucher.VoucherCode,
+                    DiscountType = booking.Voucher.DiscountType,
+                    DiscountValue = booking.Voucher.DiscountVal
+                };
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Get partner's booking statistics from their cinemas
+        /// Partner can only view statistics from their own cinemas
+        /// </summary>
+        public async Task<PartnerBookingStatisticsResponse> GetPartnerBookingStatisticsAsync(int userId, GetPartnerBookingStatisticsRequest request)
+        {
+            // Validate top limit
+            if (request.TopLimit < 1 || request.TopLimit > 50)
+                throw new ValidationException("topLimit", "TopLimit phải trong khoảng 1-50.");
+
+            // Validate pagination
+            if (request.Page < 1)
+                throw new ValidationException("page", "Page phải lớn hơn hoặc bằng 1.");
+
+            if (request.PageSize < 1 || request.PageSize > 100)
+                throw new ValidationException("pageSize", "PageSize phải trong khoảng 1-100.");
+
+            // Validate groupBy
+            var validGroupBy = new[] { "day", "week", "month", "year" };
+            if (!validGroupBy.Contains(request.GroupBy.ToLower()))
+                throw new ValidationException("groupBy", "GroupBy phải là một trong: day, week, month, year.");
+
+            // Get partner and cinema IDs (filtered by EmployeeCinemaAssignment for Staff)
+            var (partner, partnerCinemaIds) = await GetPartnerAndCinemaIdsAsync(userId);
+
+            if (!partnerCinemaIds.Any())
+            {
+                // Partner/Staff has no cinemas - return empty statistics
+                return new PartnerBookingStatisticsResponse();
+            }
+
+            // If cinemaId is specified, verify it belongs to this partner/staff
+            if (request.CinemaId.HasValue)
+            {
+                if (!partnerCinemaIds.Contains(request.CinemaId.Value))
+                    throw new ValidationException("cinemaId", "Rạp này không thuộc về đối tác của bạn hoặc bạn chưa được phân quyền.");
+            }
+
+            // Set default date range if not provided
+            var fromDate = request.FromDate ?? DateTime.UtcNow.AddDays(-30).Date;
+            var toDate = request.ToDate ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1); // End of day
+
+            // Validate date range
+            if (toDate < fromDate)
+                throw new ValidationException("toDate", "ToDate phải lớn hơn hoặc bằng FromDate.");
+
+            // Base query for all bookings in date range from partner's cinemas
+            var baseQuery = _context.Bookings
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Cinema)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Screen)
+                .Include(b => b.Customer)
+                    .ThenInclude(c => c.User)
+                .Include(b => b.Tickets)
+                    .ThenInclude(t => t.Seat)
+                        .ThenInclude(s => s.SeatType)
+                .Include(b => b.ServiceOrders)
+                    .ThenInclude(so => so.Service)
+                .Include(b => b.Voucher)
+                .AsNoTracking()
+                .Where(b => partnerCinemaIds.Contains(b.Showtime.CinemaId))
+                .Where(b => b.BookingTime >= fromDate && b.BookingTime <= toDate);
+
+            // Apply cinema filter if specified
+            if (request.CinemaId.HasValue)
+            {
+                baseQuery = baseQuery.Where(b => b.Showtime.CinemaId == request.CinemaId.Value);
+            }
+
+            var bookings = await baseQuery.ToListAsync();
+
+            var response = new PartnerBookingStatisticsResponse();
+
+            // ========== OVERVIEW STATISTICS ==========
+            response.Overview = CalculateOverviewStatistics(bookings);
+
+            // ========== CINEMA REVENUE STATISTICS ==========
+            response.CinemaRevenue = CalculateCinemaRevenueStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== MOVIE STATISTICS ==========
+            response.MovieStatistics = CalculateMovieStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== TIME-BASED STATISTICS ==========
+            response.TimeStatistics = await CalculateTimeBasedStatisticsAsync(bookings, fromDate, toDate, request.GroupBy, request.IncludeComparison, partnerCinemaIds);
+
+            // ========== TOP CUSTOMERS STATISTICS ==========
+            response.TopCustomers = CalculateTopCustomersStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== SERVICE STATISTICS ==========
+            response.ServiceStatistics = CalculateServiceStatistics(bookings);
+
+            // ========== SEAT STATISTICS ==========
+            response.SeatStatistics = await CalculateSeatStatisticsAsync(bookings, partnerCinemaIds);
+
+            // ========== SHOWTIME STATISTICS ==========
+            response.ShowtimeStatistics = await CalculateShowtimeStatisticsAsync(bookings, partnerCinemaIds, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== PAYMENT STATISTICS ==========
+            response.PaymentStatistics = CalculatePaymentStatistics(bookings);
+
+            // ========== VOUCHER STATISTICS ==========
+            response.VoucherStatistics = CalculateVoucherStatistics(bookings);
+
+            return response;
+        }
+
+        /// <summary>
+        /// Get Staff's booking statistics from assigned cinemas only
+        /// Staff can only view statistics from cinemas they are assigned to manage
+        /// </summary>
+        public async Task<PartnerBookingStatisticsResponse> GetStaffBookingStatisticsAsync(int userId, int employeeId, List<int> assignedCinemaIds, GetPartnerBookingStatisticsRequest request)
+        {
+            // Validate top limit
+            if (request.TopLimit < 1 || request.TopLimit > 50)
+                throw new ValidationException("topLimit", "TopLimit phải trong khoảng 1-50.");
+
+            // Validate pagination
+            if (request.Page < 1)
+                throw new ValidationException("page", "Page phải lớn hơn hoặc bằng 1.");
+
+            if (request.PageSize < 1 || request.PageSize > 100)
+                throw new ValidationException("pageSize", "PageSize phải trong khoảng 1-100.");
+
+            // Validate groupBy
+            var validGroupBy = new[] { "day", "week", "month", "year" };
+            if (!validGroupBy.Contains(request.GroupBy.ToLower()))
+                throw new ValidationException("groupBy", "GroupBy phải là một trong: day, week, month, year.");
+
+            // Validate assigned cinemas
+            if (!assignedCinemaIds.Any())
+            {
+                // Staff has no assigned cinemas - return empty statistics
+                return new PartnerBookingStatisticsResponse();
+            }
+
+            // If cinemaId is specified, verify it's in assigned cinemas
+            if (request.CinemaId.HasValue)
+            {
+                if (!assignedCinemaIds.Contains(request.CinemaId.Value))
+                    throw new ValidationException("cinemaId", "Bạn không có quyền xem thống kê của rạp này.");
+            }
+
+            // Set default date range if not provided
+            var fromDate = request.FromDate ?? DateTime.UtcNow.AddDays(-30).Date;
+            var toDate = request.ToDate ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1); // End of day
+
+            // Validate date range
+            if (toDate < fromDate)
+                throw new ValidationException("toDate", "ToDate phải lớn hơn hoặc bằng FromDate.");
+
+            // Base query for all bookings in date range from assigned cinemas ONLY
+            var baseQuery = _context.Bookings
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Cinema)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Screen)
+                .Include(b => b.Customer)
+                    .ThenInclude(c => c.User)
+                .Include(b => b.Tickets)
+                    .ThenInclude(t => t.Seat)
+                        .ThenInclude(s => s.SeatType)
+                .Include(b => b.ServiceOrders)
+                    .ThenInclude(so => so.Service)
+                .Include(b => b.Voucher)
+                .AsNoTracking()
+                .Where(b => assignedCinemaIds.Contains(b.Showtime.CinemaId)) // ✅ CHỈ FILTER THEO ASSIGNED CINEMAS
+                .Where(b => b.BookingTime >= fromDate && b.BookingTime <= toDate);
+
+            // Apply cinema filter if specified
+            if (request.CinemaId.HasValue)
+            {
+                baseQuery = baseQuery.Where(b => b.Showtime.CinemaId == request.CinemaId.Value);
+            }
+
+            var bookings = await baseQuery.ToListAsync();
+
+            var response = new PartnerBookingStatisticsResponse();
+
+            // ========== OVERVIEW STATISTICS ==========
+            response.Overview = CalculateOverviewStatistics(bookings);
+
+            // ========== CINEMA REVENUE STATISTICS ==========
+            response.CinemaRevenue = CalculateCinemaRevenueStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== MOVIE STATISTICS ==========
+            response.MovieStatistics = CalculateMovieStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== TIME-BASED STATISTICS ==========
+            response.TimeStatistics = await CalculateTimeBasedStatisticsAsync(bookings, fromDate, toDate, request.GroupBy, request.IncludeComparison, assignedCinemaIds);
+
+            // ========== TOP CUSTOMERS STATISTICS ==========
+            response.TopCustomers = CalculateTopCustomersStatistics(bookings, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== SERVICE STATISTICS ==========
+            response.ServiceStatistics = CalculateServiceStatistics(bookings);
+
+            // ========== SEAT STATISTICS ==========
+            response.SeatStatistics = await CalculateSeatStatisticsAsync(bookings, assignedCinemaIds);
+
+            // ========== SHOWTIME STATISTICS ==========
+            response.ShowtimeStatistics = await CalculateShowtimeStatisticsAsync(bookings, assignedCinemaIds, request.TopLimit, request.Page, request.PageSize);
+
+            // ========== PAYMENT STATISTICS ==========
+            response.PaymentStatistics = CalculatePaymentStatistics(bookings);
+
+            // ========== VOUCHER STATISTICS ==========
+            response.VoucherStatistics = CalculateVoucherStatistics(bookings);
+
+            return response;
+        }
+
+        /// <summary>
+        /// Get Staff Performance Statistics
+        /// Shows which staff are performing best based on bookings from cinemas they manage
+        /// </summary>
+        public async Task<PartnerResponses.StaffPerformanceStatisticsResponse> GetStaffPerformanceStatisticsAsync(int userId, GetPartnerBookingStatisticsRequest request)
+        {
+            // Get partner from userId
+            var partner = await _context.Partners
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
+
+            if (partner == null)
+                throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
+
+            // Set default date range if not provided
+            var fromDate = request.FromDate ?? DateTime.UtcNow.AddDays(-30).Date;
+            var toDate = request.ToDate ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+
+            // Validate date range
+            if (toDate < fromDate)
+                throw new ValidationException("toDate", "ToDate phải lớn hơn hoặc bằng FromDate.");
+
+            // Get all active staff of this partner
+            var staff = await _context.Employees
+                .Include(e => e.User)
+                .Include(e => e.CinemaAssignments.Where(a => a.IsActive))
+                    .ThenInclude(a => a.Cinema)
+                .Where(e => e.PartnerId == partner.PartnerId && e.IsActive && e.RoleType == "Staff")
+                .ToListAsync();
+
+            if (!staff.Any())
+            {
+                return new PartnerResponses.StaffPerformanceStatisticsResponse();
+            }
+
+            // Get all bookings for partner's cinemas in date range
+            var partnerCinemaIds = await _context.Cinemas
+                .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
+                .Select(c => c.CinemaId)
+                .ToListAsync();
+
+            if (!partnerCinemaIds.Any())
+            {
+                return new PartnerResponses.StaffPerformanceStatisticsResponse();
+            }
+
+            // Apply cinema filter if specified
+            var cinemaIdsToQuery = request.CinemaId.HasValue 
+                ? new List<int> { request.CinemaId.Value }
+                : partnerCinemaIds;
+
+            var bookings = await _context.Bookings
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Cinema)
+                .Include(b => b.Tickets)
+                .AsNoTracking()
+                .Where(b => cinemaIdsToQuery.Contains(b.Showtime.CinemaId))
+                .Where(b => b.BookingTime >= fromDate && b.BookingTime <= toDate)
+                .Where(b => b.PaymentStatus == "PAID") // Only count paid bookings
+                .ToListAsync();
+
+            var staffPerformanceList = new List<PartnerResponses.StaffPerformanceStat>();
+
+            // Calculate performance for each staff
+            foreach (var employee in staff)
+            {
+                // Get cinemas this staff manages
+                var staffCinemaIds = employee.CinemaAssignments
+                    .Where(a => a.IsActive)
+                    .Select(a => a.CinemaId)
+                    .ToList();
+
+                if (!staffCinemaIds.Any()) continue;
+
+                // Filter bookings from cinemas this staff manages
+                var staffBookings = bookings
+                    .Where(b => staffCinemaIds.Contains(b.Showtime.CinemaId))
+                    .ToList();
+
+                var staffTotalBookings = staffBookings.Count;
+                var staffTotalRevenue = staffBookings.Sum(b => b.TotalAmount);
+                var totalTickets = staffBookings.Sum(b => b.Tickets.Count);
+                var avgBookingValue = staffTotalBookings > 0 ? staffTotalRevenue / staffTotalBookings : 0;
+
+                var cinemaNames = employee.CinemaAssignments
+                    .Where(a => a.IsActive)
+                    .Select(a => a.Cinema.CinemaName ?? "")
+                    .Where(name => !string.IsNullOrEmpty(name))
+                    .ToList();
+
+                staffPerformanceList.Add(new PartnerResponses.StaffPerformanceStat
+                {
+                    EmployeeId = employee.EmployeeId,
+                    EmployeeName = employee.FullName,
+                    Email = employee.User?.Email ?? "",
+                    RoleType = employee.RoleType,
+                    HireDate = employee.HireDate,
+                    IsActive = employee.IsActive,
+                    TotalBookings = staffTotalBookings,
+                    TotalRevenue = staffTotalRevenue,
+                    AverageBookingValue = avgBookingValue,
+                    CinemaCount = staffCinemaIds.Count,
+                    CinemaIds = staffCinemaIds,
+                    CinemaNames = cinemaNames,
+                    TotalTicketsSold = totalTickets
+                });
+            }
+
+            // Sort by revenue (descending) and assign ranks
+            var sortedStaff = staffPerformanceList
+                .OrderByDescending(s => s.TotalRevenue)
+                .ThenByDescending(s => s.TotalBookings)
+                .ToList();
+
+            for (int i = 0; i < sortedStaff.Count; i++)
+            {
+                sortedStaff[i].Rank = i + 1;
+            }
+
+            // Calculate summary
+            var totalStaff = sortedStaff.Count;
+            var totalBookings = sortedStaff.Sum(s => s.TotalBookings);
+            var totalRevenue = sortedStaff.Sum(s => s.TotalRevenue);
+            var avgRevenuePerStaff = totalStaff > 0 ? totalRevenue / totalStaff : 0;
+
+            return new PartnerResponses.StaffPerformanceStatisticsResponse
+            {
+                StaffPerformance = sortedStaff,
+                Summary = new PartnerResponses.StaffPerformanceSummary
+                {
+                    TotalStaff = totalStaff,
+                    TotalBookings = totalBookings,
+                    TotalRevenue = totalRevenue,
+                    AverageRevenuePerStaff = avgRevenuePerStaff,
+                    BestPerformer = sortedStaff.FirstOrDefault()
+                }
+            };
+        }
+
+        /// <summary>
+        /// Get Cinema Cluster Statistics
+        /// Groups cinemas by city/district and calculates statistics for each cluster
+        /// </summary>
+        public async Task<PartnerResponses.CinemaClusterStatisticsResponse> GetCinemaClusterStatisticsAsync(int userId, string groupBy, DateTime? fromDate, DateTime? toDate)
+        {
+            // Validate groupBy
+            var validGroupBy = new[] { "city", "district" };
+            if (!validGroupBy.Contains(groupBy.ToLower()))
+                throw new ValidationException("groupBy", "GroupBy phải là một trong: city, district.");
+
+            // Get partner from userId
+            var partner = await _context.Partners
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
+
+            if (partner == null)
+                throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
+
+            // Set default date range if not provided
+            var startDate = fromDate ?? DateTime.UtcNow.AddDays(-30).Date;
+            var endDate = toDate ?? DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+
+            if (endDate < startDate)
+                throw new ValidationException("toDate", "ToDate phải lớn hơn hoặc bằng FromDate.");
+
+            // Get all partner's cinemas
+            var cinemas = await _context.Cinemas
+                .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
+                .ToListAsync();
+
+            if (!cinemas.Any())
+            {
+                return new PartnerResponses.CinemaClusterStatisticsResponse();
+            }
+
+            // Group cinemas by cluster (city or district)
+            var clusters = groupBy.ToLower() == "city"
+                ? cinemas.GroupBy(c => c.City ?? "Unknown")
+                : cinemas.GroupBy(c => $"{c.District ?? "Unknown"}, {c.City ?? "Unknown"}");
+
+            var clusterStats = new List<PartnerResponses.CinemaClusterStat>();
+
+            // Get all bookings for partner's cinemas in date range
+            var cinemaIds = cinemas.Select(c => c.CinemaId).ToList();
+            var bookings = await _context.Bookings
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Cinema)
+                .Include(b => b.Showtime)
+                    .ThenInclude(s => s.Movie)
+                .Include(b => b.Tickets)
+                .AsNoTracking()
+                .Where(b => cinemaIds.Contains(b.Showtime.CinemaId))
+                .Where(b => b.BookingTime >= startDate && b.BookingTime <= endDate)
+                .Where(b => b.PaymentStatus == "PAID")
+                .ToListAsync();
+
+            // Calculate statistics for each cluster
+            foreach (var cluster in clusters)
+            {
+                var clusterCinemaIds = cluster.Select(c => c.CinemaId).ToList();
+                var clusterBookings = bookings
+                    .Where(b => clusterCinemaIds.Contains(b.Showtime.CinemaId))
+                    .ToList();
+
+                var totalBookings = clusterBookings.Count;
+                var totalRevenue = clusterBookings.Sum(b => b.TotalAmount);
+                var totalTickets = clusterBookings.Sum(b => b.Tickets.Count);
+                var avgBookingValue = totalBookings > 0 ? totalRevenue / totalBookings : 0;
+
+                // Calculate occupancy rate (simplified - tickets sold / total capacity)
+                var totalSeats = await _context.Showtimes
+                    .Include(s => s.Screen)
+                    .Where(s => clusterCinemaIds.Contains(s.CinemaId))
+                    .Where(s => s.ShowDatetime >= startDate && s.ShowDatetime <= endDate)
+                    .SumAsync(s => s.Screen.Capacity ?? 0);
+
+                var occupancyRate = totalSeats > 0 
+                    ? (decimal)totalTickets / totalSeats * 100 
+                    : 0;
+
+                // Top movies in cluster
+                var topMovies = clusterBookings
+                    .GroupBy(b => new { b.Showtime.MovieId, b.Showtime.Movie.Title })
+                    .Select(g => new PartnerResponses.ClusterMovieStat
+                    {
+                        MovieId = g.Key.MovieId,
+                        MovieTitle = g.Key.Title ?? "",
+                        Bookings = g.Count(),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        TicketsSold = g.Sum(b => b.Tickets.Count)
+                    })
+                    .OrderByDescending(m => m.Revenue)
+                    .Take(5)
+                    .ToList();
+
+                // Count active staff managing this cluster
+                var activeStaffCount = await _context.EmployeeCinemaAssignments
+                    .Include(a => a.Employee)
+                    .Where(a => clusterCinemaIds.Contains(a.CinemaId) && a.IsActive && a.Employee.IsActive)
+                    .Select(a => a.EmployeeId)
+                    .Distinct()
+                    .CountAsync();
+
+                clusterStats.Add(new PartnerResponses.CinemaClusterStat
+                {
+                    ClusterName = cluster.Key ?? "Unknown",
+                    GroupBy = groupBy.ToLower(),
+                    CinemaIds = clusterCinemaIds,
+                    CinemaNames = cluster.Select(c => c.CinemaName ?? "").Where(n => !string.IsNullOrEmpty(n)).ToList(),
+                    TotalBookings = totalBookings,
+                    TotalRevenue = totalRevenue,
+                    AverageBookingValue = avgBookingValue,
+                    TotalTicketsSold = totalTickets,
+                    OccupancyRate = occupancyRate,
+                    TopMovies = topMovies,
+                    ActiveStaffCount = activeStaffCount
+                });
+            }
+
+            // Sort by revenue and assign ranks
+            var sortedClusters = clusterStats
+                .OrderByDescending(c => c.TotalRevenue)
+                .ThenByDescending(c => c.TotalBookings)
+                .ToList();
+
+            for (int i = 0; i < sortedClusters.Count; i++)
+            {
+                sortedClusters[i].Rank = i + 1;
+            }
+
+            // Calculate summary
+            var totalClusters = sortedClusters.Count;
+            var totalBookingsAll = sortedClusters.Sum(c => c.TotalBookings);
+            var totalRevenueAll = sortedClusters.Sum(c => c.TotalRevenue);
+            var avgRevenuePerCluster = totalClusters > 0 ? totalRevenueAll / totalClusters : 0;
+
+            return new PartnerResponses.CinemaClusterStatisticsResponse
+            {
+                Clusters = sortedClusters,
+                Summary = new PartnerResponses.CinemaClusterSummary
+                {
+                    TotalClusters = totalClusters,
+                    TotalBookings = totalBookingsAll,
+                    TotalRevenue = totalRevenueAll,
+                    AverageRevenuePerCluster = avgRevenuePerCluster,
+                    BestCluster = sortedClusters.FirstOrDefault()
+                }
+            };
+        }
+
+        /// <summary>
+        /// Helper method to check if a booking is paid/completed
+        /// </summary>
+        private bool IsPaidBooking(Booking booking)
+        {
+            var paymentStatus = booking.PaymentStatus?.ToUpper() ?? "";
+            var status = booking.Status.ToUpper();
+            var state = booking.State.ToUpper();
+            
+            if (paymentStatus == "PAID")
+                return true;
+            
+            if (status == "CONFIRMED" && paymentStatus == "PAID")
+                return true;
+            
+            if (state == "COMPLETED" && paymentStatus == "PAID")
+                return true;
+            
+            return false;
+        }
+
+        private PartnerResponses.BookingOverviewStatistics CalculateOverviewStatistics(List<Booking> bookings)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var totalTickets = paidBookings.Sum(b => b.Tickets.Count);
+            var totalCustomers = bookings.Select(b => b.CustomerId).Distinct().Count();
+            var totalRevenue = paidBookings.Sum(b => b.TotalAmount);
+            var averageOrderValue = paidBookings.Any() ? totalRevenue / paidBookings.Count : 0;
+
+            var bookingsByStatus = bookings
+                .GroupBy(b => b.Status.ToUpper())
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var revenueByStatus = paidBookings
+                .GroupBy(b => b.Status.ToUpper())
+                .ToDictionary(g => g.Key, g => g.Sum(b => b.TotalAmount));
+
+            var bookingsByPaymentStatus = bookings
+                .Where(b => !string.IsNullOrEmpty(b.PaymentStatus))
+                .GroupBy(b => b.PaymentStatus!.ToUpper())
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            return new PartnerResponses.BookingOverviewStatistics
+            {
+                TotalBookings = bookings.Count,
+                TotalRevenue = totalRevenue,
+                TotalPaidBookings = paidBookings.Count,
+                TotalPendingBookings = bookings.Count(b => b.Status.ToUpper() == "PENDING_PAYMENT" || b.State.ToUpper() == "PENDING_PAYMENT"),
+                TotalCancelledBookings = bookings.Count(b => b.Status.ToUpper() == "CANCELLED" || b.State.ToUpper() == "CANCELLED"),
+                TotalTicketsSold = totalTickets,
+                TotalCustomers = totalCustomers,
+                AverageOrderValue = averageOrderValue,
+                BookingsByStatus = bookingsByStatus,
+                RevenueByStatus = revenueByStatus,
+                BookingsByPaymentStatus = bookingsByPaymentStatus
+            };
+        }
+
+        private PartnerResponses.CinemaRevenueStatistics CalculateCinemaRevenueStatistics(List<Booking> bookings, int topLimit, int page, int pageSize)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+
+            var cinemaStats = paidBookings
+                .GroupBy(b => new
+                {
+                    CinemaId = b.Showtime.Cinema.CinemaId,
+                    CinemaName = b.Showtime.Cinema.CinemaName,
+                    City = b.Showtime.Cinema.City,
+                    District = b.Showtime.Cinema.District,
+                    Address = b.Showtime.Cinema.Address
+                })
+                .Select(g => new PartnerResponses.CinemaRevenueStat
+                {
+                    CinemaId = g.Key.CinemaId,
+                    CinemaName = g.Key.CinemaName,
+                    TotalRevenue = g.Sum(b => b.TotalAmount),
+                    TotalBookings = g.Count(),
+                    TotalTicketsSold = g.Sum(b => b.Tickets.Count),
+                    AverageOrderValue = g.Average(b => b.TotalAmount),
+                    City = g.Key.City,
+                    District = g.Key.District,
+                    Address = g.Key.Address
+                })
+                .OrderByDescending(c => c.TotalRevenue)
+                .ToList();
+
+            var totalCount = cinemaStats.Count;
+            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            var paginatedList = cinemaStats
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            var topCinemas = cinemaStats.Take(topLimit).ToList();
+
+            var comparison = new PartnerResponses.CinemaRevenueComparison
+            {
+                HighestRevenueCinema = cinemaStats.FirstOrDefault(),
+                LowestRevenueCinema = cinemaStats.LastOrDefault(c => c.TotalRevenue > 0),
+                AverageRevenuePerCinema = cinemaStats.Any() ? cinemaStats.Average(c => c.TotalRevenue) : 0
+            };
+
+            return new PartnerResponses.CinemaRevenueStatistics
+            {
+                CinemaRevenueList = paginatedList,
+                TopCinemasByRevenue = topCinemas,
+                Comparison = cinemaStats.Any() ? comparison : null,
+                Pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                }
+            };
+        }
+
+        private PartnerResponses.MovieRevenueStatistics CalculateMovieStatistics(List<Booking> bookings, int topLimit, int page, int pageSize)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+
+            var movieStats = paidBookings
+                .GroupBy(b => new
+                {
+                    MovieId = b.Showtime.Movie.MovieId,
+                    Title = b.Showtime.Movie.Title,
+                    Genre = b.Showtime.Movie.Genre
+                })
+                .Select(g => new PartnerResponses.MovieRevenueStat
+                {
+                    MovieId = g.Key.MovieId,
+                    Title = g.Key.Title,
+                    Genre = g.Key.Genre,
+                    TotalRevenue = g.Sum(b => b.TotalAmount),
+                    TotalBookings = g.Count(),
+                    TotalTicketsSold = g.Sum(b => b.Tickets.Count),
+                    ShowtimeCount = g.Select(b => b.ShowtimeId).Distinct().Count()
+                })
+                .ToList();
+
+            var moviesByRevenue = movieStats
+                .OrderByDescending(m => m.TotalRevenue)
+                .ToList();
+
+            var moviesByTickets = movieStats
+                .OrderByDescending(m => m.TotalTicketsSold)
+                .ToList();
+
+            var topByRevenue = moviesByRevenue.Take(topLimit).ToList();
+            var topByTickets = moviesByTickets.Take(topLimit).ToList();
+
+            // Pagination for revenue list
+            var totalCountByRevenue = moviesByRevenue.Count;
+            var totalPagesByRevenue = (int)Math.Ceiling(totalCountByRevenue / (double)pageSize);
+            var paginatedByRevenue = moviesByRevenue
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            // Pagination for tickets list
+            var totalCountByTickets = moviesByTickets.Count;
+            var totalPagesByTickets = (int)Math.Ceiling(totalCountByTickets / (double)pageSize);
+            var paginatedByTickets = moviesByTickets
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PartnerResponses.MovieRevenueStatistics
+            {
+                TopMoviesByRevenue = topByRevenue,
+                TopMoviesByTickets = topByTickets,
+                PaginationByRevenue = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCountByRevenue,
+                    TotalPages = totalPagesByRevenue
+                },
+                PaginationByTickets = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCountByTickets,
+                    TotalPages = totalPagesByTickets
+                }
+            };
+        }
+
+        private async Task<PartnerResponses.TimeBasedStatistics> CalculateTimeBasedStatisticsAsync(List<Booking> bookings, DateTime fromDate, DateTime toDate, string groupBy, bool includeComparison, List<int> partnerCinemaIds)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var today = DateTime.UtcNow.Date;
+            var yesterday = today.AddDays(-1);
+            var thisWeekStart = today.AddDays(-(int)today.DayOfWeek);
+            var thisMonthStart = new DateTime(today.Year, today.Month, 1);
+            var thisYearStart = new DateTime(today.Year, 1, 1);
+
+            var todayStats = CalculateTimePeriodStat(paidBookings, today, today.AddDays(1));
+            var yesterdayStats = CalculateTimePeriodStat(paidBookings, yesterday, today);
+            var thisWeekStats = CalculateTimePeriodStat(paidBookings, thisWeekStart, today.AddDays(1));
+            var thisMonthStats = CalculateTimePeriodStat(paidBookings, thisMonthStart, today.AddDays(1));
+            var thisYearStats = CalculateTimePeriodStat(paidBookings, thisYearStart, today.AddDays(1));
+
+            var revenueTrend = CalculateRevenueTrend(paidBookings, fromDate, toDate, groupBy);
+
+            PartnerResponses.PeriodComparison? periodComparison = null;
+            if (includeComparison)
+            {
+                var periodDays = (toDate - fromDate).Days;
+                var previousFromDate = fromDate.AddDays(-periodDays - 1);
+                var previousToDate = fromDate.AddTicks(-1);
+
+                var previousBookingsRaw = await _context.Bookings
+                    .Include(b => b.Tickets)
+                    .AsNoTracking()
+                    .Where(b => partnerCinemaIds.Contains(b.Showtime.CinemaId))
+                    .Where(b => b.BookingTime >= previousFromDate && b.BookingTime <= previousToDate)
+                    .ToListAsync();
+                
+                var previousBookings = previousBookingsRaw.Where(b => IsPaidBooking(b)).ToList();
+
+                var currentPeriod = new PartnerResponses.PeriodData
+                {
+                    Revenue = paidBookings.Sum(b => b.TotalAmount),
+                    Bookings = paidBookings.Count,
+                    Customers = paidBookings.Select(b => b.CustomerId).Distinct().Count()
+                };
+
+                var previousPeriod = new PartnerResponses.PeriodData
+                {
+                    Revenue = previousBookings.Sum(b => b.TotalAmount),
+                    Bookings = previousBookings.Count,
+                    Customers = previousBookings.Select(b => b.CustomerId).Distinct().Count()
+                };
+
+                periodComparison = new PartnerResponses.PeriodComparison
+                {
+                    CurrentPeriod = currentPeriod,
+                    PreviousPeriod = previousPeriod,
+                    Growth = new PartnerResponses.GrowthData
+                    {
+                        RevenueGrowth = previousPeriod.Revenue > 0
+                            ? (decimal)(((double)(currentPeriod.Revenue - previousPeriod.Revenue) / (double)previousPeriod.Revenue) * 100)
+                            : (currentPeriod.Revenue > 0 ? 100 : 0),
+                        BookingGrowth = previousPeriod.Bookings > 0
+                            ? (decimal)(((currentPeriod.Bookings - previousPeriod.Bookings) / (double)previousPeriod.Bookings) * 100)
+                            : (currentPeriod.Bookings > 0 ? 100 : 0),
+                        CustomerGrowth = previousPeriod.Customers > 0
+                            ? (decimal)(((currentPeriod.Customers - previousPeriod.Customers) / (double)previousPeriod.Customers) * 100)
+                            : (currentPeriod.Customers > 0 ? 100 : 0)
+                    }
+                };
+            }
+
+            return new PartnerResponses.TimeBasedStatistics
+            {
+                Today = todayStats,
+                Yesterday = yesterdayStats,
+                ThisWeek = thisWeekStats,
+                ThisMonth = thisMonthStats,
+                ThisYear = thisYearStats,
+                RevenueTrend = revenueTrend,
+                PeriodComparison = periodComparison
+            };
+        }
+
+        private PartnerResponses.TimePeriodStat CalculateTimePeriodStat(List<Booking> bookings, DateTime startDate, DateTime endDate)
+        {
+            var periodBookings = bookings.Where(b => b.BookingTime >= startDate && b.BookingTime < endDate).ToList();
+
+            return new PartnerResponses.TimePeriodStat
+            {
+                Bookings = periodBookings.Count,
+                Revenue = periodBookings.Sum(b => b.TotalAmount),
+                Tickets = periodBookings.Sum(b => b.Tickets.Count),
+                Customers = periodBookings.Select(b => b.CustomerId).Distinct().Count()
+            };
+        }
+
+        private List<PartnerResponses.TimeSeriesData> CalculateRevenueTrend(List<Booking> bookings, DateTime fromDate, DateTime toDate, string groupBy)
+        {
+            var trend = new List<PartnerResponses.TimeSeriesData>();
+
+            switch (groupBy.ToLower())
+            {
+                case "day":
+                    var dailyGroups = bookings
+                        .GroupBy(b => b.BookingTime.Date)
+                        .OrderBy(g => g.Key)
+                        .ToList();
+
+                    trend = dailyGroups.Select(g => new PartnerResponses.TimeSeriesData
+                    {
+                        Date = g.Key.ToString("yyyy-MM-dd"),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        BookingCount = g.Count(),
+                        TicketCount = g.Sum(b => b.Tickets.Count)
+                    }).ToList();
+                    break;
+
+                case "week":
+                    var weeklyGroups = bookings
+                        .GroupBy(b => GetWeekStart(b.BookingTime))
+                        .OrderBy(g => g.Key)
+                        .ToList();
+
+                    trend = weeklyGroups.Select(g => new PartnerResponses.TimeSeriesData
+                    {
+                        Date = g.Key.ToString("yyyy-MM-dd"),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        BookingCount = g.Count(),
+                        TicketCount = g.Sum(b => b.Tickets.Count)
+                    }).ToList();
+                    break;
+
+                case "month":
+                    var monthlyGroups = bookings
+                        .GroupBy(b => new DateTime(b.BookingTime.Year, b.BookingTime.Month, 1))
+                        .OrderBy(g => g.Key)
+                        .ToList();
+
+                    trend = monthlyGroups.Select(g => new PartnerResponses.TimeSeriesData
+                    {
+                        Date = g.Key.ToString("yyyy-MM"),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        BookingCount = g.Count(),
+                        TicketCount = g.Sum(b => b.Tickets.Count)
+                    }).ToList();
+                    break;
+
+                case "year":
+                    var yearlyGroups = bookings
+                        .GroupBy(b => new DateTime(b.BookingTime.Year, 1, 1))
+                        .OrderBy(g => g.Key)
+                        .ToList();
+
+                    trend = yearlyGroups.Select(g => new PartnerResponses.TimeSeriesData
+                    {
+                        Date = g.Key.ToString("yyyy"),
+                        Revenue = g.Sum(b => b.TotalAmount),
+                        BookingCount = g.Count(),
+                        TicketCount = g.Sum(b => b.Tickets.Count)
+                    }).ToList();
+                    break;
+            }
+
+            return trend;
+        }
+
+        private DateTime GetWeekStart(DateTime date)
+        {
+            var diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
+            return date.AddDays(-1 * diff).Date;
+        }
+
+        private PartnerResponses.TopCustomersStatistics CalculateTopCustomersStatistics(List<Booking> bookings, int topLimit, int page, int pageSize)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+
+            var customerStats = paidBookings
+                .GroupBy(b => new
+                {
+                    b.CustomerId,
+                    UserId = b.Customer.User.UserId,
+                    Fullname = b.Customer.User.Fullname,
+                    Email = b.Customer.User.Email,
+                    Phone = b.Customer.User.Phone
+                })
+                .Select(g => new PartnerResponses.CustomerStat
+                {
+                    CustomerId = g.Key.CustomerId,
+                    UserId = g.Key.UserId,
+                    Fullname = g.Key.Fullname,
+                    Email = g.Key.Email,
+                    Phone = g.Key.Phone,
+                    TotalSpent = g.Sum(b => b.TotalAmount),
+                    TotalBookings = g.Count(),
+                    TotalTicketsPurchased = g.Sum(b => b.Tickets.Count),
+                    AverageOrderValue = g.Average(b => b.TotalAmount),
+                    LastBookingDate = g.Max(b => b.BookingTime)
+                })
+                .ToList();
+
+            var customersByRevenue = customerStats
+                .OrderByDescending(c => c.TotalSpent)
+                .ToList();
+
+            var customersByBookingCount = customerStats
+                .OrderByDescending(c => c.TotalBookings)
+                .ToList();
+
+            var topByRevenue = customersByRevenue.Take(topLimit).ToList();
+            var topByBookingCount = customersByBookingCount.Take(topLimit).ToList();
+
+            // Pagination for revenue list
+            var totalCountByRevenue = customersByRevenue.Count;
+            var totalPagesByRevenue = (int)Math.Ceiling(totalCountByRevenue / (double)pageSize);
+            var paginatedByRevenue = customersByRevenue
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            // Pagination for booking count list
+            var totalCountByBookingCount = customersByBookingCount.Count;
+            var totalPagesByBookingCount = (int)Math.Ceiling(totalCountByBookingCount / (double)pageSize);
+            var paginatedByBookingCount = customersByBookingCount
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PartnerResponses.TopCustomersStatistics
+            {
+                ByRevenue = paginatedByRevenue,
+                ByBookingCount = paginatedByBookingCount,
+                PaginationByRevenue = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCountByRevenue,
+                    TotalPages = totalPagesByRevenue
+                },
+                PaginationByBookingCount = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCountByBookingCount,
+                    TotalPages = totalPagesByBookingCount
+                }
+            };
+        }
+
+        private PartnerResponses.ServiceStatistics CalculateServiceStatistics(List<Booking> bookings)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var totalRevenue = paidBookings.Sum(b => b.TotalAmount);
+            var totalServiceRevenue = paidBookings.Sum(b => b.ServiceOrders.Sum(so => so.Quantity * so.UnitPrice));
+            var totalServiceOrders = paidBookings.Sum(b => b.ServiceOrders.Count);
+            var serviceRevenuePercentage = totalRevenue > 0 ? (totalServiceRevenue / totalRevenue) * 100 : 0;
+
+            var topServices = paidBookings
+                .SelectMany(b => b.ServiceOrders)
+                .GroupBy(so => new
+                {
+                    so.ServiceId,
+                    ServiceName = so.Service.ServiceName
+                })
+                .Select(g => new PartnerResponses.TopServiceStat
+                {
+                    ServiceId = g.Key.ServiceId,
+                    ServiceName = g.Key.ServiceName,
+                    TotalQuantity = g.Sum(so => so.Quantity),
+                    TotalRevenue = g.Sum(so => so.Quantity * so.UnitPrice),
+                    BookingCount = g.Select(so => so.BookingId).Distinct().Count()
+                })
+                .OrderByDescending(s => s.TotalRevenue)
+                .Take(10)
+                .ToList();
+
+            return new PartnerResponses.ServiceStatistics
+            {
+                TotalServiceRevenue = totalServiceRevenue,
+                TotalServiceOrders = totalServiceOrders,
+                ServiceRevenuePercentage = serviceRevenuePercentage,
+                TopServices = topServices
+            };
+        }
+
+        private async Task<PartnerResponses.SeatStatistics> CalculateSeatStatisticsAsync(List<Booking> bookings, List<int> partnerCinemaIds)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var totalSeatsSold = paidBookings.Sum(b => b.Tickets.Count);
+
+            // Get total available seats from all screens in partner's cinemas
+            var totalSeatsAvailable = await _context.Screens
+                .Where(s => partnerCinemaIds.Contains(s.CinemaId) && s.IsActive)
+                .SumAsync(s => s.Capacity ?? 0);
+
+            var overallOccupancyRate = totalSeatsAvailable > 0 
+                ? (totalSeatsSold / (decimal)totalSeatsAvailable) * 100 
+                : 0;
+
+            // Statistics by seat type
+            var seatTypeStats = paidBookings
+                .SelectMany(b => b.Tickets)
+                .Where(t => t.Seat.SeatType != null)
+                .GroupBy(t => new
+                {
+                    SeatTypeId = t.Seat.SeatType!.Id,
+                    SeatTypeName = t.Seat.SeatType.Name
+                })
+                .Select(g => new PartnerResponses.SeatTypeStat
+                {
+                    SeatTypeId = g.Key.SeatTypeId,
+                    SeatTypeName = g.Key.SeatTypeName,
+                    TotalTicketsSold = g.Count(),
+                    TotalRevenue = g.Sum(t => t.Price),
+                    AveragePrice = g.Average(t => t.Price)
+                })
+                .OrderByDescending(s => s.TotalTicketsSold)
+                .ToList();
+
+            return new PartnerResponses.SeatStatistics
+            {
+                TotalSeatsSold = totalSeatsSold,
+                TotalSeatsAvailable = totalSeatsAvailable,
+                OverallOccupancyRate = overallOccupancyRate,
+                BySeatType = seatTypeStats
+            };
+        }
+
+        private async Task<PartnerResponses.ShowtimeStatistics> CalculateShowtimeStatisticsAsync(List<Booking> bookings, List<int> partnerCinemaIds, int topLimit, int page, int pageSize)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+
+            // Get all showtimes from partner's cinemas in the date range
+            var fromDate = bookings.Any() ? bookings.Min(b => b.BookingTime).Date : DateTime.UtcNow.AddDays(-30).Date;
+            var toDate = bookings.Any() ? bookings.Max(b => b.BookingTime).Date.AddDays(1) : DateTime.UtcNow.Date.AddDays(1);
+
+            var allShowtimes = await _context.Showtimes
+                .Include(s => s.Movie)
+                .Include(s => s.Cinema)
+                .AsNoTracking()
+                .Where(s => partnerCinemaIds.Contains(s.CinemaId))
+                .Where(s => s.ShowDatetime >= fromDate && s.ShowDatetime <= toDate)
+                .ToListAsync();
+
+            var totalShowtimes = allShowtimes.Count;
+            var showtimesWithBookings = paidBookings.Select(b => b.ShowtimeId).Distinct().Count();
+            var showtimesWithoutBookings = totalShowtimes - showtimesWithBookings;
+
+            // Top showtimes by revenue
+            var showtimesByRevenue = paidBookings
+                .GroupBy(b => new
+                {
+                    b.ShowtimeId,
+                    ShowDatetime = b.Showtime.ShowDatetime,
+                    FormatType = b.Showtime.FormatType,
+                    MovieTitle = b.Showtime.Movie.Title,
+                    CinemaName = b.Showtime.Cinema.CinemaName,
+                    ScreenCapacity = b.Showtime.Screen.Capacity ?? 0
+                })
+                .Select(g => new PartnerResponses.TopShowtimeStat
+                {
+                    ShowtimeId = g.Key.ShowtimeId,
+                    ShowDatetime = g.Key.ShowDatetime,
+                    FormatType = g.Key.FormatType,
+                    MovieTitle = g.Key.MovieTitle,
+                    CinemaName = g.Key.CinemaName ?? "",
+                    TotalRevenue = g.Sum(b => b.TotalAmount),
+                    TotalTicketsSold = g.Sum(b => b.Tickets.Count),
+                    OccupancyRate = g.Key.ScreenCapacity > 0 
+                        ? (g.Sum(b => b.Tickets.Count) / (decimal)g.Key.ScreenCapacity) * 100 
+                        : 0
+                })
+                .OrderByDescending(s => s.TotalRevenue)
+                .ToList();
+
+            var topShowtimes = showtimesByRevenue.Take(topLimit).ToList();
+
+            // Pagination
+            var totalCount = showtimesByRevenue.Count;
+            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            var paginatedShowtimes = showtimesByRevenue
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PartnerResponses.ShowtimeStatistics
+            {
+                TotalShowtimes = totalShowtimes,
+                ShowtimesWithBookings = showtimesWithBookings,
+                ShowtimesWithoutBookings = showtimesWithoutBookings,
+                TopShowtimesByRevenue = paginatedShowtimes,
+                Pagination = new ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses.PaginationMetadata
+                {
+                    CurrentPage = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                }
+            };
+        }
+
+        private PartnerResponses.PaymentStatistics CalculatePaymentStatistics(List<Booking> bookings)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var totalBookings = bookings.Count;
+            var failedBookings = bookings.Count(b => 
+                b.PaymentStatus?.ToUpper() == "FAILED" || 
+                b.Status.ToUpper() == "FAILED");
+
+            var failedPaymentRate = totalBookings > 0 
+                ? (failedBookings / (double)totalBookings) * 100 
+                : 0;
+
+            var pendingPaymentAmount = bookings
+                .Where(b => b.PaymentStatus?.ToUpper() == "PENDING" || b.Status.ToUpper() == "PENDING_PAYMENT")
+                .Sum(b => b.TotalAmount);
+
+            var paymentByProvider = bookings
+                .Where(b => !string.IsNullOrEmpty(b.PaymentProvider))
+                .GroupBy(b => b.PaymentProvider!)
+                .Select(g => new PartnerResponses.PaymentProviderStat
+                {
+                    Provider = g.Key,
+                    BookingCount = g.Count(),
+                    TotalAmount = g.Where(b => IsPaidBooking(b)).Sum(b => b.TotalAmount)
+                })
+                .OrderByDescending(p => p.TotalAmount)
+                .ToList();
+
+            return new PartnerResponses.PaymentStatistics
+            {
+                PaymentByProvider = paymentByProvider,
+                FailedPaymentRate = (decimal)failedPaymentRate,
+                PendingPaymentAmount = pendingPaymentAmount
+            };
+        }
+
+        private PartnerResponses.VoucherStatistics CalculateVoucherStatistics(List<Booking> bookings)
+        {
+            var paidBookings = bookings.Where(b => IsPaidBooking(b)).ToList();
+            var bookingsWithVoucher = paidBookings.Where(b => b.Voucher != null).ToList();
+
+            var totalVouchersUsed = bookingsWithVoucher.Count;
+            var totalVoucherDiscount = bookingsWithVoucher.Sum(b =>
+            {
+                if (b.Voucher == null) return 0;
+                if (b.Voucher.DiscountType.ToLower() == "fixed")
+                    return b.Voucher.DiscountVal;
+                else // percent
+                    return b.TotalAmount * (b.Voucher.DiscountVal / 100);
+            });
+
+            var voucherUsageRate = paidBookings.Any()
+                ? (totalVouchersUsed / (double)paidBookings.Count) * 100
+                : 0;
+
+            var mostUsedVouchers = bookingsWithVoucher
+                .Where(b => b.Voucher != null)
+                .GroupBy(b => b.Voucher!.VoucherCode)
+                .Select(g => new PartnerResponses.VoucherUsageStat
+                {
+                    VoucherCode = g.Key,
+                    UsageCount = g.Count(),
+                    TotalDiscount = g.Sum(b =>
+                    {
+                        var v = b.Voucher!;
+                        if (v.DiscountType.ToLower() == "fixed")
+                            return v.DiscountVal;
+                        else
+                            return b.TotalAmount * (v.DiscountVal / 100);
+                    })
+                })
+                .OrderByDescending(v => v.UsageCount)
+                .Take(10)
+                .ToList();
+
+            return new PartnerResponses.VoucherStatistics
+            {
+                TotalVouchersUsed = totalVouchersUsed,
+                TotalVoucherDiscount = totalVoucherDiscount,
+                VoucherUsageRate = (decimal)voucherUsageRate,
+                MostUsedVouchers = mostUsedVouchers
+            };
+        }
+
+        /// <summary>
+        /// Helper method để lấy Partner và danh sách Cinema IDs
+        /// - Partner: Lấy tất cả cinemas của partner
+        /// - Staff: Chỉ lấy cinemas được phân quyền qua EmployeeCinemaAssignment
+        /// </summary>
+        private async Task<(Partner partner, List<int> cinemaIds)> GetPartnerAndCinemaIdsAsync(int userId)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            Partner? partner = null;
+            List<int> cinemaIds = new List<int>();
+
+            // Nếu là Partner, lấy trực tiếp
+            if (user?.UserType == "Partner")
+            {
+                partner = await _context.Partners
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.UserId == userId && p.IsActive);
+
+                if (partner == null)
+                    throw new NotFoundException("Không tìm thấy thông tin đối tác hoặc tài khoản chưa được kích hoạt.");
+
+                // Get list of cinema IDs belonging to this partner
+                cinemaIds = await _context.Cinemas
+                    .Where(c => c.PartnerId == partner.PartnerId && c.IsActive == true)
+                    .Select(c => c.CinemaId)
+                    .ToListAsync();
+            }
+            // Nếu là Staff, lấy từ Employee và chỉ lấy cinemas được phân quyền
+            else if (user?.UserType == "Staff" || user?.UserType == "Marketing" || user?.UserType == "Cashier")
+            {
+                var employee = await _context.Employees
+                    .Include(e => e.Partner)
+                    .FirstOrDefaultAsync(e => e.UserId == userId && e.IsActive);
+
+                if (employee == null || employee.Partner == null)
+                    throw new NotFoundException("Không tìm thấy thông tin nhân viên hoặc tài khoản chưa được kích hoạt.");
+
+                partner = employee.Partner;
+
+                // Chỉ lấy các rạp được phân quyền cho Staff
+                cinemaIds = await _context.EmployeeCinemaAssignments
+                    .Where(eca => eca.EmployeeId == employee.EmployeeId && eca.IsActive)
+                    .Select(eca => eca.CinemaId)
+                    .ToListAsync();
+            }
+            else
+            {
+                throw new UnauthorizedException("Chỉ tài khoản Partner hoặc Staff mới được sử dụng chức năng này");
+            }
+
+            return (partner, cinemaIds);
         }
      }
  }

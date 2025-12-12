@@ -13,6 +13,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using System.Linq;
+using ExpressTicketCinemaSystem.Src.Cinema.Api.Filters;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
@@ -36,6 +37,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Register a new user account
         /// </summary>
         [HttpPost("register")]
+        [AuditAction("AUTH_REGISTER", "User", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
@@ -89,6 +91,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Email Verification
         /// </summary>
         [HttpGet("verify-email")]
+        [AuditAction("AUTH_VERIFY_EMAIL", "User")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
@@ -123,6 +126,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Resend verification email
         /// </summary>
         [HttpPost("resend-verification")]
+        [AuditAction("AUTH_RESEND_VERIFICATION", "User", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
@@ -166,6 +170,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Login
         /// </summary>
         [HttpPost("login")]
+        [AuditAction("AUTH_LOGIN", "UserAuth", includeRequestBody: true)]
         [AllowAnonymous]
         [ProducesResponseType(typeof(SuccessResponse<LoginResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -213,6 +218,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Sign in with Google
         /// </summary>
         [HttpPost("login/google")]
+        [AuditAction("AUTH_LOGIN_GOOGLE", "UserAuth", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<LoginResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
@@ -367,6 +373,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Refresh token
         /// </summary>
         [HttpPost("refresh-token")]
+        [AuditAction("AUTH_REFRESH_TOKEN", "UserAuth", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<LoginResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
@@ -404,6 +411,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Logout
         /// </summary>
         [HttpPost("logout")]
+        [AuditAction("AUTH_LOGOUT", "UserAuth")]
         [Authorize]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -440,6 +448,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Forgot password
         /// </summary>
         [HttpPost("forgot-password")]
+        [AuditAction("AUTH_FORGOT_PASSWORD", "UserAuth", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
@@ -483,6 +492,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// Verify password reset code
         /// </summary>
         [HttpPost("verify-reset-code")]
+        [AuditAction("AUTH_VERIFY_RESET_CODE", "UserAuth", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
@@ -514,6 +524,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
 
         [HttpPost("reset-password")]
+        [AuditAction("AUTH_RESET_PASSWORD", "UserAuth", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]

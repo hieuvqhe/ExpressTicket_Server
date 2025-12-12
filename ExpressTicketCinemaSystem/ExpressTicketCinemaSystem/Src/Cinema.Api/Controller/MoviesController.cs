@@ -1,10 +1,15 @@
 ﻿using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Movie.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Enum;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using System.Text.RegularExpressions;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
 {
@@ -359,6 +364,902 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controller
             }
         }
 
+        /// <summary>
+        /// Create a review for a movie
+        /// </summary>
+        /// <remarks>
+        /// User must be authenticated, have confirmed email, active account, and have purchased and paid for a ticket to this movie
+        /// </remarks>
+        /// <param name="movieId">Movie ID</param>
+        /// <param name="request">Review details (rating_star: 1-5, comment: 1-1000 characters)</param>
+        [HttpPost("{movieId}/reviews")]
+        [Authorize]
+        [ProducesResponseType(typeof(SuccessResponse<CreateReviewResponse>), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> CreateReview(
+            int movieId,
+            [FromBody] CreateReviewRequest request)
+        {
+            try
+            {
+                // Validate rating_star phải trong khoảng 1-5
+                if (request.RatingStar < 1 || request.RatingStar > 5)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["rating_star"] = new ValidationError
+                            {
+                                Msg = "Số sao đánh giá phải từ 1 đến 5",
+                                Path = "rating_star",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate comment không rỗng
+                if (string.IsNullOrWhiteSpace(request.Comment))
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["comment"] = new ValidationError
+                            {
+                                Msg = "Bình luận không được để trống",
+                                Path = "comment",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate độ dài comment (1-1000 ký tự)
+                if (request.Comment.Length > 1000)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["comment"] = new ValidationError
+                            {
+                                Msg = "Bình luận không được vượt quá 1000 ký tự",
+                                Path = "comment",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate image URLs (tối đa 3 ảnh)
+                if (request.ImageUrls != null && request.ImageUrls.Count > 3)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["image_urls"] = new ValidationError
+                            {
+                                Msg = "Tối đa 3 ảnh được phép",
+                                Path = "image_urls",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate image URL format (nếu có)
+                if (request.ImageUrls != null && request.ImageUrls.Any())
+                {
+                    var urlPattern = @"^https?://.+\.(jpg|jpeg|png)$";
+                    var invalidUrls = request.ImageUrls
+                        .Where(url => string.IsNullOrWhiteSpace(url) || !Regex.IsMatch(url, urlPattern, RegexOptions.IgnoreCase))
+                        .ToList();
+
+                    if (invalidUrls.Any())
+                    {
+                        return BadRequest(new ValidationErrorResponse
+                        {
+                            Message = "Lỗi xác thực dữ liệu",
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["image_urls"] = new ValidationError
+                                {
+                                    Msg = "URL ảnh không hợp lệ. Phải là URL ảnh (jpg, jpeg, png)",
+                                    Path = "image_urls",
+                                    Location = "body"
+                                }
+                            }
+                        });
+                    }
+
+                    // Kiểm tra trùng lặp
+                    if (request.ImageUrls.Distinct().Count() != request.ImageUrls.Count)
+                    {
+                        return BadRequest(new ValidationErrorResponse
+                        {
+                            Message = "Lỗi xác thực dữ liệu",
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["image_urls"] = new ValidationError
+                                {
+                                    Msg = "Không được phép có URL ảnh trùng lặp",
+                                    Path = "image_urls",
+                                    Location = "body"
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Lấy userId từ token
+                var userIdClaim = User.FindFirst("userId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                {
+                    return Unauthorized(new ValidationErrorResponse
+                    {
+                        Message = "Xác thực thất bại",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["auth"] = new ValidationError
+                            {
+                                Msg = "Không thể xác định người dùng từ token",
+                                Path = "token",
+                                Location = "header"
+                            }
+                        }
+                    });
+                }
+
+                // Gọi service để tạo review
+                var (success, message, rating) = await _movieService.CreateReviewAsync(
+                    movieId, 
+                    userId, 
+                    request.RatingStar, 
+                    request.Comment,
+                    request.ImageUrls);
+
+                if (!success)
+                {
+                    // Xác định loại lỗi dựa trên message
+                    if (message.Contains("Không tìm thấy phim"))
+                    {
+                        return NotFound(new ValidationErrorResponse
+                        {
+                            Message = message,
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["movieId"] = new ValidationError
+                                {
+                                    Msg = message,
+                                    Path = "movieId",
+                                    Location = "path"
+                                }
+                            }
+                        });
+                    }
+                    else if (message.Contains("đã đánh giá"))
+                    {
+                        return Conflict(new ValidationErrorResponse
+                        {
+                            Message = message,
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["review"] = new ValidationError
+                                {
+                                    Msg = message,
+                                    Path = "movieId",
+                                    Location = "path"
+                                }
+                            }
+                        });
+                    }
+                    else if (message.Contains("mua vé"))
+                    {
+                        return StatusCode(403, new ValidationErrorResponse
+                        {
+                            Message = message,
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["permission"] = new ValidationError
+                                {
+                                    Msg = message,
+                                    Path = "movieId",
+                                    Location = "path"
+                                }
+                            }
+                        });
+                    }
+
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = message,
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["error"] = new ValidationError
+                            {
+                                Msg = message,
+                                Path = "request",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Trả về response thành công
+                var response = new SuccessResponse<CreateReviewResponse>
+                {
+                    Message = message,
+                    Result = new CreateReviewResponse
+                    {
+                        RatingId = rating!.RatingId,
+                        MovieId = rating.MovieId,
+                        UserId = rating.UserId,
+                        UserName = rating.User?.Fullname ?? "Ẩn danh",
+                        UserAvatar = rating.User?.AvatarUrl,
+                        RatingStar = rating.RatingStar,
+                        Comment = rating.Comment,
+                        RatingAt = rating.RatingAt,
+                        ImageUrls = !string.IsNullOrEmpty(rating.ImageUrls) 
+                            ? rating.ImageUrls.Split(';').ToList() 
+                            : new List<string>()
+                    }
+                };
+
+                return StatusCode(201, response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống trong quá trình tạo review."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Update an existing review for a movie
+        /// </summary>
+        /// <remarks>
+        /// User must be authenticated and must have previously reviewed this movie
+        /// </remarks>
+        /// <param name="movieId">Movie ID</param>
+        /// <param name="request">Updated review details (rating_star: 1-5, comment: 1-1000 characters)</param>
+        [HttpPut("{movieId}/reviews")]
+        [Authorize]
+        [ProducesResponseType(typeof(SuccessResponse<CreateReviewResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateReview(
+            int movieId,
+            [FromBody] CreateReviewRequest request)
+        {
+            try
+            {
+                // Validate rating_star phải trong khoảng 1-5
+                if (request.RatingStar < 1 || request.RatingStar > 5)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["rating_star"] = new ValidationError
+                            {
+                                Msg = "Số sao đánh giá phải từ 1 đến 5",
+                                Path = "rating_star",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate comment không rỗng
+                if (string.IsNullOrWhiteSpace(request.Comment))
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["comment"] = new ValidationError
+                            {
+                                Msg = "Bình luận không được để trống",
+                                Path = "comment",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate độ dài comment (1-1000 ký tự)
+                if (request.Comment.Length > 1000)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["comment"] = new ValidationError
+                            {
+                                Msg = "Bình luận không được vượt quá 1000 ký tự",
+                                Path = "comment",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate image URLs (tối đa 3 ảnh)
+                if (request.ImageUrls != null && request.ImageUrls.Count > 3)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["image_urls"] = new ValidationError
+                            {
+                                Msg = "Tối đa 3 ảnh được phép",
+                                Path = "image_urls",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Validate image URL format (nếu có)
+                if (request.ImageUrls != null && request.ImageUrls.Any())
+                {
+                    var urlPattern = @"^https?://.+\.(jpg|jpeg|png)$";
+                    var invalidUrls = request.ImageUrls
+                        .Where(url => string.IsNullOrWhiteSpace(url) || !Regex.IsMatch(url, urlPattern, RegexOptions.IgnoreCase))
+                        .ToList();
+
+                    if (invalidUrls.Any())
+                    {
+                        return BadRequest(new ValidationErrorResponse
+                        {
+                            Message = "Lỗi xác thực dữ liệu",
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["image_urls"] = new ValidationError
+                                {
+                                    Msg = "URL ảnh không hợp lệ. Phải là URL ảnh (jpg, jpeg, png)",
+                                    Path = "image_urls",
+                                    Location = "body"
+                                }
+                            }
+                        });
+                    }
+
+                    // Kiểm tra trùng lặp
+                    if (request.ImageUrls.Distinct().Count() != request.ImageUrls.Count)
+                    {
+                        return BadRequest(new ValidationErrorResponse
+                        {
+                            Message = "Lỗi xác thực dữ liệu",
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["image_urls"] = new ValidationError
+                                {
+                                    Msg = "Không được phép có URL ảnh trùng lặp",
+                                    Path = "image_urls",
+                                    Location = "body"
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Lấy userId từ token
+                var userIdClaim = User.FindFirst("userId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                {
+                    return Unauthorized(new ValidationErrorResponse
+                    {
+                        Message = "Xác thực thất bại",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["auth"] = new ValidationError
+                            {
+                                Msg = "Không thể xác định người dùng từ token",
+                                Path = "token",
+                                Location = "header"
+                            }
+                        }
+                    });
+                }
+
+                // Gọi service để update review
+                var (success, message, rating) = await _movieService.UpdateReviewAsync(
+                    movieId,
+                    userId,
+                    request.RatingStar,
+                    request.Comment,
+                    request.ImageUrls);
+
+                if (!success)
+                {
+                    // Xác định loại lỗi dựa trên message
+                    if (message.Contains("Không tìm thấy phim"))
+                    {
+                        return NotFound(new ValidationErrorResponse
+                        {
+                            Message = message,
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["movieId"] = new ValidationError
+                                {
+                                    Msg = message,
+                                    Path = "movieId",
+                                    Location = "path"
+                                }
+                            }
+                        });
+                    }
+                    else if (message.Contains("chưa review"))
+                    {
+                        return NotFound(new ValidationErrorResponse
+                        {
+                            Message = message,
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["review"] = new ValidationError
+                                {
+                                    Msg = message,
+                                    Path = "movieId",
+                                    Location = "path"
+                                }
+                            }
+                        });
+                    }
+
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = message,
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["error"] = new ValidationError
+                            {
+                                Msg = message,
+                                Path = "request",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Trả về response thành công
+                var response = new SuccessResponse<CreateReviewResponse>
+                {
+                    Message = message,
+                    Result = new CreateReviewResponse
+                    {
+                        RatingId = rating!.RatingId,
+                        MovieId = rating.MovieId,
+                        UserId = rating.UserId,
+                        UserName = rating.User?.Fullname ?? "Ẩn danh",
+                        UserAvatar = rating.User?.AvatarUrl,
+                        RatingStar = rating.RatingStar,
+                        Comment = rating.Comment,
+                        RatingAt = rating.RatingAt,
+                        ImageUrls = !string.IsNullOrEmpty(rating.ImageUrls) 
+                            ? rating.ImageUrls.Split(';').ToList() 
+                            : new List<string>()
+                    }
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống trong quá trình cập nhật review."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get reviews for a movie (Public - no authentication required)
+        /// </summary>
+        /// <remarks>
+        /// Retrieve paginated list of reviews for a specific movie. Supports sorting by newest, oldest, highest rating, or lowest rating. Only shows active (non-deleted) reviews.
+        /// </remarks>
+        /// <param name="movieId">Movie ID</param>
+        /// <param name="page">Page number (default: 1)</param>
+        /// <param name="limit">Number of reviews per page (default: 10)</param>
+        /// <param name="sort">Sort type: newest (default), oldest, highest, lowest</param>
+        [HttpGet("{movieId}/reviews")]
+        [ProducesResponseType(typeof(SuccessResponse<GetMovieReviewsResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetMovieReviews(
+            int movieId,
+            [FromQuery] int page = 1,
+            [FromQuery] int limit = 10,
+            [FromQuery] string sort = "newest")
+        {
+            try
+            {
+                // Validate movieId
+                if (movieId <= 0)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["movieId"] = new ValidationError
+                            {
+                                Msg = "Movie ID phải là số nguyên dương",
+                                Path = "movieId",
+                                Location = "path"
+                            }
+                        }
+                    });
+                }
+
+                // Validate page và limit
+                if (page < 1)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["page"] = new ValidationError
+                            {
+                                Msg = "Page phải lớn hơn hoặc bằng 1",
+                                Path = "page",
+                                Location = "query"
+                            }
+                        }
+                    });
+                }
+
+                if (limit < 1 || limit > 100)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["limit"] = new ValidationError
+                            {
+                                Msg = "Limit phải trong khoảng 1-100",
+                                Path = "limit",
+                                Location = "query"
+                            }
+                        }
+                    });
+                }
+
+                // Validate sort
+                var validSorts = new[] { "newest", "oldest", "highest", "lowest" };
+                if (!validSorts.Contains(sort.ToLower()))
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["sort"] = new ValidationError
+                            {
+                                Msg = "Sort phải là: newest, oldest, highest, hoặc lowest",
+                                Path = "sort",
+                                Location = "query"
+                            }
+                        }
+                    });
+                }
+
+                // Gọi service để lấy reviews
+                var (success, message, data) = await _movieService.GetMovieReviewsAsync(movieId, page, limit, sort);
+
+                if (!success)
+                {
+                    return NotFound(new ValidationErrorResponse
+                    {
+                        Message = message,
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["movie"] = new ValidationError
+                            {
+                                Msg = message,
+                                Path = "movieId",
+                                Location = "path"
+                            }
+                        }
+                    });
+                }
+
+                // Trả về response thành công
+                var response = new SuccessResponse<GetMovieReviewsResponse>
+                {
+                    Message = message,
+                    Result = data!
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống trong quá trình lấy danh sách review."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get current user's review for a movie (Private - authentication required)
+        /// </summary>
+        /// <remarks>
+        /// Retrieve the authenticated user's review for a specific movie. Returns null in the review field if the user has not reviewed this movie yet.
+        /// </remarks>
+        /// <param name="movieId">Movie ID</param>
+        [HttpGet("{movieId}/my-review")]
+        [Authorize]
+        [ProducesResponseType(typeof(SuccessResponse<GetMyReviewResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetMyReview(int movieId)
+        {
+            try
+            {
+                // Lấy userId từ token
+                var userIdClaim = User.FindFirst("userId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                {
+                    return Unauthorized(new ValidationErrorResponse
+                    {
+                        Message = "Xác thực thất bại",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["auth"] = new ValidationError
+                            {
+                                Msg = "Không thể xác định người dùng từ token",
+                                Path = "token",
+                                Location = "header"
+                            }
+                        }
+                    });
+                }
+
+                // Validate movieId
+                if (movieId <= 0)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["movieId"] = new ValidationError
+                            {
+                                Msg = "Movie ID phải là số nguyên dương",
+                                Path = "movieId",
+                                Location = "path"
+                            }
+                        }
+                    });
+                }
+
+                // Gọi service để lấy review của user
+                var (success, message, data) = await _movieService.GetMyReviewAsync(movieId, userId);
+
+                if (!success)
+                {
+                    return NotFound(new ValidationErrorResponse
+                    {
+                        Message = message,
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["movie"] = new ValidationError
+                            {
+                                Msg = message,
+                                Path = "movieId",
+                                Location = "path"
+                            }
+                        }
+                    });
+                }
+
+                // Trả về response thành công
+                var response = new SuccessResponse<GetMyReviewResponse>
+                {
+                    Message = message,
+                    Result = data!
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống trong quá trình lấy review của bạn."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get rating summary/statistics for a movie (Public - no authentication required)
+        /// </summary>
+        /// <remarks>
+        /// Retrieve rating summary including average rating, total ratings count, and breakdown by star rating (1-5). Only includes active (non-deleted) reviews.
+        /// </remarks>
+        /// <param name="movieId">Movie ID</param>
+        [HttpGet("{movieId}/rating-summary")]
+        [ProducesResponseType(typeof(SuccessResponse<GetMovieRatingSummaryResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetMovieRatingSummary(int movieId)
+        {
+            try
+            {
+                // Validate movieId
+                if (movieId <= 0)
+                {
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = "Lỗi xác thực dữ liệu",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["movieId"] = new ValidationError
+                            {
+                                Msg = "Movie ID phải là số nguyên dương",
+                                Path = "movieId",
+                                Location = "path"
+                            }
+                        }
+                    });
+                }
+
+                // Gọi service để lấy rating summary
+                var (success, message, data) = await _movieService.GetMovieRatingSummaryAsync(movieId);
+
+                if (!success)
+                {
+                    return NotFound(new ValidationErrorResponse
+                    {
+                        Message = message,
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["movie"] = new ValidationError
+                            {
+                                Msg = message,
+                                Path = "movieId",
+                                Location = "path"
+                            }
+                        }
+                    });
+                }
+
+                // Trả về response thành công
+                var response = new SuccessResponse<GetMovieRatingSummaryResponse>
+                {
+                    Message = message,
+                    Result = data!
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống trong quá trình lấy thống kê rating."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Delete (soft delete) a review for a movie
+        /// </summary>
+        /// <remarks>
+        /// User must be authenticated and must have previously reviewed this movie. This is a soft delete - the review is marked as deleted but not removed from database.
+        /// </remarks>
+        /// <param name="movieId">Movie ID</param>
+        [HttpDelete("{movieId}/reviews")]
+        [Authorize]
+        [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteReview(int movieId)
+        {
+            try
+            {
+                // Lấy userId từ token
+                var userIdClaim = User.FindFirst("userId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                {
+                    return Unauthorized(new ValidationErrorResponse
+                    {
+                        Message = "Xác thực thất bại",
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["auth"] = new ValidationError
+                            {
+                                Msg = "Không thể xác định người dùng từ token",
+                                Path = "token",
+                                Location = "header"
+                            }
+                        }
+                    });
+                }
+
+                // Gọi service để delete review
+                var (success, message) = await _movieService.DeleteReviewAsync(movieId, userId);
+
+                if (!success)
+                {
+                    // Xác định loại lỗi dựa trên message
+                    if (message.Contains("Không tìm thấy phim") || message.Contains("chưa review"))
+                    {
+                        return NotFound(new ValidationErrorResponse
+                        {
+                            Message = message,
+                            Errors = new Dictionary<string, ValidationError>
+                            {
+                                ["review"] = new ValidationError
+                                {
+                                    Msg = message,
+                                    Path = "movieId",
+                                    Location = "path"
+                                }
+                            }
+                        });
+                    }
+
+                    return BadRequest(new ValidationErrorResponse
+                    {
+                        Message = message,
+                        Errors = new Dictionary<string, ValidationError>
+                        {
+                            ["error"] = new ValidationError
+                            {
+                                Msg = message,
+                                Path = "request",
+                                Location = "body"
+                            }
+                        }
+                    });
+                }
+
+                // Trả về response thành công
+                var response = new SuccessResponse<object>
+                {
+                    Message = message,
+                    Result = new { }
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ErrorResponse
+                {
+                    Message = "Đã xảy ra lỗi hệ thống trong quá trình xóa review."
+                });
+            }
+        }
 
     }
 

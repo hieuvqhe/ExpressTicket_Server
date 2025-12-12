@@ -20,13 +20,20 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
         private readonly IConfiguration _config;
+        private readonly IAuditLogService _auditLogService;
 
-        public AuthService(CinemaDbCoreContext context, IPasswordHasher<User> passwordHasher, IEmailService emailService, IConfiguration config)
+        public AuthService(
+            CinemaDbCoreContext context,
+            IPasswordHasher<User> passwordHasher,
+            IEmailService emailService,
+            IConfiguration config,
+            IAuditLogService auditLogService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _emailService = emailService;
             _config = config;
+            _auditLogService = auditLogService;
         }
 
         public async Task<User> RegisterAsync(RegisterRequest request)
@@ -91,6 +98,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_RESET_PASSWORD",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new { user.UserId });
+
             var token = Guid.NewGuid().ToString();
             var tokenBytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
 
@@ -142,6 +156,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             _context.EmailVerificationTokens.Remove(verification);
             await _context.SaveChangesAsync();
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_VERIFY_EMAIL",
+                tableName: "User",
+                recordId: verification.UserId,
+                beforeData: null,
+                afterData: new
+                {
+                    verification.UserId,
+                    verification.User.Email,
+                    EmailConfirmed = true
+                });
             return true;
         }
 
@@ -183,6 +209,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await _context.SaveChangesAsync();
 
             await _emailService.SendVerificationEmailAsync(user.Email, newToken);
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_RESEND_VERIFICATION",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new
+                {
+                    user.UserId,
+                    user.Email
+                });
         }
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
@@ -199,9 +236,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (errors.Any())
                 throw new ValidationException(errors);
 
-            // Tìm user - INCLUDE PARTNER INFORMATION
+            // Tìm user - INCLUDE PARTNER, EMPLOYEE, MANAGER, AND MANAGERSTAFF INFORMATION
             var user = await _context.Users
                 .Include(u => u.Partner) // QUAN TRỌNG: Include partner info
+                .Include(u => u.Employee) // QUAN TRỌNG: Include employee info for Staff validation
+                    .ThenInclude(e => e.Partner) // Include Partner info from Employee
+                .Include(u => u.Manager) // Include Manager info
+                .Include(u => u.ManagerStaff) // Include ManagerStaff info
+                    .ThenInclude(ms => ms.Manager) // Include Manager info from ManagerStaff
+                        .ThenInclude(m => m.User) // Include Manager.User for validation
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername || u.Username == request.EmailOrUsername);
 
             if (user == null)
@@ -218,6 +261,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (user.UserType == "Partner")
             {
                 ValidatePartnerLogin(user);
+            }
+
+            // ==================== STAFF/EMPLOYEE SPECIFIC VALIDATION ====================
+            if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
+            {
+                await ValidateStaffLoginAsync(user);
+            }
+
+            // ==================== MANAGERSTAFF SPECIFIC VALIDATION ====================
+            if (user.UserType == "ManagerStaff")
+            {
+                await ValidateManagerStaffLoginAsync(user);
             }
 
             // ==================== COMMON VALIDATION ====================
@@ -260,7 +315,23 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     }
                 });
 
-            return await CreateJwtResponseAsync(user);
+            var response = await CreateJwtResponseAsync(user);
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_LOGIN_SUCCESS",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new
+                {
+                    user.UserId,
+                    user.Email,
+                    user.Username,
+                    user.UserType,
+                    response.ExpireAt
+                });
+
+            return response;
         }
 
         // ==================== NEW METHOD: VALIDATE PARTNER LOGIN ====================
@@ -328,6 +399,131 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 throw new UnauthorizedException(errors);
         }
 
+        // ==================== NEW METHOD: VALIDATE STAFF/EMPLOYEE LOGIN ====================
+        private async Task ValidateStaffLoginAsync(User user)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            // Kiểm tra employee record có tồn tại không
+            if (user.Employee == null)
+            {
+                errors["employee"] = new ValidationError
+                {
+                    Msg = "Tài khoản nhân viên chưa được thiết lập đầy đủ. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra employee is active
+            if (!user.Employee.IsActive)
+            {
+                errors["employee"] = new ValidationError
+                {
+                    Msg = "Tài khoản nhân viên đã bị khóa. Vui lòng liên hệ quản lý để được kích hoạt lại.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra partner của employee có active không (vì Staff phụ thuộc vào Partner)
+            if (user.Employee.Partner == null)
+            {
+                errors["partner"] = new ValidationError
+                {
+                    Msg = "Thông tin đối tác chưa được thiết lập. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            if (!user.Employee.Partner.IsActive)
+            {
+                errors["partner"] = new ValidationError
+                {
+                    Msg = "Tài khoản đối tác của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra partner status
+            if (user.Employee.Partner.Status?.ToLower() != "approved")
+            {
+                errors["partner"] = new ValidationError
+                {
+                    Msg = "Tài khoản đối tác chưa được duyệt. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+        }
+
+        // ==================== NEW METHOD: VALIDATE MANAGERSTAFF LOGIN ====================
+        private async Task ValidateManagerStaffLoginAsync(User user)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            // Kiểm tra ManagerStaff record có tồn tại không
+            if (user.ManagerStaff == null)
+            {
+                errors["managerStaff"] = new ValidationError
+                {
+                    Msg = "Tài khoản manager staff chưa được thiết lập đầy đủ. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra ManagerStaff is active
+            if (!user.ManagerStaff.IsActive)
+            {
+                errors["managerStaff"] = new ValidationError
+                {
+                    Msg = "Tài khoản manager staff đã bị khóa. Vui lòng liên hệ quản lý để được kích hoạt lại.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra Manager của ManagerStaff có active không
+            if (user.ManagerStaff.Manager == null)
+            {
+                errors["manager"] = new ValidationError
+                {
+                    Msg = "Thông tin manager chưa được thiết lập. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Load Manager.User nếu chưa được include (fallback)
+            if (user.ManagerStaff.Manager.User == null)
+            {
+                var managerUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.UserId == user.ManagerStaff.Manager.UserId);
+                
+                if (managerUser == null || !managerUser.IsActive)
+                {
+                    errors["manager"] = new ValidationError
+                    {
+                        Msg = "Tài khoản manager của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.",
+                        Path = "account"
+                    };
+                    throw new UnauthorizedException(errors);
+                }
+            }
+            else if (!user.ManagerStaff.Manager.User.IsActive)
+            {
+                errors["manager"] = new ValidationError
+                {
+                    Msg = "Tài khoản manager của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+        }
+
         public async Task<LoginResponse> CreateJwtResponseAsync(User user)
         {
             var jwtKey = _config["Jwt:Key"];
@@ -359,6 +555,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 {
                     claims.Add(new Claim("CommissionRate", user.Partner.CommissionRate.ToString()));
                 }
+            }
+
+            // ==================== ADD MANAGERSTAFF SPECIFIC CLAIMS ====================
+            if (user.UserType == "ManagerStaff" && user.ManagerStaff != null)
+            {
+                claims.Add(new Claim("ManagerStaffId", user.ManagerStaff.ManagerStaffId.ToString()));
+                claims.Add(new Claim("ManagerId", user.ManagerStaff.ManagerId.ToString()));
             }
 
             var tokenDescriptor = new SecurityTokenDescriptor
@@ -487,6 +690,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             token.IsRevoked = true;
             await _context.SaveChangesAsync();
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_LOGOUT",
+                tableName: "User",
+                recordId: token.UserId,
+                beforeData: null,
+                afterData: new { token.UserId, refreshToken });
             return true;
         }
 
@@ -532,6 +742,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                        $"Mã có hiệu lực trong 10 phút.\n\n" +
                        $"Nếu bạn không yêu cầu khôi phục, vui lòng bỏ qua email này.";
             await _emailService.SendEmailAsync(user.Email, subject, body);
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_FORGOT_PASSWORD",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new { user.UserId, user.Email });
         }
 
         public async Task VerifyResetCodeAsync(VerifyResetCodeRequest request)
@@ -580,6 +797,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             record.VerifiedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            await _auditLogService.LogEntityChangeAsync(
+                action: "AUTH_VERIFY_RESET_CODE",
+                tableName: "User",
+                recordId: user.UserId,
+                beforeData: null,
+                afterData: new { user.UserId, request.Code });
         }
 
         public async Task ResetPasswordAsync(ResetPasswordRequest request)

@@ -48,6 +48,8 @@ public partial class MovieSubmission
 
     public int? ReviewerId { get; set; }
 
+    public int? ManagerStaffId { get; set; }
+
     public string? RejectionReason { get; set; }
 
     public int? MovieId { get; set; }
@@ -67,5 +69,7 @@ public partial class MovieSubmission
     public virtual Partner Partner { get; set; } = null!;
 
     public virtual Manager? Reviewer { get; set; }
+
+    public virtual ManagerStaff? ManagerStaff { get; set; }
 }
 

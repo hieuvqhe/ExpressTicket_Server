@@ -26,6 +26,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses
         public string? TaxRegistrationCertificateUrl { get; set; }
         public string? IdentityCardUrl { get; set; }
         public string? TheaterPhotosUrl { get; set; }
+        public string? AdditionalDocumentsUrl { get; set; }
+
+        // ManagerStaff assignment information
+        public int? ManagerStaffId { get; set; }
+        public string? ManagerStaffName { get; set; }
+        public string? ManagerStaffEmail { get; set; }
+        public bool IsAssignedToStaff { get; set; } // Helper property để FE dễ check
     }
 
     public class PaginatedPartnersResponse

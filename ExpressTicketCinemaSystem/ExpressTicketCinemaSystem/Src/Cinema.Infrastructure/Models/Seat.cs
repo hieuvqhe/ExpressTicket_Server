@@ -21,6 +21,8 @@ public partial class Seat
 
     public virtual Screen Screen { get; set; } = null!;
 
+    public virtual ICollection<SeatLock> SeatLocks { get; set; } = new List<SeatLock>();
+
     public virtual SeatType? SeatType { get; set; }
 
     public virtual ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();

@@ -17,5 +17,6 @@
         public string TaxRegistrationCertificateUrl { get; set; } = string.Empty;
         public string IdentityCardUrl { get; set; } = string.Empty;
         public List<string> TheaterPhotosUrls { get; set; } = new();
+        public List<string> AdditionalDocumentsUrls { get; set; } = new();
     }
 }
