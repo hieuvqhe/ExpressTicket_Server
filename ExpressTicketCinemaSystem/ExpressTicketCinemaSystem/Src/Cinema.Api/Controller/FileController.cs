@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Services;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using System;
 using System.Collections.Generic;
@@ -95,6 +94,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         }
     }
 }
+
 
 
 

@@ -35,3 +35,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Helpers
     }
 }
 
+
+
+
+
+
+
+
+

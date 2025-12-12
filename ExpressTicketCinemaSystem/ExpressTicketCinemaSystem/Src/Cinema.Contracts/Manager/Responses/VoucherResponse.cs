@@ -19,6 +19,10 @@
         // Manager info
         public int ManagerId { get; set; }
         public string ManagerName { get; set; } = null!;
+
+        // ManagerStaff info
+        public int? ManagerStaffId { get; set; }
+        public string? ManagerStaffName { get; set; }
     }
 
     public class VoucherListResponse

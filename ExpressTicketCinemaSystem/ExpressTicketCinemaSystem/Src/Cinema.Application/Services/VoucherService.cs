@@ -9,10 +9,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 {
     public interface IVoucherService
     {
-        Task<VoucherResponse> CreateVoucherAsync(int managerId, CreateVoucherRequest request);
+        Task<VoucherResponse> CreateVoucherAsync(int managerId, CreateVoucherRequest request, int? managerStaffId = null);
         Task<PaginatedVouchersResponse> GetAllVouchersAsync(int managerId, int page, int limit, string? search, string? status, string? sortBy, string? sortOrder);
         Task<VoucherResponse> GetVoucherByIdAsync(int voucherId, int managerId);
-        Task<VoucherResponse> UpdateVoucherAsync(int voucherId, int managerId, UpdateVoucherRequest request);
+        Task<VoucherResponse> UpdateVoucherAsync(int voucherId, int managerId, UpdateVoucherRequest request, int? managerStaffId = null);
         Task SoftDeleteVoucherAsync(int voucherId, int managerId);
         Task ToggleVoucherStatusAsync(int voucherId, int managerId);
         Task<List<VoucherEmailHistoryResponse>> GetVoucherEmailHistoryAsync(int voucherId, int managerId);
@@ -69,12 +69,31 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _auditLogService = auditLogService;
         }
 
-        public async Task<VoucherResponse> CreateVoucherAsync(int managerId, CreateVoucherRequest request)
+        public async Task<VoucherResponse> CreateVoucherAsync(int managerId, CreateVoucherRequest request, int? managerStaffId = null)
         {
             // Validate manager exists
             if (!await _managerService.ValidateManagerExistsAsync(managerId))
             {
                 throw new NotFoundException("Manager không tồn tại");
+            }
+
+            // If ManagerStaff creates voucher, verify they belong to this Manager and have permission
+            if (managerStaffId.HasValue)
+            {
+                var managerStaff = await _context.ManagerStaffs
+                    .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId.Value && ms.ManagerId == managerId && ms.IsActive);
+                if (managerStaff == null)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["managerStaff"] = new ValidationError
+                        {
+                            Msg = "ManagerStaff không thuộc quyền quản lý của Manager này",
+                            Path = "managerStaffId",
+                            Location = "body"
+                        }
+                    });
+                }
             }
 
             // Validate voucher code uniqueness
@@ -111,6 +130,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 UsageLimit = request.UsageLimit,
                 Description = request.Description,
                 IsActive = request.IsActive,
+                ManagerStaffId = managerStaffId, // Set ManagerStaffId if created by ManagerStaff
                 IsRestricted = request.IsRestricted,
                 ManagerId = managerId,
                 CreatedAt = DateTime.UtcNow,
@@ -128,7 +148,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 afterData: BuildVoucherSnapshot(voucher),
                 metadata: new { managerId });
 
-            return await MapToVoucherResponseAsync(voucher);
+            // Reload voucher with navigation properties for response
+            var createdVoucher = await _context.Vouchers
+                .Include(v => v.Manager)
+                .ThenInclude(m => m.User)
+                .Include(v => v.ManagerStaff)
+                .ThenInclude(ms => ms.User)
+                .FirstOrDefaultAsync(v => v.VoucherId == voucher.VoucherId);
+
+            return await MapToVoucherResponseAsync(createdVoucher!);
         }
 
         public async Task<PaginatedVouchersResponse> GetAllVouchersAsync(int managerId, int page, int limit, string? search, string? status, string? sortBy, string? sortOrder)
@@ -219,6 +247,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var voucher = await _context.Vouchers
                 .Include(v => v.Manager)
                 .ThenInclude(m => m.User)
+                .Include(v => v.ManagerStaff)
+                .ThenInclude(ms => ms.User)
                 .FirstOrDefaultAsync(v => v.VoucherId == voucherId && !v.IsDeleted);
 
             if (voucher == null)
@@ -234,11 +264,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             return await MapToVoucherResponseAsync(voucher);
         }
 
-        public async Task<VoucherResponse> UpdateVoucherAsync(int voucherId, int managerId, UpdateVoucherRequest request)
+        public async Task<VoucherResponse> UpdateVoucherAsync(int voucherId, int managerId, UpdateVoucherRequest request, int? managerStaffId = null)
         {
             var voucher = await _context.Vouchers
                 .Include(v => v.Manager)
                 .ThenInclude(m => m.User)
+                .Include(v => v.ManagerStaff)
+                .ThenInclude(ms => ms.User)
                 .FirstOrDefaultAsync(v => v.VoucherId == voucherId && !v.IsDeleted);
 
             if (voucher == null)
@@ -249,6 +281,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (voucher.ManagerId != managerId)
             {
                 throw new UnauthorizedException("Bạn không có quyền cập nhật voucher này");
+            }
+
+            // If ManagerStaff updates voucher, update ManagerStaffId
+            if (managerStaffId.HasValue)
+            {
+                voucher.ManagerStaffId = managerStaffId;
             }
 
             var beforeSnapshot = BuildVoucherSnapshot(voucher);
@@ -491,7 +529,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 CreatedAt = voucher.CreatedAt,
                 UpdatedAt = voucher.UpdatedAt,
                 ManagerId = voucher.ManagerId,
-                ManagerName = voucher.Manager.FullName
+                ManagerName = voucher.Manager.FullName,
+                ManagerStaffId = voucher.ManagerStaffId,
+                ManagerStaffName = voucher.ManagerStaff?.FullName
             };
         }
 

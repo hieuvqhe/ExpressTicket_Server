@@ -24,6 +24,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly IPasswordHasher<User> _passwordHasher;
         private readonly IEmailService _emailService;
         private readonly IManagerService _managerService;
+        private readonly IManagerStaffPermissionService _managerStaffPermissionService;
         private readonly IContractValidationService _contractValidationService;
         private readonly IAuditLogService _auditLogService;
         private readonly ILogger<PartnerService> _logger;
@@ -32,7 +33,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             CinemaDbCoreContext context,
             IPasswordHasher<User> passwordHasher,
             IEmailService emailService,
-            IManagerService managerService ,
+            IManagerService managerService,
+            IManagerStaffPermissionService managerStaffPermissionService,
             IContractValidationService contractValidationService,
             IAuditLogService auditLogService,
             ILogger<PartnerService> logger)
@@ -41,6 +43,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _passwordHasher = passwordHasher;
             _emailService = emailService;
             _managerService = managerService;
+            _managerStaffPermissionService = managerStaffPermissionService;
             _contractValidationService = contractValidationService;
             _auditLogService = auditLogService;
             _logger = logger;
@@ -625,7 +628,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     int limit = 10,
     string? search = null,
     string? sortBy = "created_at",
-    string? sortOrder = "desc")
+    string? sortOrder = "desc",
+    int? managerStaffId = null)
         {
             // Validate pagination
             if (page < 1) page = 1;
@@ -634,8 +638,67 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             // Base query - chỉ lấy partners có status = "pending"
             var query = _context.Partners
                 .Include(p => p.User)
+                .Include(p => p.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .Where(p => p.Status == "pending")
                 .AsQueryable();
+
+            // If managerStaffId is provided, filter by PARTNER_READ permission
+            if (managerStaffId.HasValue)
+            {
+                // Get list of partner IDs that ManagerStaff has PARTNER_READ permission
+                var assignedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaffId.Value)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+
+                if (assignedPartnerIds.Count > 0)
+                {
+                    // Get partner IDs with PARTNER_READ permission
+                    var partnerIdsWithPermission = await _context.ManagerStaffPartnerPermissions
+                        .Where(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && (msp.PartnerId == null || assignedPartnerIds.Contains(msp.PartnerId.Value))
+                            && msp.Permission.PermissionCode == "PARTNER_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive)
+                        .Select(msp => msp.PartnerId ?? 0)
+                        .Distinct()
+                        .ToListAsync();
+
+                    // Check if has global permission (null)
+                    var hasGlobalPermission = await _context.ManagerStaffPartnerPermissions
+                        .AnyAsync(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && msp.PartnerId == null
+                            && msp.Permission.PermissionCode == "PARTNER_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive);
+
+                    if (hasGlobalPermission)
+                    {
+                        // Global permission: show all pending partners assigned to this staff
+                        query = query.Where(p => p.ManagerStaffId == managerStaffId.Value);
+                    }
+                    else
+                    {
+                        // Specific permissions: only show partners with PARTNER_READ permission
+                        var validPartnerIds = partnerIdsWithPermission.Where(p => p > 0).ToList();
+                        if (validPartnerIds.Count > 0)
+                        {
+                            query = query.Where(p => validPartnerIds.Contains(p.PartnerId) && p.ManagerStaffId == managerStaffId.Value);
+                        }
+                        else
+                        {
+                            // No permission: return empty result
+                            query = query.Where(p => false);
+                        }
+                    }
+                }
+                else
+                {
+                    // No assigned partners: return empty result
+                    query = query.Where(p => false);
+                }
+            }
 
             // Apply search filter
             if (!string.IsNullOrWhiteSpace(search))
@@ -670,6 +733,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     CommissionRate = p.CommissionRate,
                     Status = p.Status,
                     CreatedAt = p.CreatedAt, 
+                    UpdatedAt = p.UpdatedAt ?? p.CreatedAt,
                     UserId = p.UserId,
                     Fullname = p.User != null ? p.User.Fullname : "",
                     UserEmail = p.User != null ? p.User.Email : "",
@@ -679,7 +743,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     TaxRegistrationCertificateUrl = p.TaxRegistrationCertificateUrl,
                     IdentityCardUrl = p.IdentityCardUrl,
                     TheaterPhotosUrl = p.TheaterPhotosUrl,
-                    AdditionalDocumentsUrl = p.AdditionalDocumentsUrl
+                    AdditionalDocumentsUrl = p.AdditionalDocumentsUrl,
+
+                    // ManagerStaff assignment information
+                    ManagerStaffId = p.ManagerStaffId,
+                    ManagerStaffName = p.ManagerStaff != null ? p.ManagerStaff.FullName : null,
+                    ManagerStaffEmail = p.ManagerStaff != null && p.ManagerStaff.User != null ? p.ManagerStaff.User.Email : null,
+                    IsAssignedToStaff = p.ManagerStaffId != null
                 })
                 .ToListAsync();  
 
@@ -697,12 +767,14 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Pagination = pagination
             };
         }
-        public async Task<PartnerApprovalResponse> ApprovePartnerAsync(int partnerId, int managerId)
+        public async Task<PartnerApprovalResponse> ApprovePartnerAsync(int partnerId, int managerId, int? managerStaffId = null)
         {
             var partner = await _context.Partners
             .Include(p => p.User)
             .Include(p => p.Manager)
             .ThenInclude(m => m.User)
+            .Include(p => p.ManagerStaff)
+            .ThenInclude(ms => ms.User)
             .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
 
             if (partner == null)
@@ -722,6 +794,38 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (manager == null)
                 throw new UnauthorizedException("Manager không tồn tại.");
 
+            // If managerStaffId is provided, verify it belongs to the manager and has permission
+            ManagerStaff? managerStaff = null;
+            if (managerStaffId.HasValue)
+            {
+                // Check permission: ManagerStaff must have PARTNER_APPROVE permission for this partner
+                var hasPermission = await _managerStaffPermissionService.HasPermissionAsync(
+                    managerStaffId.Value,
+                    partnerId,
+                    "PARTNER_APPROVE");
+
+                if (!hasPermission)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["permission"] = new ValidationError
+                        {
+                            Msg = "Bạn không có quyền duyệt partner này",
+                            Path = "partnerId",
+                            Location = "path"
+                        }
+                    });
+                }
+
+                managerStaff = await _context.ManagerStaffs
+                    .Include(ms => ms.Manager)
+                    .Include(ms => ms.User)
+                    .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId.Value && ms.ManagerId == managerId && ms.IsActive);
+
+                if (managerStaff == null)
+                    throw new NotFoundException("Không tìm thấy staff hoặc staff không thuộc quyền quản lý của bạn.");
+            }
+
             // Business logic validation
             ValidatePartnerForApproval(partner);
 
@@ -730,9 +834,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             partner.Status = "approved";
             partner.ApprovedAt = DateTime.UtcNow;
-            partner.ApprovedBy = manager.ManagerId; // ← DÙNG manager.ManagerId THAY VÌ managerId parameter
+            partner.ApprovedBy = manager.ManagerId;
             partner.UpdatedAt = DateTime.UtcNow;
-            partner.ManagerId = manager.ManagerId;  // ← DÙNG manager.ManagerId THAY VÌ managerId parameter
+            partner.ManagerId = manager.ManagerId;
+            
+            // If approved by ManagerStaff, assign partner to that staff
+            if (managerStaff != null)
+            {
+                partner.ManagerStaffId = managerStaff.ManagerStaffId;
+            }
 
             if (partner.User != null)
             {
@@ -868,7 +978,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Console.WriteLine($"Failed to send approval email: {ex.Message}");
             }
         }
-        public async Task<PartnerRejectionResponse> RejectPartnerAsync(int partnerId, int managerId, RejectPartnerRequest request)
+        public async Task<PartnerRejectionResponse> RejectPartnerAsync(int partnerId, int managerId, RejectPartnerRequest request, int? managerStaffId = null)
         {
             ValidateRejectRequest(request);
 
@@ -876,6 +986,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
              .Include(p => p.User)
              .Include(p => p.Manager)
              .ThenInclude(m => m.User)
+             .Include(p => p.ManagerStaff)
+             .ThenInclude(ms => ms.User)
              .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
 
             if (partner == null)
@@ -894,6 +1006,19 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (manager == null)
                 throw new UnauthorizedException("Manager không tồn tại.");
+
+            // If managerStaffId is provided, verify it belongs to the manager
+            ManagerStaff? managerStaff = null;
+            if (managerStaffId.HasValue)
+            {
+                managerStaff = await _context.ManagerStaffs
+                    .Include(ms => ms.Manager)
+                    .Include(ms => ms.User)
+                    .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId.Value && ms.ManagerId == managerId && ms.IsActive);
+
+                if (managerStaff == null)
+                    throw new NotFoundException("Không tìm thấy staff hoặc staff không thuộc quyền quản lý của bạn.");
+            }
 
             ValidatePartnerForRejection(partner);
 
@@ -1051,10 +1176,50 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 Console.WriteLine($"Failed to send rejection email: {ex.Message}");
             }
         }
+        public async Task AssignPartnerToStaffAsync(int partnerId, int managerId, int managerStaffId)
+        {
+            var partner = await _context.Partners
+                .Include(p => p.Manager)
+                .Include(p => p.ManagerStaff)
+                .FirstOrDefaultAsync(p => p.PartnerId == partnerId);
+
+            if (partner == null)
+                throw new NotFoundException("Không tìm thấy partner với ID này.");
+
+            // Verify manager exists and has access
+            var manager = await _context.Managers
+                .FirstOrDefaultAsync(m => m.ManagerId == managerId);
+
+            if (manager == null)
+                throw new UnauthorizedException("Manager không tồn tại.");
+
+            // Verify managerStaff exists and belongs to this manager
+            var managerStaff = await _context.ManagerStaffs
+                .Include(ms => ms.Manager)
+                .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId && ms.ManagerId == managerId && ms.IsActive);
+
+            if (managerStaff == null)
+                throw new NotFoundException("Không tìm thấy staff hoặc staff không thuộc quyền quản lý của bạn.");
+
+            // Update partner to assign to staff
+            partner.ManagerStaffId = managerStaffId;
+            partner.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_ASSIGN_PARTNER_TO_STAFF",
+                tableName: "Partner",
+                recordId: partner.PartnerId,
+                beforeData: new { partner.ManagerStaffId },
+                afterData: new { ManagerStaffId = managerStaffId },
+                metadata: new { managerId, managerStaffId });
+        }
+
         public async Task<PaginatedPartnersWithoutContractsResponse> GetPartnersWithoutContractsAsync(
     int page = 1,
     int limit = 10,
-    string? search = null)
+    string? search = null,
+    int? managerStaffId = null)
         {
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 10;
@@ -1067,6 +1232,62 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var query = _context.Partners
                 .Where(p => p.Status == "approved" && !partnersWithContracts.Contains(p.PartnerId))
                 .AsQueryable();
+
+            // If ManagerStaff, filter by PARTNER_READ permission
+            if (managerStaffId.HasValue)
+            {
+                var assignedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaffId.Value)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+
+                if (assignedPartnerIds.Count > 0)
+                {
+                    // Get partner IDs with PARTNER_READ permission
+                    var partnerIdsWithPermission = await _context.ManagerStaffPartnerPermissions
+                        .Where(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && (msp.PartnerId == null || assignedPartnerIds.Contains(msp.PartnerId.Value))
+                            && msp.Permission.PermissionCode == "PARTNER_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive)
+                        .Select(msp => msp.PartnerId ?? 0)
+                        .Distinct()
+                        .ToListAsync();
+
+                    // Check if has global permission (null)
+                    var hasGlobalPermission = await _context.ManagerStaffPartnerPermissions
+                        .AnyAsync(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && msp.PartnerId == null
+                            && msp.Permission.PermissionCode == "PARTNER_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive);
+
+                    if (hasGlobalPermission)
+                    {
+                        // Global permission: show all partners without contracts assigned to this staff
+                        query = query.Where(p => assignedPartnerIds.Contains(p.PartnerId));
+                    }
+                    else
+                    {
+                        // Specific permissions: only show partners with PARTNER_READ permission
+                        var validPartnerIds = partnerIdsWithPermission.Where(p => p > 0).ToList();
+                        if (validPartnerIds.Count > 0)
+                        {
+                            query = query.Where(p => validPartnerIds.Contains(p.PartnerId));
+                        }
+                        else
+                        {
+                            // No permission: return empty result
+                            query = query.Where(p => false);
+                        }
+                    }
+                }
+                else
+                {
+                    // No assigned partners: return empty result
+                    query = query.Where(p => false);
+                }
+            }
 
             // Apply search filter
             if (!string.IsNullOrWhiteSpace(search))

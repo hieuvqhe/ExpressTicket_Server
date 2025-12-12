@@ -45,6 +45,10 @@ public partial class CinemaDbCoreContext : DbContext
 
     public virtual DbSet<Manager> Managers { get; set; }
 
+    public virtual DbSet<ManagerStaff> ManagerStaffs { get; set; }
+
+    public virtual DbSet<ManagerStaffPartnerPermission> ManagerStaffPartnerPermissions { get; set; }
+
     public virtual DbSet<Movie> Movies { get; set; }
 
     public virtual DbSet<MovieActor> MovieActors { get; set; }
@@ -427,6 +431,11 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasMaxLength(500)
                 .HasColumnName("manager_signature");
             entity.Property(e => e.ManagerSignedAt).HasColumnName("manager_signed_at");
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
+            entity.Property(e => e.ManagerStaffSignature)
+                .HasMaxLength(500)
+                .HasColumnName("manager_staff_signature");
+            entity.Property(e => e.ManagerStaffSignedAt).HasColumnName("manager_staff_signed_at");
             entity.Property(e => e.MinimumRevenue)
                 .HasColumnType("decimal(18, 2)")
                 .HasColumnName("minimum_revenue");
@@ -460,6 +469,11 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.PartnerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Contract_Partner");
+
+            entity.HasOne(d => d.ManagerStaff).WithMany(p => p.Contracts)
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Contract_ManagerStaff");
         });
 
         modelBuilder.Entity<Customer>(entity =>
@@ -743,6 +757,96 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasConstraintName("FK_Manager_User");
         });
 
+        modelBuilder.Entity<ManagerStaff>(entity =>
+        {
+            entity.HasKey(e => e.ManagerStaffId).HasName("PK__ManagerStaff__ManagerStaffId");
+
+            entity.ToTable("ManagerStaff");
+
+            entity.HasIndex(e => e.UserId, "UQ__ManagerStaff__B9BE370E").IsUnique();
+
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
+            entity.Property(e => e.ManagerId).HasColumnName("manager_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.FullName)
+                .HasMaxLength(255)
+                .IsUnicode(true)
+                .HasColumnName("full_name");
+            entity.Property(e => e.RoleType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("role_type");
+            entity.Property(e => e.HireDate).HasColumnName("hire_date");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+
+            entity.HasOne(d => d.Manager).WithMany(p => p.ManagerStaffs)
+                .HasForeignKey(d => d.ManagerId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaff_Manager");
+
+            entity.HasOne(d => d.User).WithOne(p => p.ManagerStaff)
+                .HasForeignKey<ManagerStaff>(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaff_User");
+        });
+
+        modelBuilder.Entity<ManagerStaffPartnerPermission>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_ManagerStaffPartnerPermissions");
+
+            entity.ToTable("ManagerStaffPartnerPermissions");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
+            entity.Property(e => e.PartnerId).HasColumnName("partner_id");
+            entity.Property(e => e.PermissionId).HasColumnName("permission_id");
+            entity.Property(e => e.GrantedBy).HasColumnName("granted_by");
+            entity.Property(e => e.GrantedAt)
+                .HasDefaultValueSql("(sysutcdatetime())")
+                .HasColumnName("granted_at");
+            entity.Property(e => e.IsActive)
+                .HasDefaultValue(true)
+                .HasColumnName("is_active");
+            entity.Property(e => e.RevokedAt).HasColumnName("revoked_at");
+            entity.Property(e => e.RevokedBy).HasColumnName("revoked_by");
+
+            entity.HasOne(d => d.ManagerStaff).WithMany(p => p.PartnerPermissions)
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_ManagerStaff");
+
+            entity.HasOne(d => d.Partner).WithMany()
+                .HasForeignKey(d => d.PartnerId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_Partner");
+
+            entity.HasOne(d => d.Permission).WithMany(p => p.ManagerStaffPartnerPermissions)
+                .HasForeignKey(d => d.PermissionId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_Permission");
+
+            entity.HasOne(d => d.GrantedByUser).WithMany()
+                .HasForeignKey(d => d.GrantedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_GrantedBy");
+
+            entity.HasOne(d => d.RevokedByUser).WithMany()
+                .HasForeignKey(d => d.RevokedBy)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_ManagerStaffPartnerPermissions_RevokedBy");
+
+            // Index để tăng tốc truy vấn
+            entity.HasIndex(e => new { e.ManagerStaffId, e.PartnerId, e.PermissionId })
+                .HasDatabaseName("IX_ManagerStaffPartnerPermissions_Staff_Partner_Permission")
+                .HasFilter("[is_active] = 1");
+
+            entity.HasIndex(e => e.ManagerStaffId)
+                .HasDatabaseName("IX_ManagerStaffPartnerPermissions_Staff_Active")
+                .HasFilter("[is_active] = 1");
+        });
+
         modelBuilder.Entity<Movie>(entity =>
         {
             entity.HasKey(e => e.MovieId).HasName("PK__Movie__83CDF7494F73DF92");
@@ -891,6 +995,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("resubmitted_at");
             entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
             entity.Property(e => e.ReviewerId).HasColumnName("reviewer_id");
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
                 .HasDefaultValue("Draft")
@@ -916,6 +1021,11 @@ public partial class CinemaDbCoreContext : DbContext
             entity.HasOne(d => d.Reviewer).WithMany(p => p.MovieSubmissions)
                 .HasForeignKey(d => d.ReviewerId)
                 .HasConstraintName("FK_MovieSubmission_Reviewer");
+
+            entity.HasOne(d => d.ManagerStaff).WithMany()
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_MovieSubmission_ManagerStaff");
         });
         modelBuilder.Entity<MovieSubmissionActor>(entity =>
         {
@@ -994,6 +1104,7 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
             entity.Property(e => e.ManagerId).HasColumnName("manager_id");
+            entity.Property(e => e.ManagerStaffId).HasColumnName("manager_staff_id");
             entity.Property(e => e.PartnerName)
                 .HasMaxLength(255)
                 .IsUnicode(true)
@@ -1035,6 +1146,11 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.ManagerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Partner_Manager");
+
+            entity.HasOne(d => d.ManagerStaff).WithMany(p => p.Partners)
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Partner_ManagerStaff");
 
             entity.HasOne(d => d.User).WithOne(p => p.Partner)
                 .HasForeignKey<Partner>(d => d.UserId)
@@ -1756,6 +1872,9 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasColumnName("manager_id")
                 .HasDefaultValue(1);
 
+            entity.Property(e => e.ManagerStaffId)
+                .HasColumnName("manager_staff_id");
+
             entity.Property(e => e.DiscountType)
                 .HasMaxLength(20)
                 .IsUnicode(false)
@@ -1805,6 +1924,12 @@ public partial class CinemaDbCoreContext : DbContext
                 .HasForeignKey(d => d.ManagerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Voucher_Manager");
+
+            entity.HasOne(d => d.ManagerStaff)
+                .WithMany()
+                .HasForeignKey(d => d.ManagerStaffId)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("FK_Voucher_ManagerStaff");
         });
 
         modelBuilder.Entity<VoucherEmailHistory>(entity =>

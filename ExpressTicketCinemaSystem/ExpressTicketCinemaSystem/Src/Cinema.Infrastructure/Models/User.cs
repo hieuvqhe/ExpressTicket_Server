@@ -45,6 +45,8 @@ public partial class User
 
     public virtual Manager? Manager { get; set; }
 
+    public virtual ManagerStaff? ManagerStaff { get; set; }
+
     public virtual Partner? Partner { get; set; }
 
     public virtual ICollection<PasswordResetCode> PasswordResetCodes { get; set; } = new List<PasswordResetCode>();

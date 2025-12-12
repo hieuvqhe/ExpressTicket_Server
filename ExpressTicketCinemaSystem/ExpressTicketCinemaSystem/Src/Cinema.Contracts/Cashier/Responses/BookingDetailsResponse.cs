@@ -70,3 +70,11 @@ public class BookingCheckInSummary
 
 
 
+
+
+
+
+
+
+
+

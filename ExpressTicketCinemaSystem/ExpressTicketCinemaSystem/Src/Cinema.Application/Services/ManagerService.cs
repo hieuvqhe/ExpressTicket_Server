@@ -3,6 +3,7 @@ using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Responses;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using System.Linq;
 
 namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
@@ -27,6 +28,39 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             return manager.ManagerId;
+        }
+
+        public async Task<int> GetManagerIdOrManagerStaffIdByUserIdAsync(int userId)
+        {
+            // First check if user is a Manager
+            var manager = await _context.Managers
+                .FirstOrDefaultAsync(m => m.UserId == userId);
+
+            if (manager != null)
+            {
+                return manager.ManagerId;
+            }
+
+            // If not manager, check if user is ManagerStaff
+            var managerStaff = await _context.ManagerStaffs
+                .Include(ms => ms.Manager)
+                .FirstOrDefaultAsync(ms => ms.UserId == userId && ms.IsActive);
+
+            if (managerStaff != null)
+            {
+                // Return the ManagerId that this staff belongs to
+                return managerStaff.ManagerId;
+            }
+
+            throw new UnauthorizedException("Người dùng không phải là manager hoặc manager staff.");
+        }
+
+        public async Task<int?> GetManagerStaffIdByUserIdAsync(int userId)
+        {
+            var managerStaff = await _context.ManagerStaffs
+                .FirstOrDefaultAsync(ms => ms.UserId == userId && ms.IsActive);
+
+            return managerStaff?.ManagerStaffId;
         }
 
         public async Task<int> GetDefaultManagerIdAsync()
@@ -55,20 +89,61 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .AnyAsync(m => m.UserId == userId);
         }
 
+        public async Task<bool> IsUserManagerOrManagerStaffAsync(int userId)
+        {
+            var isManager = await _context.Managers.AnyAsync(m => m.UserId == userId);
+            if (isManager) return true;
+
+            var isManagerStaff = await _context.ManagerStaffs
+                .AnyAsync(ms => ms.UserId == userId && ms.IsActive);
+            
+            return isManagerStaff;
+        }
+
         /// <summary>
-        /// Get all bookings (Manager only) with filtering and pagination
+        /// Get all bookings (Manager or ManagerStaff) with filtering and pagination
         /// Manager can see bookings from all partners and all cinemas
+        /// ManagerStaff can only see bookings from partners they manage
         /// </summary>
         public async Task<ManagerBookingsResponse> GetManagerBookingsAsync(int userId, GetManagerBookingsRequest request)
         {
-            // Validate manager user
+            // Check if user is Manager or ManagerStaff
+            // Note: Authorization is already checked at controller level with [Authorize(Roles = "Manager,ManagerStaff")]
+            // So we just need to verify the records exist and are active
             var manager = await _context.Managers
                 .Include(m => m.User)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.UserId == userId);
 
-            if (manager == null || manager.User == null || !manager.User.IsActive || manager.User.UserType.ToLower() != "manager")
-                throw new UnauthorizedException("Bạn không có quyền truy cập. Chỉ Manager mới có thể xem tất cả đơn hàng.");
+            var managerStaff = await _context.ManagerStaffs
+                .Include(ms => ms.User)
+                .Include(ms => ms.Manager)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ms => ms.UserId == userId && ms.IsActive);
+
+            bool isManager = manager != null && manager.User != null && manager.User.IsActive;
+            bool isManagerStaff = managerStaff != null && managerStaff.User != null && managerStaff.User.IsActive && managerStaff.IsActive;
+
+            if (!isManager && !isManagerStaff)
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["auth"] = new ValidationError
+                    {
+                        Msg = "Bạn không có quyền truy cập. Chỉ Manager hoặc ManagerStaff mới có thể xem đơn hàng.",
+                        Path = "form",
+                        Location = "body"
+                    }
+                });
+
+            // Get list of partner IDs that ManagerStaff manages
+            List<int>? managedPartnerIds = null;
+            if (isManagerStaff)
+            {
+                managedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaff.ManagerStaffId)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+            }
 
             // Validate pagination
             if (request.Page < 1)
@@ -101,6 +176,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
 
             // Build query - Manager: NO LIMIT, can see all bookings
+            // ManagerStaff: Only see bookings from managed partners
             var query = _context.Bookings
                 .Include(b => b.Showtime)
                     .ThenInclude(s => s.Movie)
@@ -111,6 +187,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(c => c.User)
                 .Include(b => b.Tickets)
                 .AsNoTracking();
+
+            // If ManagerStaff, filter by managed partners
+            if (isManagerStaff && managedPartnerIds != null && managedPartnerIds.Any())
+            {
+                query = query.Where(b => managedPartnerIds.Contains(b.Showtime.Cinema.PartnerId));
+            }
+            else if (isManagerStaff)
+            {
+                // ManagerStaff has no managed partners, return empty result
+                query = query.Where(b => false);
+            }
 
             // Apply filters
             if (request.PartnerId.HasValue)
@@ -296,19 +383,38 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
         /// <summary>
-        /// Get detailed information of a specific booking (Manager only)
+        /// Get detailed information of a specific booking (Manager or ManagerStaff)
         /// Manager can see booking details from all partners and all cinemas
+        /// ManagerStaff can only see booking details from partners they manage
         /// </summary>
         public async Task<BookingDetailResponse> GetBookingDetailAsync(int userId, int bookingId)
         {
-            // Validate manager user
+            // Check if user is Manager or ManagerStaff
+            // Note: Authorization is already checked at controller level with [Authorize(Roles = "Manager,ManagerStaff")]
+            // So we just need to verify the records exist and are active
             var manager = await _context.Managers
                 .Include(m => m.User)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.UserId == userId);
 
-            if (manager == null || manager.User == null || !manager.User.IsActive || manager.User.UserType.ToLower() != "manager")
-                throw new UnauthorizedException("Bạn không có quyền truy cập. Chỉ Manager mới có thể xem chi tiết đơn hàng.");
+            var managerStaff = await _context.ManagerStaffs
+                .Include(ms => ms.User)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ms => ms.UserId == userId && ms.IsActive);
+
+            bool isManager = manager != null && manager.User != null && manager.User.IsActive;
+            bool isManagerStaff = managerStaff != null && managerStaff.User != null && managerStaff.User.IsActive && managerStaff.IsActive;
+
+            if (!isManager && !isManagerStaff)
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["auth"] = new ValidationError
+                    {
+                        Msg = "Bạn không có quyền truy cập. Chỉ Manager hoặc ManagerStaff mới có thể xem chi tiết đơn hàng.",
+                        Path = "form",
+                        Location = "body"
+                    }
+                });
 
             // Get booking with all related data
             var booking = await _context.Bookings
@@ -333,6 +439,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (booking == null)
                 throw new NotFoundException($"Không tìm thấy đơn hàng với ID {bookingId}.");
+
+            // If ManagerStaff, verify they manage this partner
+            if (isManagerStaff)
+            {
+                var partnerId = booking.Showtime.Cinema.PartnerId;
+                var managesPartner = await _context.Partners
+                    .AnyAsync(p => p.PartnerId == partnerId && p.ManagerStaffId == managerStaff.ManagerStaffId);
+
+                if (!managesPartner)
+                    throw new UnauthorizedException("Bạn không có quyền xem đơn hàng này. Chỉ có thể xem đơn hàng từ các partner bạn quản lý.");
+            }
 
             // Calculate pricing breakdown
             decimal ticketsSubtotal = booking.Tickets.Sum(t => t.Price);
@@ -498,19 +615,48 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
         /// <summary>
-        /// Get booking statistics (Manager only)
+        /// Get booking statistics (Manager or ManagerStaff)
         /// Manager can see statistics from all partners and all cinemas
+        /// ManagerStaff can only see statistics from partners they manage
         /// </summary>
         public async Task<ManagerBookingStatisticsResponse> GetBookingStatisticsAsync(int userId, GetManagerBookingStatisticsRequest request)
         {
-            // Validate manager user
+            // Check if user is Manager or ManagerStaff
+            // Note: Authorization is already checked at controller level with [Authorize(Roles = "Manager,ManagerStaff")]
+            // So we just need to verify the records exist and are active
             var manager = await _context.Managers
                 .Include(m => m.User)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.UserId == userId);
 
-            if (manager == null || manager.User == null || !manager.User.IsActive || manager.User.UserType.ToLower() != "manager")
-                throw new UnauthorizedException("Bạn không có quyền truy cập. Chỉ Manager mới có thể xem thống kê đơn hàng.");
+            var managerStaff = await _context.ManagerStaffs
+                .Include(ms => ms.User)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ms => ms.UserId == userId && ms.IsActive);
+
+            bool isManager = manager != null && manager.User != null && manager.User.IsActive;
+            bool isManagerStaff = managerStaff != null && managerStaff.User != null && managerStaff.User.IsActive && managerStaff.IsActive;
+
+            if (!isManager && !isManagerStaff)
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["auth"] = new ValidationError
+                    {
+                        Msg = "Bạn không có quyền truy cập. Chỉ Manager hoặc ManagerStaff mới có thể xem thống kê đơn hàng.",
+                        Path = "form",
+                        Location = "body"
+                    }
+                });
+
+            // Get list of partner IDs that ManagerStaff manages
+            List<int>? managedPartnerIds = null;
+            if (isManagerStaff)
+            {
+                managedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaff.ManagerStaffId)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+            }
 
             // Validate top limit
             if (request.TopLimit < 1 || request.TopLimit > 50)
@@ -549,6 +695,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 .Include(b => b.Voucher)
                 .AsNoTracking()
                 .Where(b => b.BookingTime >= fromDate && b.BookingTime <= toDate);
+
+            // If ManagerStaff, filter by managed partners
+            if (isManagerStaff && managedPartnerIds != null && managedPartnerIds.Any())
+            {
+                baseQuery = baseQuery.Where(b => managedPartnerIds.Contains(b.Showtime.Cinema.PartnerId));
+            }
+            else if (isManagerStaff)
+            {
+                // ManagerStaff has no managed partners, return empty result
+                baseQuery = baseQuery.Where(b => false);
+            }
 
             // Apply filters
             if (request.PartnerId.HasValue)
@@ -1098,14 +1255,42 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             int userId, 
             GetSuccessfulBookingCustomersRequest request)
         {
-            // Validate manager user
+            // Check if user is Manager or ManagerStaff
+            // Note: Authorization is already checked at controller level with [Authorize(Roles = "Manager,ManagerStaff")]
+            // So we just need to verify the records exist and are active
             var manager = await _context.Managers
                 .Include(m => m.User)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.UserId == userId);
 
-            if (manager == null || manager.User == null || !manager.User.IsActive || manager.User.UserType.ToLower() != "manager")
-                throw new UnauthorizedException("Bạn không có quyền truy cập. Chỉ Manager mới có thể xem danh sách khách hàng.");
+            var managerStaff = await _context.ManagerStaffs
+                .Include(ms => ms.User)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ms => ms.UserId == userId && ms.IsActive);
+
+            bool isManager = manager != null && manager.User != null && manager.User.IsActive;
+            bool isManagerStaff = managerStaff != null && managerStaff.User != null && managerStaff.User.IsActive && managerStaff.IsActive;
+
+            if (!isManager && !isManagerStaff)
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["auth"] = new ValidationError
+                    {
+                        Msg = "Bạn không có quyền truy cập. Chỉ Manager hoặc ManagerStaff mới có thể xem danh sách khách hàng.",
+                        Path = "form",
+                        Location = "body"
+                    }
+                });
+
+            // Get list of partner IDs that ManagerStaff manages
+            List<int>? managedPartnerIds = null;
+            if (isManagerStaff)
+            {
+                managedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaff.ManagerStaffId)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+            }
 
             // Validate request parameters
             if (request.TopLimit < 1 || request.TopLimit > 50)
@@ -1145,6 +1330,17 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                             (b.Status == "CONFIRMED" && b.PaymentStatus == "PAID") ||
                             (b.State == "COMPLETED" && b.PaymentStatus == "PAID"))
                 .Where(b => b.Customer.User.IsActive == true);
+
+            // If ManagerStaff, filter by managed partners
+            if (isManagerStaff && managedPartnerIds != null && managedPartnerIds.Any())
+            {
+                bookingsQuery = bookingsQuery.Where(b => managedPartnerIds.Contains(b.Showtime.Cinema.PartnerId));
+            }
+            else if (isManagerStaff)
+            {
+                // ManagerStaff has no managed partners, return empty result
+                bookingsQuery = bookingsQuery.Where(b => false);
+            }
 
             // Apply filters
             if (request.FromDate.HasValue)

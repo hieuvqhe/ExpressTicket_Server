@@ -135,3 +135,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Responses
 
 
 
+
+
+
+
+
+
+
+

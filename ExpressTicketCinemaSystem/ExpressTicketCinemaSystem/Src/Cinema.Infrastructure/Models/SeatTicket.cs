@@ -55,3 +55,11 @@ public partial class SeatTicket
 
 
 
+
+
+
+
+
+
+
+

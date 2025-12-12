@@ -236,11 +236,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (errors.Any())
                 throw new ValidationException(errors);
 
-            // Tìm user - INCLUDE PARTNER AND EMPLOYEE INFORMATION
+            // Tìm user - INCLUDE PARTNER, EMPLOYEE, MANAGER, AND MANAGERSTAFF INFORMATION
             var user = await _context.Users
                 .Include(u => u.Partner) // QUAN TRỌNG: Include partner info
                 .Include(u => u.Employee) // QUAN TRỌNG: Include employee info for Staff validation
                     .ThenInclude(e => e.Partner) // Include Partner info from Employee
+                .Include(u => u.Manager) // Include Manager info
+                .Include(u => u.ManagerStaff) // Include ManagerStaff info
+                    .ThenInclude(ms => ms.Manager) // Include Manager info from ManagerStaff
+                        .ThenInclude(m => m.User) // Include Manager.User for validation
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername || u.Username == request.EmailOrUsername);
 
             if (user == null)
@@ -263,6 +267,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (user.UserType == "Staff" || user.UserType == "Marketing" || user.UserType == "Cashier")
             {
                 await ValidateStaffLoginAsync(user);
+            }
+
+            // ==================== MANAGERSTAFF SPECIFIC VALIDATION ====================
+            if (user.UserType == "ManagerStaff")
+            {
+                await ValidateManagerStaffLoginAsync(user);
             }
 
             // ==================== COMMON VALIDATION ====================
@@ -449,6 +459,71 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             }
         }
 
+        // ==================== NEW METHOD: VALIDATE MANAGERSTAFF LOGIN ====================
+        private async Task ValidateManagerStaffLoginAsync(User user)
+        {
+            var errors = new Dictionary<string, ValidationError>();
+
+            // Kiểm tra ManagerStaff record có tồn tại không
+            if (user.ManagerStaff == null)
+            {
+                errors["managerStaff"] = new ValidationError
+                {
+                    Msg = "Tài khoản manager staff chưa được thiết lập đầy đủ. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra ManagerStaff is active
+            if (!user.ManagerStaff.IsActive)
+            {
+                errors["managerStaff"] = new ValidationError
+                {
+                    Msg = "Tài khoản manager staff đã bị khóa. Vui lòng liên hệ quản lý để được kích hoạt lại.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Kiểm tra Manager của ManagerStaff có active không
+            if (user.ManagerStaff.Manager == null)
+            {
+                errors["manager"] = new ValidationError
+                {
+                    Msg = "Thông tin manager chưa được thiết lập. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+
+            // Load Manager.User nếu chưa được include (fallback)
+            if (user.ManagerStaff.Manager.User == null)
+            {
+                var managerUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.UserId == user.ManagerStaff.Manager.UserId);
+                
+                if (managerUser == null || !managerUser.IsActive)
+                {
+                    errors["manager"] = new ValidationError
+                    {
+                        Msg = "Tài khoản manager của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.",
+                        Path = "account"
+                    };
+                    throw new UnauthorizedException(errors);
+                }
+            }
+            else if (!user.ManagerStaff.Manager.User.IsActive)
+            {
+                errors["manager"] = new ValidationError
+                {
+                    Msg = "Tài khoản manager của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.",
+                    Path = "account"
+                };
+                throw new UnauthorizedException(errors);
+            }
+        }
+
         public async Task<LoginResponse> CreateJwtResponseAsync(User user)
         {
             var jwtKey = _config["Jwt:Key"];
@@ -480,6 +555,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 {
                     claims.Add(new Claim("CommissionRate", user.Partner.CommissionRate.ToString()));
                 }
+            }
+
+            // ==================== ADD MANAGERSTAFF SPECIFIC CLAIMS ====================
+            if (user.UserType == "ManagerStaff" && user.ManagerStaff != null)
+            {
+                claims.Add(new Claim("ManagerStaffId", user.ManagerStaff.ManagerStaffId.ToString()));
+                claims.Add(new Claim("ManagerId", user.ManagerStaff.ManagerId.ToString()));
             }
 
             var tokenDescriptor = new SecurityTokenDescriptor

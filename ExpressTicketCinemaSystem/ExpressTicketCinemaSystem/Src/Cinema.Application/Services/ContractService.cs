@@ -12,7 +12,6 @@ using System.Linq;
 using System;
 using System.Threading.Tasks;
 using System.Net;
-using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests.ExpressTicketCinemaSystem.Src.Cinema.Contracts.Manager.Requests;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Partner.Requests;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +22,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         private readonly CinemaDbCoreContext _context;
         private readonly IEmailService _emailService;
         private readonly IManagerService _managerService;
+        private readonly IManagerStaffPermissionService _managerStaffPermissionService;
         private readonly IAzureBlobService _azureBlobService;
         private readonly ILogger<ContractService> _logger;
         private readonly IAuditLogService _auditLogService;
@@ -31,6 +31,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             CinemaDbCoreContext context,
             IEmailService emailService,
             IManagerService managerService,
+            IManagerStaffPermissionService managerStaffPermissionService,
             IAzureBlobService azureBlobService,
             ILogger<ContractService> logger,
             IAuditLogService auditLogService)
@@ -38,12 +39,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             _context = context;
             _emailService = emailService;
             _managerService = managerService;
+            _managerStaffPermissionService = managerStaffPermissionService;
             _azureBlobService = azureBlobService;
             _logger = logger;
             _auditLogService = auditLogService;
         }
 
-        public async Task<ContractResponse> CreateContractDraftAsync(int managerId, CreateContractRequest request)
+        public async Task<ContractResponse> CreateContractDraftAsync(int managerId, CreateContractRequest request, int? managerStaffId = null)
         {
             // ==================== VALIDATION SECTION ====================
             ValidateRequiredFields(request);
@@ -53,6 +55,26 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 managerId = await _managerService.GetDefaultManagerIdAsync();
             }
+            
+            // If ManagerStaff creates contract, verify they belong to this Manager
+            if (managerStaffId.HasValue)
+            {
+                var managerStaff = await _context.ManagerStaffs
+                    .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId.Value && ms.ManagerId == managerId && ms.IsActive);
+                if (managerStaff == null)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["managerStaff"] = new ValidationError
+                        {
+                            Msg = "ManagerStaff không thuộc quyền quản lý của Manager này",
+                            Path = "managerStaffId",
+                            Location = "body"
+                        }
+                    });
+                }
+            }
+            
             ValidateContractDates(request.StartDate, request.EndDate);
             ValidateCommissionRate(request.CommissionRate);
             await ValidateContractNumberAsync(request.ContractNumber);
@@ -66,6 +88,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 ManagerId = managerId,
                 PartnerId = request.PartnerId,
+                ManagerStaffId = managerStaffId, // Set ManagerStaffId if created by ManagerStaff
                 ContractNumber = request.ContractNumber,
                 ContractType = request.ContractType,
                 Title = request.Title,
@@ -114,13 +137,15 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(content));
             return Convert.ToBase64String(bytes);
         }
-        public async Task SendContractPdfToPartnerAsync(int contractId, int managerId, SendContractPdfRequest request)
+        public async Task SendContractPdfToPartnerAsync(int contractId, int managerId, SendContractPdfRequest request, int? managerStaffId = null)
         {
             var contract = await _context.Contracts
                 .Include(c => c.Partner)
                     .ThenInclude(p => p.User)
                 .Include(c => c.Manager)
                     .ThenInclude(m => m.User)
+                .Include(c => c.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .FirstOrDefaultAsync(c => c.ContractId == contractId);
 
             if (contract == null)
@@ -131,7 +156,41 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             {
                 managerId = await _managerService.GetDefaultManagerIdAsync();
             }
-            if (contract.ManagerId != managerId)
+            
+            // Security check: Manager or ManagerStaff can send contract
+            bool hasAccess = false;
+            if (managerStaffId.HasValue)
+            {
+                // ManagerStaff must have CONTRACT_SEND_PDF permission for this partner
+                var hasPermission = await _managerStaffPermissionService.HasPermissionAsync(
+                    managerStaffId.Value,
+                    contract.PartnerId,
+                    "CONTRACT_SEND_PDF");
+
+                if (!hasPermission)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["permission"] = new ValidationError
+                        {
+                            Msg = "Bạn không có quyền gửi hợp đồng cho partner này",
+                            Path = "contractId",
+                            Location = "path"
+                        }
+                    });
+                }
+
+                // ManagerStaff can send if they created it or it's assigned to their Manager
+                hasAccess = (contract.ManagerStaffId == managerStaffId.Value && contract.ManagerId == managerId) 
+                         || contract.ManagerId == managerId;
+            }
+            else
+            {
+                // Manager can send if it's their contract
+                hasAccess = contract.ManagerId == managerId;
+            }
+            
+            if (!hasAccess)
             {
                 throw new UnauthorizedException(new Dictionary<string, ValidationError>
                 {
@@ -405,6 +464,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(p => p.User)
                 .Include(c => c.Manager)
                     .ThenInclude(m => m.User)
+                .Include(c => c.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .FirstOrDefaultAsync(c => c.ContractId == contractId);
 
             if (contract == null)
@@ -432,6 +493,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 SignedAt = contract.SignedAt,
                 PartnerSignedAt = contract.PartnerSignedAt,
                 ManagerSignedAt = contract.ManagerSignedAt,
+                ManagerStaffId = contract.ManagerStaffId,
+                ManagerStaffSignature = contract.ManagerStaffSignature,
+                ManagerStaffSignedAt = contract.ManagerStaffSignedAt,
                 LockedAt = contract.LockedAt,
                 IsLocked = contract.IsLocked,
                 ManagerId = contract.ManagerId,
@@ -454,7 +518,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 ManagerName = contract.Manager?.User?.Fullname ?? "",
                 ManagerPosition = "Quản lý Đối tác",
                 ManagerEmail = contract.Manager?.User?.Email ?? "",
-                CreatedByName = contract.Manager?.User?.Fullname ?? ""
+                CreatedByName = contract.Manager?.User?.Fullname ?? "",
+                
+                // ManagerStaff information
+                ManagerStaffName = contract.ManagerStaff?.FullName,
+                ManagerStaffEmail = contract.ManagerStaff?.User?.Email,
+                HasManagerStaffSignedTemporarily = contract.ManagerStaffSignedAt.HasValue && !contract.IsLocked
             };
         }
         public async Task<PaginatedContractsResponse> GetAllContractsAsync(
@@ -466,7 +535,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     string? status = null,
     string? search = null,
     string? sortBy = "created_at",
-    string? sortOrder = "desc")
+    string? sortOrder = "desc",
+    int? managerStaffId = null)
         {
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 10;
@@ -480,6 +550,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(p => p.User)
                 .Include(c => c.Manager)
                     .ThenInclude(m => m.User)
+                .Include(c => c.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .AsQueryable();
 
             if (managerId.HasValue)
@@ -499,6 +571,63 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (partnerId.HasValue)
                 query = query.Where(c => c.PartnerId == partnerId.Value);
+
+            // If ManagerStaff, filter by partners they have CONTRACT_READ permission
+            if (managerStaffId.HasValue)
+            {
+                // Get list of partner IDs that ManagerStaff has been assigned to
+                var assignedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaffId.Value)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+
+                if (assignedPartnerIds.Count > 0)
+                {
+                    // Get partner IDs with CONTRACT_READ permission
+                    var partnerIdsWithPermission = await _context.ManagerStaffPartnerPermissions
+                        .Where(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && (msp.PartnerId == null || assignedPartnerIds.Contains(msp.PartnerId.Value))
+                            && msp.Permission.PermissionCode == "CONTRACT_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive)
+                        .Select(msp => msp.PartnerId ?? 0)
+                        .Distinct()
+                        .ToListAsync();
+
+                    // Check if has global permission (null)
+                    var hasGlobalPermission = await _context.ManagerStaffPartnerPermissions
+                        .AnyAsync(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && msp.PartnerId == null
+                            && msp.Permission.PermissionCode == "CONTRACT_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive);
+
+                    if (hasGlobalPermission)
+                    {
+                        // Global permission: show all contracts for assigned partners
+                        query = query.Where(c => assignedPartnerIds.Contains(c.PartnerId));
+                    }
+                    else
+                    {
+                        // Specific permissions: only show contracts for partners with CONTRACT_READ permission
+                        var validPartnerIds = partnerIdsWithPermission.Where(p => p > 0).ToList();
+                        if (validPartnerIds.Count > 0)
+                        {
+                            query = query.Where(c => validPartnerIds.Contains(c.PartnerId));
+                        }
+                        else
+                        {
+                            // No permission: return empty result
+                            query = query.Where(c => false);
+                        }
+                    }
+                }
+                else
+                {
+                    // No assigned partners: return empty result
+                    query = query.Where(c => false);
+                }
+            }
 
             if (!string.IsNullOrWhiteSpace(status))
             {
@@ -551,6 +680,10 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     ManagerId = c.ManagerId,
                     ManagerName = c.Manager.User.Fullname,
 
+                    ManagerStaffId = c.ManagerStaffId,
+                    ManagerStaffName = c.ManagerStaff != null ? c.ManagerStaff.FullName : null,
+                    HasManagerStaffSignedTemporarily = c.ManagerStaffSignedAt.HasValue && !c.IsLocked,
+
                     PartnerSignatureUrl = c.PartnerSignatureUrl
                 })
                 .ToListAsync();
@@ -598,6 +731,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(p => p.User)
                 .Include(c => c.Manager)
                     .ThenInclude(m => m.User)
+                .Include(c => c.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .FirstOrDefaultAsync(c => c.ContractId == contractId);
 
             if (contract == null)
@@ -644,6 +779,9 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 SignedAt = contract.SignedAt,
                 PartnerSignedAt = contract.PartnerSignedAt,
                 ManagerSignedAt = contract.ManagerSignedAt,
+                ManagerStaffId = contract.ManagerStaffId,
+                ManagerStaffSignature = contract.ManagerStaffSignature,
+                ManagerStaffSignedAt = contract.ManagerStaffSignedAt,
                 LockedAt = contract.LockedAt,
                 ManagerId = contract.ManagerId,
                 PartnerId = contract.PartnerId,
@@ -668,13 +806,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 // Thông tin người tạo
                 CreatedByName = contract.Manager?.User?.Fullname ?? "",
 
+                // ManagerStaff information
+                ManagerStaffName = contract.ManagerStaff?.FullName,
+                ManagerStaffEmail = contract.ManagerStaff?.User?.Email,
+                HasManagerStaffSignedTemporarily = contract.ManagerStaffSignedAt.HasValue && !contract.IsLocked,
+
                 // Thông tin công ty cho PDF
                 CompanyName = companyInfo.Name,
                 CompanyAddress = companyInfo.Address,
                 CompanyTaxCode = companyInfo.TaxCode
             };
         }
-        public async Task<ContractResponse> FinalizeContractAsync(int contractId, int managerId, FinalizeContractRequest request)
+        public async Task<ContractResponse> FinalizeContractAsync(int contractId, int managerId, FinalizeContractRequest request, int? userId = null)
         {
             // ==================== VALIDATION SECTION ====================
 
@@ -706,6 +849,24 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                         Location = "path"
                     }
                 });
+            }
+
+            // Only Manager can finalize, not ManagerStaff
+            if (userId.HasValue)
+            {
+                var isManager = await _managerService.IsUserManagerAsync(userId.Value);
+                if (!isManager)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["role"] = new ValidationError
+                        {
+                            Msg = "Chỉ Manager mới có thể finalize hợp đồng. ManagerStaff chỉ có thể ký tạm.",
+                            Path = "contractId",
+                            Location = "path"
+                        }
+                    });
+                }
             }
 
             // Business logic validation
@@ -764,6 +925,108 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             await SendContractFinalizedEmailAsync(contract);
 
             return result;
+        }
+
+        /// <summary>
+        /// ManagerStaff can sign contract temporarily (not finalize)
+        /// </summary>
+        public async Task<ContractResponse> SignContractTemporarilyAsync(int contractId, int managerId, int managerStaffId, FinalizeContractRequest request)
+        {
+            ValidateFinalizeRequest(request);
+
+            var contract = await _context.Contracts
+                .Include(c => c.Partner)
+                    .ThenInclude(p => p.User)
+                .Include(c => c.Manager)
+                    .ThenInclude(m => m.User)
+                .Include(c => c.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
+                .FirstOrDefaultAsync(c => c.ContractId == contractId);
+
+            if (contract == null)
+                throw new NotFoundException("Không tìm thấy hợp đồng với ID này.");
+
+            // Verify managerStaff belongs to this manager
+            var managerStaff = await _context.ManagerStaffs
+                .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId && ms.ManagerId == managerId && ms.IsActive);
+
+            if (managerStaff == null)
+                throw new UnauthorizedException("Không tìm thấy staff hoặc staff không thuộc quyền quản lý của bạn.");
+
+            // Check permission: ManagerStaff must have CONTRACT_SIGN_TEMPORARY permission for this partner
+            var hasPermission = await _managerStaffPermissionService.HasPermissionAsync(
+                managerStaffId,
+                contract.PartnerId,
+                "CONTRACT_SIGN_TEMPORARY");
+
+            if (!hasPermission)
+            {
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["permission"] = new ValidationError
+                    {
+                        Msg = "Bạn không có quyền ký tạm hợp đồng cho partner này",
+                        Path = "contractId",
+                        Location = "path"
+                    }
+                });
+            }
+
+            // Security check
+            if (contract.ManagerId != managerId)
+            {
+                throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                {
+                    ["access"] = new ValidationError
+                    {
+                        Msg = "Bạn không có quyền thao tác với hợp đồng này",
+                        Path = "contractId",
+                        Location = "path"
+                    }
+                });
+            }
+
+            // Business logic validation - contract must not be locked
+            if (contract.IsLocked)
+            {
+                throw new ValidationException(new Dictionary<string, ValidationError>
+                {
+                    ["status"] = new ValidationError
+                    {
+                        Msg = "Hợp đồng đã được finalize và khóa, không thể ký tạm.",
+                        Path = "contractId"
+                    }
+                });
+            }
+
+            var beforeSnapshot = BuildContractAuditSnapshot(contract);
+
+            // ManagerStaff signs temporarily - update signature but don't lock or finalize
+            contract.ManagerStaffId = managerStaffId;
+            contract.ManagerStaffSignature = request.ManagerSignature;
+            contract.ManagerStaffSignedAt = DateTime.UtcNow;
+            contract.UpdatedAt = DateTime.UtcNow;
+            // Status remains as "pending" or "draft", not "active"
+            // IsLocked remains false
+            // Note: ManagerSignature and ManagerSignedAt are NOT set here - only Manager can finalize
+
+            await _context.SaveChangesAsync();
+            await _auditLogService.LogEntityChangeAsync(
+                action: "MANAGER_STAFF_SIGN_CONTRACT_TEMPORARILY",
+                tableName: "Contract",
+                recordId: contract.ContractId,
+                beforeData: beforeSnapshot,
+                afterData: BuildContractAuditSnapshot(contract),
+                metadata: new
+                {
+                    managerStaffId,
+                    request.ManagerSignature
+                });
+
+            // Detach the entity to ensure fresh data is loaded
+            _context.Entry(contract).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+
+            return await GetContractWithFullDetailsAsync(contract.ContractId);
         }
 
         private void ValidateFinalizeRequest(FinalizeContractRequest request)
@@ -1061,6 +1324,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     .ThenInclude(p => p.User)
                 .Include(c => c.Manager)
                     .ThenInclude(m => m.User)
+                .Include(c => c.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .Where(c => c.PartnerId == partnerId &&
                            (c.Status == "pending_signature" || c.Status == "active" || c.Status == "expired")) // ← CHỈ HIỂN THỊ CÁC STATUS ĐÃ ĐƯỢC GỬI
                 .AsQueryable();
@@ -1114,6 +1379,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     // Manager information
                     ManagerId = c.ManagerId,
                     ManagerName = c.Manager.User.Fullname,
+                    
+                    // ManagerStaff information
+                    ManagerStaffId = c.ManagerStaffId,
+                    ManagerStaffName = c.ManagerStaff != null ? c.ManagerStaff.FullName : null,
+                    HasManagerStaffSignedTemporarily = c.ManagerStaffSignedAt.HasValue && !c.IsLocked,
+                    
+                    PartnerSignatureUrl = c.PartnerSignatureUrl
                 })
                 .ToListAsync();
 
@@ -1258,7 +1530,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 CompanyTaxCode = companyInfo.TaxCode
             };
         }
-        public async Task<ContractResponse> UpdateContractDraftAsync(int contractId, int managerId, UpdateContractRequest request)
+        public async Task<ContractResponse> UpdateContractDraftAsync(int contractId, int managerId, UpdateContractRequest request, int? managerStaffId = null)
         {
             // ==================== VALIDATION SECTION ====================
             var contract = await _context.Contracts
@@ -1275,6 +1547,29 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             if (!managerExists)
             {
                 managerId = await _managerService.GetDefaultManagerIdAsync();
+            }
+
+            // If ManagerStaff updates contract, check permission
+            if (managerStaffId.HasValue)
+            {
+                // Check permission: ManagerStaff must have CONTRACT_UPDATE permission for this partner
+                var hasPermission = await _managerStaffPermissionService.HasPermissionAsync(
+                    managerStaffId.Value,
+                    contract.PartnerId,
+                    "CONTRACT_UPDATE");
+
+                if (!hasPermission)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["permission"] = new ValidationError
+                        {
+                            Msg = "Bạn không có quyền cập nhật hợp đồng cho partner này",
+                            Path = "contractId",
+                            Location = "path"
+                        }
+                    });
+                }
             }
 
             // Security check

@@ -18,6 +18,8 @@ public partial class Voucher
     // Các trường mới được thêm
     public int ManagerId { get; set; }
 
+    public int? ManagerStaffId { get; set; }
+
     public string DiscountType { get; set; } = "fixed";
 
     public int? UsageLimit { get; set; }
@@ -40,6 +42,8 @@ public partial class Voucher
 
     // Navigation properties
     public virtual Manager Manager { get; set; } = null!;
+
+    public virtual ManagerStaff? ManagerStaff { get; set; }
 
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 

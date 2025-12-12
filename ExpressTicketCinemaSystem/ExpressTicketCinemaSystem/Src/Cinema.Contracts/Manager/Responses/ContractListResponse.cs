@@ -24,6 +24,11 @@
         public int ManagerId { get; set; }
         public string ManagerName { get; set; } = string.Empty;
 
+        // ManagerStaff information (if contract was created/signed by ManagerStaff)
+        public int? ManagerStaffId { get; set; }
+        public string? ManagerStaffName { get; set; }
+        public bool HasManagerStaffSignedTemporarily { get; set; }
+
         // Signature information
         public string? PartnerSignatureUrl { get; set; }
     }

@@ -208,8 +208,10 @@ builder.Services.AddScoped<ExpressTicketCinemaSystem.Src.Cinema.Application.Serv
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<PartnerService>();
 builder.Services.AddScoped<EmployeeManagementService>();
+builder.Services.AddScoped<ManagerStaffManagementService>();
 builder.Services.AddScoped<IEmployeeCinemaAssignmentService, EmployeeCinemaAssignmentService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IManagerStaffPermissionService, ManagerStaffPermissionService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<ICashierService, CashierService>();
 builder.Services.AddScoped<IPartnerStatisticsService, PartnerStatisticsService>();

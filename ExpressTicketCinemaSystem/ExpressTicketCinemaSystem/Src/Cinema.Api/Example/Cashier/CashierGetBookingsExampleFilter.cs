@@ -328,3 +328,11 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Example.Cashier
 
 
 
+
+
+
+
+
+
+
+

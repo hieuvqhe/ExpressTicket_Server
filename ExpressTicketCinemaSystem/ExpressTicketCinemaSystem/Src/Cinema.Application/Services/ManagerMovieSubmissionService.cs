@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ExpressTicketCinemaSystem.Src.Cinema.Infrastructure.Models;
 using ExpressTicketCinemaSystem.Src.Cinema.Application.Exceptions;
+using ExpressTicketCinemaSystem.Src.Cinema.Contracts.Common.Responses;
 using ExpressTicketCinemaSystem.Src.Cinema.Contracts.MovieManagement.Responses;
 using System.Text.RegularExpressions;
 
@@ -10,20 +11,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
     {
         private readonly CinemaDbCoreContext _context;
         private readonly IAuditLogService _auditLogService;
+        private readonly IManagerStaffPermissionService _managerStaffPermissionService;
 
         // Các trạng thái hợp lệ cho màn manager (trừ Draft)
         private static readonly HashSet<string> NonDraftStatuses =
             new(StringComparer.OrdinalIgnoreCase) { "Pending", "Rejected", "Resubmitted", "Approved" };
 
-        public ManagerMovieSubmissionService(CinemaDbCoreContext context, IAuditLogService auditLogService)
+        public ManagerMovieSubmissionService(
+            CinemaDbCoreContext context, 
+            IAuditLogService auditLogService,
+            IManagerStaffPermissionService managerStaffPermissionService)
         {
             _context = context;
             _auditLogService = auditLogService;
+            _managerStaffPermissionService = managerStaffPermissionService;
         }
 
         // GET all (non-draft)
         public async Task<object> GetAllNonDraftSubmissionsAsync(
-            int page, int limit, string? status, string? search, string? sortBy, string? sortOrder)
+            int page, int limit, string? status, string? search, string? sortBy, string? sortOrder, int? managerStaffId = null)
         {
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 10;
@@ -33,8 +39,66 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var nonDraftStatusesLower = new[] { "pending", "rejected", "resubmitted", "approved" };
             var q = _context.MovieSubmissions
                 .Include(ms => ms.Partner)
+                .Include(ms => ms.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .Where(ms => nonDraftStatusesLower.Contains(ms.Status.ToLower()))
                 .AsQueryable();
+
+            // If ManagerStaff, filter by partners they have MOVIE_SUBMISSION_READ permission
+            if (managerStaffId.HasValue)
+            {
+                var assignedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaffId.Value)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+
+                if (assignedPartnerIds.Count > 0)
+                {
+                    // Get partner IDs with MOVIE_SUBMISSION_READ permission
+                    var partnerIdsWithPermission = await _context.ManagerStaffPartnerPermissions
+                        .Where(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && (msp.PartnerId == null || assignedPartnerIds.Contains(msp.PartnerId.Value))
+                            && msp.Permission.PermissionCode == "MOVIE_SUBMISSION_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive)
+                        .Select(msp => msp.PartnerId ?? 0)
+                        .Distinct()
+                        .ToListAsync();
+
+                    // Check if has global permission (null)
+                    var hasGlobalPermission = await _context.ManagerStaffPartnerPermissions
+                        .AnyAsync(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && msp.PartnerId == null
+                            && msp.Permission.PermissionCode == "MOVIE_SUBMISSION_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive);
+
+                    if (hasGlobalPermission)
+                    {
+                        // Global permission: show all submissions for assigned partners
+                        q = q.Where(ms => assignedPartnerIds.Contains(ms.PartnerId));
+                    }
+                    else
+                    {
+                        // Specific permissions: only show submissions for partners with MOVIE_SUBMISSION_READ permission
+                        var validPartnerIds = partnerIdsWithPermission.Where(p => p > 0).ToList();
+                        if (validPartnerIds.Count > 0)
+                        {
+                            q = q.Where(ms => validPartnerIds.Contains(ms.PartnerId));
+                        }
+                        else
+                        {
+                            // No permission: return empty result
+                            q = q.Where(ms => false);
+                        }
+                    }
+                }
+                else
+                {
+                    // No assigned partners: return empty result
+                    q = q.Where(ms => false);
+                }
+            }
 
             // optional filter theo status
             if (!string.IsNullOrWhiteSpace(status) && NonDraftStatuses.Contains(status))
@@ -83,6 +147,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     {
                         ms.Partner.PartnerId,
                         ms.Partner.PartnerName
+                    } : null,
+                    ManagerStaff = ms.ManagerStaff != null ? new
+                    {
+                        ms.ManagerStaff.ManagerStaffId,
+                        ms.ManagerStaff.FullName,
+                        ms.ManagerStaff.User.Email
                     } : null
                 })
                 .ToListAsync();
@@ -101,11 +171,13 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
         }
 
         // GET by id (non-draft only)
-        public async Task<object> GetNonDraftSubmissionByIdAsync(int id)
+        public async Task<object> GetNonDraftSubmissionByIdAsync(int id, int? managerStaffId = null)
         {
             var ms = await _context.MovieSubmissions
                 .Include(x => x.MovieSubmissionActors).ThenInclude(a => a.Actor)
                 .Include(x => x.Partner)
+                .Include(x => x.Reviewer).ThenInclude(r => r.User)
+                .Include(x => x.ManagerStaff).ThenInclude(ms => ms.User)
                 .FirstOrDefaultAsync(x => x.MovieSubmissionId == id);
 
             if (ms == null)
@@ -113,6 +185,28 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             if (!NonDraftStatuses.Contains(ms.Status))
                 throw new ValidationException("status", "Chỉ xem được submission đã gửi (không phải Draft).");
+
+            // If ManagerStaff, check permission
+            if (managerStaffId.HasValue)
+            {
+                var hasPermission = await _managerStaffPermissionService.HasPermissionAsync(
+                    managerStaffId.Value,
+                    ms.PartnerId,
+                    "MOVIE_SUBMISSION_READ");
+
+                if (!hasPermission)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["permission"] = new ValidationError
+                        {
+                            Msg = "Bạn không có quyền xem submission này",
+                            Path = "id",
+                            Location = "path"
+                        }
+                    });
+                }
+            }
 
             var actors = ms.MovieSubmissionActors
                 .Select(a => new
@@ -156,21 +250,91 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     ms.Partner.PartnerId,
                     ms.Partner.PartnerName
                 } : null,
+                Reviewer = ms.Reviewer != null ? new
+                {
+                    ms.Reviewer.ManagerId,
+                    ms.Reviewer.User.Fullname,
+                    ms.Reviewer.User.Email
+                } : null,
+                ManagerStaff = ms.ManagerStaff != null ? new
+                {
+                    ms.ManagerStaff.ManagerStaffId,
+                    ms.ManagerStaff.FullName,
+                    ms.ManagerStaff.User.Email
+                } : null,
                 Actors = actors
             };
         }
 
         // GET pending
         public async Task<object> GetPendingSubmissionsAsync(
-            int page, int limit, string? search, string? sortBy, string? sortOrder)
+            int page, int limit, string? search, string? sortBy, string? sortOrder, int? managerStaffId = null)
         {
             if (page < 1) page = 1;
             if (limit < 1 || limit > 100) limit = 10;
 
             var q = _context.MovieSubmissions
                 .Include(ms => ms.Partner)
+                .Include(ms => ms.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .Where(ms => ms.Status == "Pending")
                 .AsQueryable();
+
+            // If ManagerStaff, filter by partners they have MOVIE_SUBMISSION_READ permission
+            if (managerStaffId.HasValue)
+            {
+                var assignedPartnerIds = await _context.Partners
+                    .Where(p => p.ManagerStaffId == managerStaffId.Value)
+                    .Select(p => p.PartnerId)
+                    .ToListAsync();
+
+                if (assignedPartnerIds.Count > 0)
+                {
+                    // Get partner IDs with MOVIE_SUBMISSION_READ permission
+                    var partnerIdsWithPermission = await _context.ManagerStaffPartnerPermissions
+                        .Where(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && (msp.PartnerId == null || assignedPartnerIds.Contains(msp.PartnerId.Value))
+                            && msp.Permission.PermissionCode == "MOVIE_SUBMISSION_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive)
+                        .Select(msp => msp.PartnerId ?? 0)
+                        .Distinct()
+                        .ToListAsync();
+
+                    // Check if has global permission (null)
+                    var hasGlobalPermission = await _context.ManagerStaffPartnerPermissions
+                        .AnyAsync(msp => msp.ManagerStaffId == managerStaffId.Value
+                            && msp.PartnerId == null
+                            && msp.Permission.PermissionCode == "MOVIE_SUBMISSION_READ"
+                            && msp.IsActive
+                            && msp.Permission.IsActive);
+
+                    if (hasGlobalPermission)
+                    {
+                        // Global permission: show all pending submissions for assigned partners
+                        q = q.Where(ms => assignedPartnerIds.Contains(ms.PartnerId));
+                    }
+                    else
+                    {
+                        // Specific permissions: only show pending submissions for partners with MOVIE_SUBMISSION_READ permission
+                        var validPartnerIds = partnerIdsWithPermission.Where(p => p > 0).ToList();
+                        if (validPartnerIds.Count > 0)
+                        {
+                            q = q.Where(ms => validPartnerIds.Contains(ms.PartnerId));
+                        }
+                        else
+                        {
+                            // No permission: return empty result
+                            q = q.Where(ms => false);
+                        }
+                    }
+                }
+                else
+                {
+                    // No assigned partners: return empty result
+                    q = q.Where(ms => false);
+                }
+            }
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -192,6 +356,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             var total = await q.CountAsync();
 
             var items = await q
+                .Include(ms => ms.ManagerStaff)
+                    .ThenInclude(ms => ms.User)
                 .Skip((page - 1) * limit)
                 .Take(limit)
                 .Select(ms => new
@@ -205,6 +371,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                     {
                         ms.Partner.PartnerId,
                         ms.Partner.PartnerName
+                    } : null,
+                    ManagerStaff = ms.ManagerStaff != null ? new
+                    {
+                        ms.ManagerStaff.ManagerStaffId,
+                        ms.ManagerStaff.FullName,
+                        ms.ManagerStaff.User.Email
                     } : null
                 })
                 .ToListAsync();
@@ -221,18 +393,45 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
                 }
             };
         }
-        public async Task<MovieSubmissionResponse> ApproveSubmissionAsync(int submissionId, int managerId)
+        public async Task<MovieSubmissionResponse> ApproveSubmissionAsync(int submissionId, int managerId, int? managerStaffId = null)
         {
             await using var tx = await _context.Database.BeginTransactionAsync();
 
             var s = await _context.MovieSubmissions
                 .Include(x => x.MovieSubmissionActors)
+                .Include(x => x.Partner)
                 .FirstOrDefaultAsync(x => x.MovieSubmissionId == submissionId);
 
             if (s == null) throw new NotFoundException("Không tìm thấy submission.");
             if (s.Status != "Pending") throw new ValidationException("status", "Chỉ duyệt được submission ở trạng thái Pending.");
-            if (s.ReviewerId != managerId) /* nếu muốn ràng đúng manager */
-                throw new UnauthorizedException("Bạn không phải reviewer được phân công.");
+
+            // If ManagerStaff, check permission
+            if (managerStaffId.HasValue)
+            {
+                var hasPermission = await _managerStaffPermissionService.HasPermissionAsync(
+                    managerStaffId.Value,
+                    s.PartnerId,
+                    "MOVIE_SUBMISSION_APPROVE");
+
+                if (!hasPermission)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["permission"] = new ValidationError
+                        {
+                            Msg = "Bạn không có quyền duyệt submission này",
+                            Path = "id",
+                            Location = "path"
+                        }
+                    });
+                }
+            }
+            else
+            {
+                // Manager: check reviewer assignment (if exists)
+                if (s.ReviewerId.HasValue && s.ReviewerId != managerId)
+                    throw new UnauthorizedException("Bạn không phải reviewer được phân công.");
+            }
             var beforeSnapshot = BuildSubmissionSnapshot(s);
 
             string key = NormalizeTitle(s.Title);
@@ -316,6 +515,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
             s.Status = "Approved";
             s.MovieId = movieEntity.MovieId;
             s.ReviewerId = managerId;
+            s.ManagerStaffId = managerStaffId; // Set ManagerStaffId if approved by ManagerStaff
             s.ReviewedAt = DateTime.UtcNow;
             s.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -357,17 +557,46 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Application.Services
 
             return await MapToMovieSubmissionResponseAsync(s);
         }
-        public async Task<MovieSubmissionResponse> RejectSubmissionAsync(int submissionId, int managerId, string reason)
+        public async Task<MovieSubmissionResponse> RejectSubmissionAsync(int submissionId, int managerId, string reason, int? managerStaffId = null)
         {
-            var s = await _context.MovieSubmissions.FirstOrDefaultAsync(x => x.MovieSubmissionId == submissionId);
+            var s = await _context.MovieSubmissions
+                .Include(x => x.Partner)
+                .FirstOrDefaultAsync(x => x.MovieSubmissionId == submissionId);
             if (s == null) throw new NotFoundException("Không tìm thấy submission.");
             if (s.Status != "Pending") throw new ValidationException("status", "Chỉ từ chối được submission ở trạng thái Pending.");
-            if (s.ReviewerId != managerId)
-                throw new UnauthorizedException("Bạn không phải reviewer được phân công.");
+
+            // If ManagerStaff, check permission
+            if (managerStaffId.HasValue)
+            {
+                var hasPermission = await _managerStaffPermissionService.HasPermissionAsync(
+                    managerStaffId.Value,
+                    s.PartnerId,
+                    "MOVIE_SUBMISSION_REJECT");
+
+                if (!hasPermission)
+                {
+                    throw new UnauthorizedException(new Dictionary<string, ValidationError>
+                    {
+                        ["permission"] = new ValidationError
+                        {
+                            Msg = "Bạn không có quyền từ chối submission này",
+                            Path = "id",
+                            Location = "path"
+                        }
+                    });
+                }
+            }
+            else
+            {
+                // Manager: check reviewer assignment (if exists)
+                if (s.ReviewerId.HasValue && s.ReviewerId != managerId)
+                    throw new UnauthorizedException("Bạn không phải reviewer được phân công.");
+            }
             var beforeSnapshot = BuildSubmissionSnapshot(s);
 
             s.Status = "Rejected";
             s.ReviewerId = managerId;
+            s.ManagerStaffId = managerStaffId; // Set ManagerStaffId if rejected by ManagerStaff
             s.ReviewedAt = DateTime.UtcNow;
             s.RejectionReason = string.IsNullOrWhiteSpace(reason)
                 ? "Hồ sơ chưa đạt yêu cầu."

@@ -43,3 +43,11 @@ public partial class VIPMember
 
 
 
+
+
+
+
+
+
+
+

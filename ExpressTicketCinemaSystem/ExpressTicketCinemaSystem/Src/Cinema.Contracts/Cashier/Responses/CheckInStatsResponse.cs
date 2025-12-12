@@ -28,3 +28,11 @@ public class CheckInStatsResponse
 
 
 
+
+
+
+
+
+
+
+

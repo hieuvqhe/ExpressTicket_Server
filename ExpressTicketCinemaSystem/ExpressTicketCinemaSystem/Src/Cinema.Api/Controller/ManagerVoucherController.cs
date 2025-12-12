@@ -16,17 +16,25 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 {
     [ApiController]
     [Route("api/manager/vouchers")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Roles = "Manager,ManagerStaff")]
     [Produces("application/json")]
     public class ManagerVoucherController : ControllerBase
     {
         private readonly IVoucherService _voucherService;
         private readonly CinemaDbCoreContext _context;
+        private readonly IManagerService _managerService;
+        private readonly IManagerStaffPermissionService _managerStaffPermissionService;
 
-        public ManagerVoucherController(IVoucherService voucherService, CinemaDbCoreContext context)
+        public ManagerVoucherController(
+            IVoucherService voucherService, 
+            CinemaDbCoreContext context,
+            IManagerService managerService,
+            IManagerStaffPermissionService managerStaffPermissionService)
         {
             _voucherService = voucherService;
             _context = context;
+            _managerService = managerService;
+            _managerStaffPermissionService = managerStaffPermissionService;
         }
 
         private async Task<int> GetCurrentManagerId()
@@ -36,6 +44,18 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
             if (int.TryParse(userIdClaim, out var userId))
             {
+                // Kiểm tra nếu là ManagerStaff, lấy ManagerId từ ManagerStaff
+                var managerStaffId = await _managerService.GetManagerStaffIdByUserIdAsync(userId);
+                if (managerStaffId.HasValue)
+                {
+                    var managerStaff = await _context.ManagerStaffs
+                        .FirstOrDefaultAsync(ms => ms.ManagerStaffId == managerStaffId.Value);
+                    if (managerStaff != null)
+                    {
+                        return managerStaff.ManagerId;
+                    }
+                }
+
                 // Tìm ManagerId từ UserId
                 var manager = await _context.Managers
                     .FirstOrDefaultAsync(m => m.UserId == userId);
@@ -45,16 +65,32 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
                     return manager.ManagerId;
                 }
 
-                throw new UnauthorizedException("Người dùng không phải là manager.");
+                throw new UnauthorizedException("Người dùng không phải là manager hoặc manager staff.");
             }
 
             throw new UnauthorizedException("Token không hợp lệ hoặc không chứa ID người dùng.");
         }
 
+        private async Task<int?> GetCurrentManagerStaffId()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                              ?? User.FindFirst("sub")?.Value;
+
+            if (int.TryParse(userIdClaim, out var userId))
+            {
+                return await _managerService.GetManagerStaffIdByUserIdAsync(userId);
+            }
+
+            return null;
+        }
+
         /// <summary>
         /// Create a new voucher
+        /// Manager: Can create any voucher
+        /// ManagerStaff: Can only create if they have VOUCHER_CREATE permission
         /// </summary>
         [HttpPost]
+        [RequireVoucherPermission("VOUCHER_CREATE")]
         [AuditAction("MANAGER_CREATE_VOUCHER", "Voucher", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<VoucherResponse>), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -66,7 +102,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             try
             {
                 var managerId = await GetCurrentManagerId();
-                var result = await _voucherService.CreateVoucherAsync(managerId, request);
+                var managerStaffId = await GetCurrentManagerStaffId();
+                var result = await _voucherService.CreateVoucherAsync(managerId, request, managerStaffId);
 
                 var response = new SuccessResponse<VoucherResponse>
                 {
@@ -108,6 +145,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Get all vouchers with filtering, sorting and pagination
+        /// Manager: Can view all vouchers
+        /// ManagerStaff: Can only view if they have VOUCHER_READ permission
         /// </summary>
         /// <param name="page">Page number (default: 1)</param>
         /// <param name="limit">Number of items per page (default: 10)</param>
@@ -117,6 +156,7 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
         /// <param name="sortOrder">Sort order (asc, desc)</param>
         /// <returns>Paginated list of contracts</returns>
         [HttpGet]
+        [RequireVoucherPermission("VOUCHER_READ")]
         [ProducesResponseType(typeof(SuccessResponse<PaginatedVouchersResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -174,9 +214,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Get voucher details by ID
+        /// Manager: Can view any voucher
+        /// ManagerStaff: Can only view if they have VOUCHER_READ permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpGet("{id}")]
+        [RequireVoucherPermission("VOUCHER_READ")]
         [ProducesResponseType(typeof(SuccessResponse<VoucherResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -229,9 +272,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Update voucher
+        /// Manager: Can update any voucher
+        /// ManagerStaff: Can only update if they have VOUCHER_UPDATE permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPut("{id}")]
+        [RequireVoucherPermission("VOUCHER_UPDATE")]
         [AuditAction("MANAGER_UPDATE_VOUCHER", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<VoucherResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -243,7 +289,8 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
             try
             {
                 var managerId = await GetCurrentManagerId();
-                var result = await _voucherService.UpdateVoucherAsync(id, managerId, request);
+                var managerStaffId = await GetCurrentManagerStaffId();
+                var result = await _voucherService.UpdateVoucherAsync(id, managerId, request, managerStaffId);
 
                 var response = new SuccessResponse<VoucherResponse>
                 {
@@ -285,9 +332,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Soft delete voucher
+        /// Manager: Can delete any voucher
+        /// ManagerStaff: Can only delete if they have VOUCHER_DELETE permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpDelete("{id}")]
+        [RequireVoucherPermission("VOUCHER_DELETE")]
         [AuditAction("MANAGER_DELETE_VOUCHER", "Voucher", recordIdRouteKey: "id", includeRequestBody: false)]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -340,9 +390,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Change status voucher
+        /// Manager: Can toggle any voucher
+        /// ManagerStaff: Can only toggle if they have VOUCHER_UPDATE permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPatch("{id}/toggle-status")]
+        [RequireVoucherPermission("VOUCHER_UPDATE")]
         [ProducesResponseType(typeof(SuccessResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -394,9 +447,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Get all email voucher history
+        /// Manager: Can view email history of any voucher
+        /// ManagerStaff: Can only view if they have VOUCHER_READ permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpGet("{id}/email-history")]
+        [RequireVoucherPermission("VOUCHER_READ")]
         [ProducesResponseType(typeof(SuccessResponse<List<VoucherEmailHistoryResponse>>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -449,9 +505,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Send all user voucher
+        /// Manager: Can send any voucher
+        /// ManagerStaff: Can only send if they have VOUCHER_SEND permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPost("{id}/send-to-all-users")]
+        [RequireVoucherPermission("VOUCHER_SEND")]
         [AuditAction("MANAGER_VOUCHER_SEND_ALL", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -505,9 +564,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Sent voucher to specific user
+        /// Manager: Can send any voucher
+        /// ManagerStaff: Can only send if they have VOUCHER_SEND permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPost("{id}/send-to-specific-users")]
+        [RequireVoucherPermission("VOUCHER_SEND")]
         [AuditAction("MANAGER_VOUCHER_SEND_SPECIFIC", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -561,9 +623,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Send voucher to top buyers (customers with most bookings)
+        /// Manager: Can send any voucher
+        /// ManagerStaff: Can only send if they have VOUCHER_SEND permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPost("{id}/send-to-top-buyers")]
+        [RequireVoucherPermission("VOUCHER_SEND")]
         [AuditAction("MANAGER_VOUCHER_SEND_TOP_BUYERS", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -617,9 +682,12 @@ namespace ExpressTicketCinemaSystem.Src.Cinema.Api.Controllers
 
         /// <summary>
         /// Send voucher to top spenders (customers with highest total spending)
+        /// Manager: Can send any voucher
+        /// ManagerStaff: Can only send if they have VOUCHER_SEND permission
         /// </summary>
         /// <param name="id">Voucher ID</param>
         [HttpPost("{id}/send-to-top-spenders")]
+        [RequireVoucherPermission("VOUCHER_SEND")]
         [AuditAction("MANAGER_VOUCHER_SEND_TOP_SPENDERS", "Voucher", recordIdRouteKey: "id", includeRequestBody: true)]
         [ProducesResponseType(typeof(SuccessResponse<SendVoucherEmailResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
